@@ -1,9 +1,0 @@
-PORTAL HR PRO - Gestión de Contratación
-
-Cambios aplicados:
-- Se dejó visible y operativo únicamente el módulo Gestión de Contratación.
-- Se retiraron/ocultaron accesos a Gestión Documental, Vacacional, trabajadores/usuarios y otros módulos.
-- Se cambió el título PRIZE PRO por PORTAL HR PRO.
-- Se mantuvo la interfaz visual verde/profesional del login y panel interno según las imágenes de referencia.
-
-Usuario demo administrador: admin / admin123
