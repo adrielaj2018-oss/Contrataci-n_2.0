@@ -1,0 +1,5 @@
+CAMBIOS REALIZADOS:
+- Se dejó únicamente enfoque Gestión Documental.
+- Se agregó campo EMPRESA en el login.
+- Se mejoró estilo visual con colores suaves verde/blanco.
+- Branding actualizado a GESTION DOCUMENTAL.
