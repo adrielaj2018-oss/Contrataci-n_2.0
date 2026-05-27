@@ -2439,6 +2439,36 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
   .login-body:after{font-size:12px!important;bottom:14px!important;}
 }
 
+
+/* === AJUSTE FINAL CONTRATACION 2026-05-27 === */
+:root{--soft-bg:#f4faf8;--soft-card:#ffffff;--soft-line:#dbe7ee;--soft-text:#082544;--soft-muted:#64748b;--pro-green:#11b772;--pro-green-2:#0b8d5a;--pro-dark:#082544;--side-a:#083a30;--side-b:#06243a;}
+body{background:var(--soft-bg)!important;color:var(--soft-text)!important;font-family:'Inter','Segoe UI',Arial,sans-serif!important;font-weight:500!important;}
+.app,.main{background:linear-gradient(135deg,#f8fbfd 0%,#eef7f4 100%)!important;color:var(--soft-text)!important;}
+.main{padding:0 30px 45px!important;}
+.side{background:linear-gradient(180deg,#0c4535 0%,#08352f 45%,#071b2e 100%)!important;color:#eaf7f2!important;box-shadow:10px 0 28px rgba(15,23,42,.16)!important;border-right:1px solid rgba(255,255,255,.10)!important;}
+.side-head-pro,.side-top{background:linear-gradient(90deg,#0c3c31,#0e5d42)!important;border-radius:18px!important;margin:12px!important;height:68px!important;border:1px solid rgba(255,255,255,.10)!important;}
+.side-top b{color:#fff!important;font-weight:780!important;letter-spacing:.3px!important;}
+.brand{display:none!important;}
+.side nav{padding:8px 10px 18px!important;}
+.menu-group{margin:7px 0!important;border-radius:18px!important;overflow:hidden!important;}
+.menu-group.nested{margin:10px 0 10px 30px!important;padding:6px 8px!important;background:rgba(255,255,255,.035)!important;border:1px solid rgba(255,255,255,.075)!important;}
+.menu-title,.menu-item{background:transparent!important;border:0!important;box-shadow:none!important;color:#d9e7f0!important;font-size:14px!important;font-weight:720!important;letter-spacing:-.01em!important;line-height:1.25!important;border-radius:16px!important;padding:12px 14px!important;display:flex!important;align-items:center!important;gap:12px!important;text-decoration:none!important;}
+.menu-title span:first-child,.menu-item span:first-child{width:30px!important;height:30px!important;border-radius:10px!important;display:grid!important;place-items:center!important;background:rgba(255,255,255,.08)!important;color:#d9f7e8!important;font-size:16px!important;flex:0 0 30px!important;}
+.menu-item.sub-mini{padding-left:14px!important;margin-left:4px!important;font-size:13.6px!important;}
+.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.08)!important;color:#fff!important;transform:translateX(1px);}
+.menu-title.active,.menu-item.active{background:linear-gradient(135deg,#12b76a,#079455)!important;color:#fff!important;box-shadow:0 12px 24px rgba(16,185,129,.22)!important;}
+.menu-title.active span:first-child,.menu-item.active span:first-child{background:rgba(255,255,255,.16)!important;color:#fff!important;}
+.chev{margin-left:auto!important;color:#c7f9da!important;font-weight:800!important;transition:transform .18s ease!important;}
+.menu-group.closed>.menu-title .chev{transform:rotate(-90deg)!important;}
+.submenu{max-height:900px!important;overflow:hidden!important;transition:max-height .24s ease,padding .18s ease!important;padding:5px 0!important;}
+.menu-group.closed>.submenu{max-height:0!important;padding:0!important;}
+.side.collapsed .submenu{display:none!important}.side.collapsed .menu-group.nested{margin-left:0!important;padding:0!important;background:transparent!important;border:0!important}.side.collapsed .menu-title span:first-child,.side.collapsed .menu-item span:first-child{margin:auto!important}.side.collapsed .menu-title,.side.collapsed .menu-item{justify-content:center!important;padding:12px 8px!important}.side.collapsed .label,.side.collapsed .chev{display:none!important}
+.admin-shell{padding:28px 24px!important;}.admin-header{background:transparent!important;border:0!important;box-shadow:none!important;margin-bottom:24px!important}.admin-title h1{color:#082544!important;font-weight:780!important;font-size:32px!important}.admin-title .role{color:#13a85f!important;font-weight:760!important}.admin-title p{color:#1f2f46!important;font-weight:500!important}.hambox{background:#111827!important;color:#eaf7f2!important;border:0!important;border-radius:14px!important;width:44px!important;height:44px!important;display:grid!important;place-items:center!important;font-size:21px!important}.admin-chip .a{background:#17b978!important;color:#063522!important}.admin-chip span:last-child{color:#082544!important;font-weight:760!important}.top-icon{display:none!important}
+.gestion-cards.one-module{display:grid!important;grid-template-columns:minmax(320px,760px)!important;gap:22px!important}.gestion-card{background:#fff!important;border:1px solid #d9e8ef!important;border-radius:24px!important;box-shadow:0 18px 42px rgba(15,23,42,.07)!important;color:#082544!important}.gestion-card:before{background:rgba(17,183,114,.10)!important}.gestion-card h2,.dashboard-panel h2{color:#082544!important;font-weight:760!important}.gestion-icon{background:linear-gradient(135deg,#14b875,#079455)!important;color:#fff!important;box-shadow:0 18px 28px rgba(16,185,129,.20)!important}.btn-blue,.btn-green,.c-btn{background:linear-gradient(135deg,#17bd77,#0c9c61)!important;color:#fff!important;border:0!important;border-radius:14px!important;box-shadow:0 12px 24px rgba(16,185,129,.18)!important}.btn-warn{background:linear-gradient(135deg,#17bd77,#0c9c61)!important;color:#fff!important}.only-contratacion{display:grid!important;grid-template-columns:minmax(320px,1fr)!important}.dashboard-panel{background:#fff!important;border:1px solid #d9e8ef!important;border-radius:24px!important;color:#082544!important;box-shadow:0 18px 42px rgba(15,23,42,.07)!important}.mini-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))!important;gap:14px!important}.dash-metric{background:linear-gradient(180deg,#ffffff,#f7fbfa)!important;border:1px solid #dce8ef!important;border-radius:18px!important;color:#082544!important}.dash-metric span{color:#64748b!important}.dash-metric b{color:#082544!important}.dash-metric .mi{color:#10b981!important;background:#e9fbf2!important;border-radius:12px!important;padding:7px!important}.quick-actions-pro{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:18px 0}.quick-actions-pro .qa{display:flex;align-items:center;gap:10px;padding:14px 15px;border:1px solid #dbe7ee;border-radius:16px;background:#f8fcfb;color:#082544;text-decoration:none;font-weight:740}.quick-actions-pro .qa i{color:#0ea56a;font-size:18px}.quick-actions-pro .qa:hover{background:#eefbf5;border-color:#8ee5bd}.admin-footer{color:#64748b!important;border-top:1px solid #dbe7ee!important}
+/* Limpieza de pantallas internas oscuras */
+.c-title{color:#082544!important;font-weight:780!important}.c-bar,.c-card,.card,.table-wrap{background:#fff!important;color:#082544!important;border:1px solid #dbe7ee!important;border-radius:22px!important;box-shadow:0 16px 38px rgba(15,23,42,.06)!important}.toolbar{color:#64748b!important;font-weight:650!important}.tabs{background:#f7fbfa!important;border-bottom:1px solid #dbe7ee!important}.tab{color:#64748b!important;font-weight:720!important}.tab.active{color:#082544!important;border-bottom:3px solid #12b76a!important}.c-table,table{background:#fff!important;color:#102a43!important}.c-table th,th{background:#f0f7f5!important;color:#082544!important;border-bottom:1px solid #dbe7ee!important;font-weight:760!important}.c-table td,td{background:#fff!important;color:#102a43!important;border-bottom:1px solid #edf2f7!important;font-weight:580!important}tr:hover td{background:#f8fcfb!important}.input,input,select,textarea{background:#fff!important;color:#102a43!important;border:1px solid #cfdbe5!important;border-radius:14px!important}.icon-btn{color:#0d8f61!important;background:#eefbf5!important;border-radius:10px!important;padding:6px 8px!important}.status-pill,select.status-pill{background:#eefbf5!important;color:#075c3c!important;border:1px solid #9de9c2!important}.admin-shell.contratacion-only .gestion-cards:not(.one-module) .gestion-card:not(.purple){display:none!important}
+@media(max-width:900px){.main{padding:0 12px 35px!important}.admin-shell{padding:18px 8px!important}.gestion-cards.one-module{grid-template-columns:1fr!important}.menu-group.nested{margin-left:8px!important}.side{width:300px!important}.app{grid-template-columns:1fr!important}.side{position:fixed!important;left:-320px!important;top:0!important;height:100vh!important;transition:left .22s ease!important}.side.open{left:0!important}.main{min-height:100vh!important}}
+
 </style>
 <script>
 function side(){return document.querySelector('.side')}
@@ -2518,47 +2548,47 @@ def sidebar(active):
         def cls(sec):
             return 'menu-item sub-mini active' if active_sub == sec else 'menu-item sub-mini'
         admin = f"""
-        <div id='grp_contratacion' data-group='contratacion' class='menu-group force-open'>
-          <button type='button' class='menu-title active' onclick="toggleGroup('grp_contratacion')"><span>🧾</span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
+        <div id='grp_contratacion' data-group='contratacion' class='menu-group'>
+          <button type='button' class='menu-title active' onclick="toggleGroup('grp_contratacion')"><span><i class='bi bi-file-earmark-text'></i></span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
           <div class='submenu'>
-            <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><span>☰</span><span class='label'>Flujos de aprobación</span></a>
-            <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><span>⬆️</span><span class='label'>Carga Masiva</span></a>
-            <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><span>▤</span><span class='label'>Reportes</span></a>
-            <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
-              <button type='button' class='menu-title'><span>💼</span><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
+            <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><span><i class='bi bi-list-task'></i></span><span class='label'>Flujos de aprobación</span></a>
+            <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><span><i class='bi bi-cloud-arrow-up'></i></span><span class='label'>Carga Masiva</span></a>
+            <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><span><i class='bi bi-table'></i></span><span class='label'>Reportes</span></a>
+            <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested'>
+              <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><span><i class='bi bi-briefcase'></i></span><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><span>•</span><span class='label'>Mantenedor General</span></a>
-                <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><span>•</span><span class='label'>Trabajadores Obs.</span></a>
-                <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><span>•</span><span class='label'>Tipos por Etapa</span></a>
-                <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><span>•</span><span class='label'>Tipo Documento Empleado</span></a>
-                <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><span>•</span><span class='label'>Cargo</span></a>
-                <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><span>•</span><span class='label'>Actualizar Trabajador</span></a>
+                <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><span><i class='bi bi-ui-checks-grid'></i></span><span class='label'>Mantenedor General</span></a>
+                <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><span><i class='bi bi-people'></i></span><span class='label'>Trabajadores Obs.</span></a>
+                <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><span><i class='bi bi-diagram-3'></i></span><span class='label'>Tipos por Etapa</span></a>
+                <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><span><i class='bi bi-person-vcard'></i></span><span class='label'>Tipo Documento Empleado</span></a>
+                <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><span><i class='bi bi-briefcase'></i></span><span class='label'>Cargo</span></a>
+                <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><span><i class='bi bi-arrow-repeat'></i></span><span class='label'>Actualizar Trabajador</span></a>
               </div>
             </div>
-            <div id='grp_con_documentaria' data-group='con_documentaria' class='menu-group nested force-open'>
-              <button type='button' class='menu-title'><span>🪪</span><span class='label'>Gestión Documentaria</span><span class='chev'>∨</span></button>
+            <div id='grp_con_documentaria' data-group='con_documentaria' class='menu-group nested'>
+              <button type='button' class='menu-title' onclick="toggleGroup('grp_con_documentaria')"><span><i class='bi bi-folder2-open'></i></span><span class='label'>Gestión Documentaria</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><span>•</span><span class='label'>Renovación Contrato</span></a>
-                <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><span>•</span><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
-                <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><span>•</span><span class='label'>Ficha Trabajador</span></a>
-                <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><span>•</span><span class='label'>Plantilla Documentos</span></a>
-                <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><span>•</span><span class='label'>Firma / Facial / Digital</span></a>
-                <a class='menu-item sub-mini' onclick='saveSideScroll()' href='/admin/plantilla_gestion/contratacion'><span>•</span><span class='label'>Plantilla Contratación</span></a>
-                <a class='{cls('nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nisira'><span>•</span><span class='label'>Contratación NISIRA</span></a>
-                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><span>•</span><span class='label'>Descargas</span></a>
+                <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><span><i class='bi bi-file-earmark-plus'></i></span><span class='label'>Renovación Contrato</span></a>
+                <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><span><i class='bi bi-archive'></i></span><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
+                <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><span><i class='bi bi-person-lines-fill'></i></span><span class='label'>Ficha Trabajador</span></a>
+                <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><span><i class='bi bi-file-earmark-word'></i></span><span class='label'>Plantilla Documentos</span></a>
+                <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><span><i class='bi bi-fingerprint'></i></span><span class='label'>Firma / Facial / Digital</span></a>
+                <a class='menu-item sub-mini' onclick='saveSideScroll()' href='/admin/plantilla_gestion/contratacion'><span><i class='bi bi-file-earmark-spreadsheet'></i></span><span class='label'>Plantilla Contratación</span></a>
+                <a class='{cls('nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nisira'><span><i class='bi bi-database'></i></span><span class='label'>Contratación NISIRA</span></a>
+                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><span><i class='bi bi-cloud-arrow-down'></i></span><span class='label'>Descargas</span></a>
               </div>
             </div>
-            <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><span>📢</span><span class='label'>Anuncios</span></a>
+            <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><span><i class='bi bi-megaphone'></i></span><span class='label'>Anuncios</span></a>
           </div>
         </div>"""
-        return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><span>👤</span><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><span>🚪</span><span class='label'>Salir</span></a></div></div></nav>"""
+        return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><span><i class='bi bi-person-circle'></i></span><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><span><i class='bi bi-box-arrow-right'></i></span><span class='label'>Salir</span></a></div></div></nav>"""
     return """
     <nav>
-      <div id='grp_user_contrato' data-group='user_contrato' class='menu-group force-open'>
-        <button type='button' class='menu-title active' onclick="toggleGroup('grp_user_contrato')"><span>🧾</span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
-        <div class='submenu'><a class='menu-item active' onclick='saveSideScroll()' href='/contratacion/mis_documentos'><span>📊</span><span class='label'>Mis documentos</span></a></div>
+      <div id='grp_user_contrato' data-group='user_contrato' class='menu-group'>
+        <button type='button' class='menu-title active' onclick="toggleGroup('grp_user_contrato')"><span><i class='bi bi-file-earmark-text'></i></span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
+        <div class='submenu'><a class='menu-item active' onclick='saveSideScroll()' href='/contratacion/mis_documentos'><span><i class='bi bi-folder-check'></i></span><span class='label'>Mis documentos</span></a></div>
       </div>
-      <div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><span>👤</span><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><span>🚪</span><span class='label'>Salir</span></a></div></div>
+      <div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><span><i class='bi bi-person-circle'></i></span><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><span><i class='bi bi-box-arrow-right'></i></span><span class='label'>Salir</span></a></div></div>
     </nav>"""
 
 
@@ -2982,78 +3012,50 @@ def admin():
         con_docs = con.execute("SELECT COUNT(*) FROM contratacion_docs").fetchone()[0]
         con_tipos = con.execute("SELECT COUNT(*) FROM contratacion_tipos").fetchone()[0]
     content = f"""
-    <div class='admin-shell'>
+    <div class='admin-shell contratacion-only'>
       <div class='admin-header'>
         <div class='admin-title-row'>
-          <button class='hambox' onclick='toggleSide()'>☰</button>
+          <button class='hambox' onclick='toggleSide()'><i class='bi bi-list'></i></button>
           <div class='admin-title'>
             <h1>Centro de Control</h1>
             <div class='role'>Administrador</div>
-            <p>Bienvenido al panel de administración. Seleccione una gestión para comenzar.</p>
+            <p>Dashboard general exclusivo de Gestión Contratación.</p>
           </div>
         </div>
         <div class='top-actions'>
-          <div class='top-icon'>🔔<i>0</i></div>
-          <div class='top-icon'>☰<i>0</i></div>
           <div class='admin-chip'><span class='a'>A</span><span>Administrador⌄</span></div>
         </div>
       </div>
 
-      <div class='gestion-cards'>
-        <div class='card gestion-card'>
-          <div class='gestion-icon'>📁</div>
-          <div><h2>Gestión Documental</h2><p class='muted'>Administre y controle todos los documentos de la organización.</p><a class='btn-warn' href='/admin/modulo/documentos'>Ir al Dashboard <span>→</span></a></div>
-        </div>
-        <div class='card gestion-card green'>
-          <div class='gestion-icon'>☂️</div>
-          <div><h2>Gestión Vacacional</h2><p class='muted'>Administre saldos y solicitudes de vacaciones de los trabajadores.</p><a class='btn-green' href='/admin/vacaciones'>Ir al Dashboard <span>→</span></a></div>
-        </div>
-        <div class='card gestion-card purple'>
-          <div class='gestion-icon'>📄</div>
-          <div><h2>Gestión Contratación</h2><p class='muted'>Gestione procesos de contratación, candidatos y contratos.</p><a class='btn-blue' href='/admin/contratacion'>Ir al Dashboard <span>→</span></a></div>
+      <div class='gestion-cards one-module'>
+        <div class='card gestion-card purple contratacion-hero-card'>
+          <div class='gestion-icon'><i class='bi bi-file-earmark-text'></i></div>
+          <div><h2>Gestión Contratación</h2><p class='muted'>Controle contratos, plantillas, flujos, trabajadores observados, firmas y documentación del trabajador desde un solo panel.</p><a class='btn-blue' href='/admin/contratacion'>Ingresar al módulo <span>→</span></a></div>
         </div>
       </div>
 
-      <div class='dashboards-admin'>
-        <div class='card dashboard-panel'>
-          <h2>📁 Dashboard - Gestión Documental</h2>
-          <div class='mini-grid'>
-            <div class='dash-metric'><span>Trabajadores</span><b>{trabajadores}</b><em class='mi'>👥</em></div>
-            <div class='dash-metric'><span>Documentos</span><b>{docs}</b><em class='mi'>📄</em></div>
-            <div class='dash-metric'><span>Recibidos / Abiertos</span><b>{leidos}</b><em class='mi'>👁️</em></div>
-            <div class='dash-metric'><span>Aprobados</span><b>{aprobados}</b><em class='mi'>✓</em></div>
-            <div class='dash-metric'><span>Rechazados</span><b>{rechazados}</b><em class='mi'>−</em></div>
-            <div class='dash-metric'><span>Empresas</span><b>{emp}</b><em class='mi'>🏢</em></div>
-          </div>
-          <a class='btn-warn full-link' href='/admin/modulo/documentos'>Ver Dashboard Completo <span>→</span></a>
-        </div>
-        <div class='card dashboard-panel green'>
-          <h2>☂️ Dashboard - Gestión Vacacional</h2>
-          <div class='mini-grid'>
-            <div class='dash-metric'><span>Saldos Registrados</span><b>{vac_saldos}</b><em class='mi'>🗓️</em></div>
-            <div class='dash-metric'><span>Solicitudes</span><b>{vac_solicitudes}</b><em class='mi'>📄</em></div>
-            <div class='dash-metric'><span>Pendientes</span><b>{vac_pendientes}</b><em class='mi'>⏱️</em></div>
-            <div class='dash-metric'><span>Aprobadas</span><b>{vac_aprobadas}</b><em class='mi'>✓</em></div>
-            <div class='dash-metric'><span>Rechazadas</span><b>0</b><em class='mi'>−</em></div>
-            <div class='dash-metric'><span>En Proceso</span><b>{vac_pendientes}</b><em class='mi'>…</em></div>
-          </div>
-          <a class='btn-green full-link' href='/admin/vacaciones'>Ver Dashboard Completo <span>→</span></a>
-        </div>
+      <div class='dashboards-admin only-contratacion'>
         <div class='card dashboard-panel purple'>
-          <h2>🧾 Dashboard - Gestión Contratación</h2>
+          <h2><i class='bi bi-speedometer2'></i> Dashboard General - Gestión Contratación</h2>
           <div class='mini-grid'>
-            <div class='dash-metric'><span>Procesos Activos</span><b>{con_docs}</b><em class='mi'>💼</em></div>
-            <div class='dash-metric'><span>Candidatos</span><b>0</b><em class='mi'>👥</em></div>
-            <div class='dash-metric'><span>Contratos Activos</span><b>{con_docs}</b><em class='mi'>📄</em></div>
-            <div class='dash-metric'><span>Contratos por Vencer</span><b>0</b><em class='mi'>⏱️</em></div>
-            <div class='dash-metric'><span>Contratos Vencidos</span><b>0</b><em class='mi'>−</em></div>
-            <div class='dash-metric'><span>Contratos Finalizados</span><b>0</b><em class='mi'>✓</em></div>
+            <div class='dash-metric'><span>Procesos Activos</span><b>{con_docs}</b><em class='mi'><i class='bi bi-kanban'></i></em></div>
+            <div class='dash-metric'><span>Tipos por Etapa</span><b>{con_tipos}</b><em class='mi'><i class='bi bi-diagram-3'></i></em></div>
+            <div class='dash-metric'><span>Contratos Activos</span><b>{con_docs}</b><em class='mi'><i class='bi bi-file-earmark-check'></i></em></div>
+            <div class='dash-metric'><span>Contratos por Vencer</span><b>0</b><em class='mi'><i class='bi bi-clock-history'></i></em></div>
+            <div class='dash-metric'><span>Contratos Vencidos</span><b>0</b><em class='mi'><i class='bi bi-x-circle'></i></em></div>
+            <div class='dash-metric'><span>Contratos Finalizados</span><b>0</b><em class='mi'><i class='bi bi-check2-circle'></i></em></div>
+          </div>
+          <div class='quick-actions-pro'>
+            <a class='qa' href='/admin/contratacion?sec=flujo'><i class='bi bi-list-task'></i><span>Flujos de aprobación</span></a>
+            <a class='qa' href='/admin/contratacion?sec=carga'><i class='bi bi-cloud-arrow-up'></i><span>Carga Masiva</span></a>
+            <a class='qa' href='/admin/contratacion?sec=observados'><i class='bi bi-people'></i><span>Trabajadores Obs.</span></a>
+            <a class='qa' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span>Plantillas</span></a>
           </div>
           <a class='btn-blue full-link' href='/admin/contratacion'>Ver Dashboard Completo <span>→</span></a>
         </div>
       </div>
 
-      <div class='admin-footer'><span>© 2026 PRIZE - Superfruits</span><span>Versión 1.0.0</span></div>
+      <div class='admin-footer'><span>© 2026 PORTAL HR PRO</span><span>Gestión Contratación</span></div>
     </div>
     """
     return render_page(content, active='Admin')
