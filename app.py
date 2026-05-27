@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Portal de Documentos PRIZE - Versión Ultra Mejorada
+Portal HR PRO - Gestión de Contratación
 Listo para Render / GitHub / uso local.
 
 Usuarios demo:
@@ -1875,6 +1875,21 @@ body{background:#0f141a!important;color:var(--ink)!important;font-family:Inter,S
 .edit-overlay input,.edit-overlay select,.edit-overlay textarea{color:#111827!important;background:#fff!important;}
 
 .menu-item.doc-loaded{background:linear-gradient(135deg,#0f5132,#16a34a)!important;color:#fff!important;border-left:4px solid #86efac!important}.menu-item.doc-loaded .label,.menu-item.doc-loaded span{color:#fff!important}
+
+
+/* ===== TEMA PRO VERDE SUAVE - REFERENCIA LOGIN Y POST LOGIN ===== */
+:root{--txt:#111827!important;--mut:#6b7280!important;--yellow:#16a05d!important;--yellow2:#25c47b!important;--green:#149954!important;--green2:#0b7a55!important;--dark:#f4f8f6!important;--panel:#ffffff!important;--panel2:#f8fbfa!important;--line:#e2e8f0!important;--shadow:0 20px 55px rgba(15,23,42,.10)!important}
+body{font-family:Inter,Segoe UI,Arial,sans-serif!important;font-weight:650!important;color:#111827!important;background:#eef5f1!important}
+.login-body{min-height:100vh!important;background:radial-gradient(circle at 4% 0%,rgba(187,247,208,.72) 0 23%,transparent 24%),radial-gradient(circle at 93% 0%,rgba(204,251,241,.72) 0 27%,transparent 28%),linear-gradient(180deg,#f9fffc 0%,#ecf8f3 62%,#0f9d68 62%,#087052 100%)!important;overflow:hidden!important}
+.login-body:before{content:"";position:absolute;left:-4%;right:-4%;bottom:20%;height:92px;background:linear-gradient(90deg,#21bf73,#04785c);transform:skewY(-4deg);box-shadow:0 -15px 45px rgba(5,150,105,.15)}
+.login-body:after{content:"Sistema seguro y confiable\A © 2025 Prize Pro. Todos los derechos reservados.";white-space:pre;position:absolute;left:0;right:0;bottom:18px;text-align:center;color:#fff;font-size:15px;line-height:2;font-weight:800;text-shadow:0 2px 8px rgba(0,0,0,.18)}
+.login-card{width:min(92vw,530px)!important;background:rgba(255,255,255,.90)!important;border:1px solid #e5edf1!important;border-radius:34px!important;padding:70px 56px 38px!important;box-shadow:0 28px 80px rgba(15,23,42,.16)!important;overflow:visible!important;backdrop-filter:blur(12px)!important}
+.login-card:before{content:"👥"!important;position:absolute!important;left:50%!important;top:-64px!important;transform:translateX(-50%)!important;width:126px!important;height:126px!important;border-radius:50%!important;background:#fff!important;border:1px solid #e5edf1!important;display:grid!important;place-items:center!important;font-size:54px!important;color:#149954!important;box-shadow:0 18px 55px rgba(15,23,42,.10)!important;opacity:1!important}
+.login-card:after{display:none!important}.login-logo{display:none!important}.login-title{margin:6px 0 28px!important;text-align:center!important}.login-title h1{font-size:38px!important;line-height:1.05!important;color:#111827!important;letter-spacing:-1px!important;text-transform:uppercase!important;font-weight:950!important}.login-title b{display:block!important;color:#7a8699!important;font-size:16px!important;font-weight:650!important}.login-title:after{content:"";display:block;width:58px;height:3px;background:#18bd75;border-radius:999px;margin:20px auto 0}.login-card .field label{display:block!important;margin:0 0 10px!important;color:#2b3038!important;font-size:15px!important;font-weight:850!important}.login-input{height:61px!important;margin-bottom:22px!important;border:1.5px solid #dbe7f0!important;border-radius:15px!important;background:#eaf2ff!important;box-shadow:none!important;padding:0 13px!important;gap:12px!important}.login-input:focus-within{border-color:#24c77f!important;background:#e8f1ff!important;box-shadow:0 0 0 4px rgba(36,199,127,.12)!important}.login-ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:#effff7;color:#169b5f;font-size:18px;flex:0 0 auto}.login-input input,.login-input select{color:#111827!important;background:transparent!important;border:0!important;font-weight:600!important;padding:0!important;height:100%!important}.login-input input::placeholder{color:#8793a5!important}.login-card .btn-green{width:100%!important;height:62px!important;border-radius:13px!important;margin:4px 0 26px!important;background:linear-gradient(135deg,#18a957,#05876e)!important;color:#fff!important;font-size:18px!important;font-weight:900!important;box-shadow:0 18px 35px rgba(5,135,110,.22)!important}.login-links{margin:0!important;padding:8px 0 0!important;border-top:1px solid #edf2f7!important}.login-links a{color:#73819a!important;font-weight:650!important}
+.app,.app.side-collapsed{background:#eef5f1!important}.main{background:linear-gradient(135deg,#f6fbfa 0%,#edf5f1 100%)!important;padding:16px 24px 44px!important}.side{background:linear-gradient(180deg,#104d2b 0%,#0b1b2c 100%)!important;color:#edfdf5!important;border-right:0!important;box-shadow:12px 0 36px rgba(15,23,42,.18)!important}.side-top{background:#124f30!important;border-bottom:1px solid rgba(255,255,255,.13)!important;height:86px!important}.side-top .label{font-size:20px!important;line-height:1.05!important}.brand{text-align:left!important;padding:18px 18px 8px!important}.brand img{display:none!important}.brand:before{content:"PRIZE PRO";display:block;color:#fff;font-size:20px;font-weight:950;letter-spacing:-.4px}.brand p{margin:2px 0 0!important;color:#d7f8e8!important;font-size:12px!important;font-weight:800!important}.toggle{background:rgba(255,255,255,.10)!important;border-radius:14px!important;width:45px!important;height:45px!important;color:#fff!important;font-size:20px!important}.menu-group{margin:10px 11px!important}.menu-title,.menu-item{border:0!important;background:transparent!important;color:#cbd5e1!important;font-weight:850!important;border-radius:16px!important}.menu-title.active,.menu-item.active,.menu-title:hover,.menu-item:hover{background:linear-gradient(135deg,#1cab58,#139447)!important;color:#fff!important;box-shadow:0 12px 28px rgba(20,148,71,.23)!important;border-left:0!important}.sub-mini{padding-left:34px!important}.side-user{position:sticky;bottom:10px;background:rgba(255,255,255,.10)!important;border-radius:18px!important;border-top:0!important;padding:12px!important}.avatar{background:#dffceb!important;color:#158b55!important}
+.hero,.card,.c-card,.filter-card,.table-wrap,.modal-card{background:#fff!important;color:#111827!important;border:1px solid #dde8ef!important;border-radius:24px!important;box-shadow:0 18px 48px rgba(15,23,42,.08)!important}.hero{margin:0 0 20px!important;padding:28px 24px!important}.topbar h1,h1,h2,h3,.c-title{color:#111827!important;text-shadow:none!important;font-weight:950!important}.subtitle,.muted,.card p{color:#667085!important}.mini b,.accent{color:#111827!important}.ico,.badge-green,.btn-green,.c-btn,.btn-blue,.crear-btn{background:linear-gradient(135deg,#1faa59,#07876d)!important;color:#fff!important;border:0!important;box-shadow:0 12px 28px rgba(5,135,110,.18)!important}.btn,.btn-blue,.btn-green,.c-btn,.crear-btn{border-radius:14px!important;font-weight:900!important}.btn:not(.btn-red),.btn-blue{background:#20242b!important;color:#fff!important}.btn-green{background:linear-gradient(135deg,#1faa59,#07876d)!important;color:#fff!important}.doc-card{background:#fff!important;color:#111827!important;border:1px solid #dde8ef!important;border-radius:22px!important;box-shadow:0 12px 32px rgba(15,23,42,.07)!important}.doc-card:before{background:#d9fbe7!important}.doc-card h3{color:#111827!important}.doc-card p{color:#667085!important}table,.c-table,.tpl-table{background:#fff!important;color:#111827!important}th,.c-table th,.tpl-table th{background:#f5f8fb!important;color:#475467!important;border-bottom:1px solid #dde8ef!important;text-transform:none!important}td,.c-table td,.tpl-table td{background:#fff!important;color:#1f2937!important;border-bottom:1px solid #e5edf3!important;font-weight:650!important}tr:hover td{background:#f7fbf9!important}.input,input,select,textarea{background:#fff!important;color:#111827!important;border:1.5px solid #dbe7f0!important;border-radius:14px!important;font-weight:650!important}input:focus,select:focus,textarea:focus{border-color:#22c77b!important;box-shadow:0 0 0 4px rgba(34,199,123,.12)!important}.status-pill,.state-pill.ok,.pill.ok{background:#e8fff3!important;color:#0f8f55!important;border:1px solid #b7f0ce!important}.mobile-head{background:#104d2b!important;color:#fff!important}.flash{background:#ecfdf5!important;border:1px solid #bbf7d0!important;color:#065f46!important}.flash.err{background:#fff1f2!important;border-color:#fecdd3!important;color:#9f1239!important}
+@media(max-width:1000px){.login-card{padding:66px 24px 30px!important;border-radius:26px!important}.login-title h1{font-size:30px!important}.login-body:after{font-size:12px}.main{padding:12px 12px 28px!important}.side-top{height:62px!important}.hero{padding:20px 16px!important}.topbar h1{font-size:26px!important}.card{border-radius:18px!important}.login-input{height:56px!important}}
+
 </style>
 <script>
 function side(){return document.querySelector('.side')}
@@ -1915,13 +1930,13 @@ window.addEventListener('DOMContentLoaded',()=>{
 '''
 
 
-def render_page(content, title="Portal de Documentos PRIZE", active="Inicio"):
+def render_page(content, title="PRIZE PRO - Gestión de Contratación", active="Inicio"):
     user_label = session.get('admin_nombre') or session.get('nombre') or 'Usuario PRIZE'
     primer_nombre = user_label.split()[0] if user_label else 'Usuario'
     body = f'''
-    <div class="mobile-head"><button class="toggle" onclick="toggleSide()">☰</button><b>PRIZE Documentos</b><a href="/logout">Salir</a></div>
+    <div class="mobile-head"><button class="toggle" onclick="toggleSide()">☰</button><b>PRIZE PRO</b><a href="/logout">Salir</a></div>
     <div class="app"><aside class="side"><div class="side-top"><button class="toggle" title="Expandir / contraer panel" onclick="toggleSide()">☰</button><b class="label">PRIZE RRHH</b><button class="toggle" title="Expandir / contraer panel" onclick="toggleSide()">☰</button></div>
-      <div class="brand"><img src="{logo_url()}" alt="PRIZE"><p>Documentos PRIZE</p></div>{sidebar(active)}<div class="side-user"><div class="avatar">👤</div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}</main></div>'''
+      <div class="brand"><img src="{logo_url()}" alt="PRIZE PRO"><p>Gestión de Contratación</p></div>{sidebar(active)}<div class="side-user"><div class="avatar">👤</div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}</main></div>'''
     return render_template_string(BASE, body=body, title=title)
 
 
@@ -2019,24 +2034,24 @@ def empresas_disponibles_login():
 
 def login_template(admin=False, error=""):
     action = url_for('admin_login') if admin else url_for('login')
-    title = "Administrador PRIZE RRHH" if admin else "Portal PRIZE RRHH"
-    sub = "Control y trazabilidad documental" if admin else "Ingrese DNI, clave y empresa asignada"
+    title = "PRIZE PRO"
+    sub = "Gestión de Contratación" if admin else "Gestión de Contratación"
     if admin:
         fields = """
-          <div class='field'><label>Usuario</label><div class='login-input'>👤<input name='usuario' placeholder='Ingrese su usuario' required></div></div>
-          <div class='field'><label>Clave</label><div class='login-input'>🔒<input name='clave' type='password' placeholder='Ingrese su clave' required></div></div>
+          <div class='field'><label>Usuario</label><div class='login-input'><span class='login-ico'>👤</span><input name='usuario' placeholder='Ingrese su usuario' required></div></div>
+          <div class='field'><label>Clave</label><div class='login-input'><span class='login-ico'>🔒</span><input name='clave' type='password' placeholder='Ingrese su clave' required></div></div>
         """
     else:
         opts = ''.join([f"<option value='{e}'>{e}</option>" for e in empresas_disponibles_login()])
         fields = f"""
-          <div class='field'><label>Empresa</label><div class='login-input'>🏢<select name='empresa' required style='width:100%;background:transparent;color:#fff;border:0;padding:15px 8px;font-weight:900'><option value=''>Seleccione empresa</option>{opts}</select></div></div>
-          <div class='field'><label>DNI</label><div class='login-input'>🪪<input name='dni' maxlength='8' placeholder='Ingrese su DNI' required></div></div>
-          <div class='field'><label>Clave</label><div class='login-input'>🔑<input name='correo' type='password' placeholder='Fecha nacimiento: ddmmaaaa' required></div></div>
+          <div class='field'><label>Empresa</label><div class='login-input'><span class='login-ico'>🏢</span><select name='empresa' required style='width:100%;background:transparent;color:#fff;border:0;padding:15px 8px;font-weight:900'><option value=''>Seleccione empresa</option>{opts}</select></div></div>
+          <div class='field'><label>DNI</label><div class='login-input'><span class='login-ico'>🪪</span><input name='dni' maxlength='8' placeholder='Ingrese su DNI' required></div></div>
+          <div class='field'><label>Clave</label><div class='login-input'><span class='login-ico'>🔑</span><input name='correo' type='password' placeholder='Fecha nacimiento: ddmmaaaa' required></div></div>
         """
     body = f"""
     <div class='login-body'><form class='login-card' method='post' action='{action}'><div class='login-inner'>
       <div class='login-logo'><img src='{logo_url()}'></div><div class='login-title'><h1>{title}</h1><b>{sub}</b></div>
-      {f"<div class='flash err'>{error}</div>" if error else ""}{fields}<button class='btn-green'>Ingresar</button>
+      {f"<div class='flash err'>{error}</div>" if error else ""}{fields}<button class='btn-green'>🛡️ Ingresar</button>
     </div><div class='login-links'>{'<a href="/">Ir al portal trabajador</a>' if admin else '<a href="/admin/login">Acceso administrador</a>'}</div></form></div>"""
     return render_template_string(BASE, body=body, title=title)
 
