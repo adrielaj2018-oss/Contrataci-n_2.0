@@ -1943,172 +1943,58 @@ def item(tipo, label, icon, active):
 
 def sidebar(active):
     active_txt = str(active or '')
-    active_type = active_txt.split(':', 1)[0]
     active_sub = active_txt.split(':', 1)[1] if ':' in active_txt else ''
-    pago_parts=[]
-    for k,l,i in TIPOS_PAGO:
-        if k=='Normal':
-            sub_open = ' force-open' if active_type == k else ''
-            base_cls = 'menu-item parent-active' if active_type == k else 'menu-item'
-            cls_mensual = 'menu-item sub-mini active' if active_type == k and active_sub == 'Mensual' else 'menu-item sub-mini'
-            cls_semanal = 'menu-item sub-mini active' if active_type == k and active_sub == 'Semanal' else 'menu-item sub-mini'
-            pago_parts.append(f"<div id='grp_normal' data-group='normal' class='menu-group nested{sub_open}'><button type='button' class='{base_cls}' onclick=\"toggleGroup('grp_normal')\"><span>{i}</span><span class='label'>{l}</span><span class='chev'>∨</span></button><div class='submenu'>")
-            pago_parts.append(f"<a class='{cls_mensual}' onclick='saveSideScroll()' href='{url_for('panel_tipo', tipo=k, sub='Mensual')}'><span>📅</span><span class='label'>Normal mensual</span></a>")
-            pago_parts.append(f"<a class='{cls_semanal}' onclick='saveSideScroll()' href='{url_for('panel_tipo', tipo=k, sub='Semanal')}'><span>🗓️</span><span class='label'>Normal semanal</span></a></div></div>")
-        else:
-            pago_parts.append(item(k,l,i,active))
-    pago = ''.join(pago_parts)
-    emp = ''.join(item(k,l,i,active) for k,l,i in TIPOS_EMPRESA)
-    per = ''.join(item(k,l,i,active) for k,l,i in TIPOS_PERSONALES)
-    def gclass(keys):
-        return 'menu-group force-open' if active_type in keys else 'menu-group'
-    pago_cls = gclass([k for k,_,_ in TIPOS_PAGO])
-    emp_cls = gclass([k for k,_,_ in TIPOS_EMPRESA])
-    per_cls = gclass([k for k,_,_ in TIPOS_PERSONALES])
-    admin = ""
     if session.get('admin_id'):
-        admin_keys = ['Admin','Trabajadores','Usuarios','Modulo documentos','Subir documentos','Gestion Vacacional','Gestion Contratacion','Modo prueba'] + [k for k,_,_ in TIPOS_PAGO] + [k for k,_,_ in TIPOS_EMPRESA] + [k for k,_,_ in TIPOS_PERSONALES]
-        admin_cls = 'menu-group force-open' if active_type in admin_keys else 'menu-group'
-        cls_dash = 'menu-item active' if active == 'Admin' else 'menu-item'
-        cls_trab = 'menu-item active' if active == 'Trabajadores' else 'menu-item'
-        cls_docs = 'menu-item active' if active == 'Subir documentos' else 'menu-item'
-        cls_users = 'menu-item active' if active == 'Usuarios' else 'menu-item'
-        cls_moddocs = 'menu-item active' if active == 'Modulo documentos' else 'menu-item'
-        cls_vac = 'menu-item active' if active == 'Gestion Vacacional' else 'menu-item'
-        cls_con = 'menu-item active' if active == 'Gestion Contratacion' else 'menu-item'
-        cls_test = 'menu-item active' if active == 'Modo prueba' else 'menu-item'
-        docs_mod_keys = [k for k,_,_ in TIPOS_PAGO] + [k for k,_,_ in TIPOS_EMPRESA] + [k for k,_,_ in TIPOS_PERSONALES] + ['Modulo documentos','Subir documentos']
-        docs_mod_cls = 'menu-group nested force-open' if active_type in docs_mod_keys else 'menu-group nested'
-        vac_cls = 'menu-group nested force-open' if active == 'Gestion Vacacional' else 'menu-group nested'
-        con_cls = 'menu-group nested force-open' if active_type == 'Gestion Contratacion' else 'menu-group nested'
-        docs_head = 'menu-title' + (' active' if active_type in docs_mod_keys else '')
-        vac_head = 'menu-title' + (' active' if active == 'Gestion Vacacional' else '')
-        con_head = 'menu-title' + (' active' if active_type == 'Gestion Contratacion' else '')
         docs_count_con = 0
         try:
             with db() as _conx:
                 docs_count_con = _conx.execute('SELECT COUNT(*) FROM contratacion_docs').fetchone()[0]
         except Exception:
-            docs_count_con = 0
-        archivos_cls = 'menu-item sub-mini doc-loaded ' + ('active' if active_sub == 'documentaria' else '') if docs_count_con else 'menu-item sub-mini ' + ('active' if active_sub == 'documentaria' else '')
+            pass
+        def cls(sec):
+            return 'menu-item sub-mini active' if active_sub == sec else 'menu-item sub-mini'
         admin = f"""
-        <div id='grp_admin' data-group='admin' class='{admin_cls}'>
-          <button type='button' class='menu-title' onclick="toggleGroup('grp_admin')"><span>⚙️</span><span class='label'>Administrador</span><span class='chev'>∨</span></button>
+        <div id='grp_contratacion' data-group='contratacion' class='menu-group force-open'>
+          <button type='button' class='menu-title active' onclick="toggleGroup('grp_contratacion')"><span>🧾</span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
           <div class='submenu'>
-            <a class='{cls_dash}' onclick='saveSideScroll()' href='/admin'><span>📊</span><span class='label'>Dashboard</span></a>
-            <div id='grp_modulo_documentos' data-group='modulo_documentos' class='{docs_mod_cls}'>
-              <button type='button' class='{docs_head}' onclick="toggleGroup('grp_modulo_documentos')"><span>🗃️</span><span class='label'>1. Gestión Documental</span><span class='chev'>∨</span></button>
+            <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><span>☰</span><span class='label'>Flujos de aprobación</span></a>
+            <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><span>⬆️</span><span class='label'>Carga Masiva</span></a>
+            <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><span>▤</span><span class='label'>Reportes</span></a>
+            <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
+              <button type='button' class='menu-title'><span>💼</span><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls_moddocs}' onclick='saveSideScroll()' href='/admin/modulo/documentos'><span>📊</span><span class='label'>Dashboard</span></a>
-                <div id='grp_pago' data-group='pago' class='{pago_cls}'>
-                  <button type='button' class='menu-title' onclick="toggleGroup('grp_pago')"><span>▣</span><span class='label'>Documentos de pago</span><span class='chev'>∨</span></button>
-                  <div class='submenu'>{pago}</div>
-                </div>
-                <div id='grp_empresa' data-group='empresa' class='{emp_cls}'>
-                  <button type='button' class='menu-title' onclick="toggleGroup('grp_empresa')"><span>▦</span><span class='label'>Documentos de la empresa</span><span class='chev'>∨</span></button>
-                  <div class='submenu'>{emp}</div>
-                </div>
-                <div id='grp_personal' data-group='personal' class='{per_cls}'>
-                  <button type='button' class='menu-title' onclick="toggleGroup('grp_personal')"><span>▤</span><span class='label'>Documentos personales</span><span class='chev'>∨</span></button>
-                  <div class='submenu'>{per}</div>
-                </div>
-                <a class='{cls_docs}' onclick='saveSideScroll()' href='/admin/documentos'><span>⬆️</span><span class='label'>Subir / gestionar documentos</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/plantilla_gestion/documental'><span>⬇️</span><span class='label'>Plantilla Documental</span></a>
+                <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><span>•</span><span class='label'>Mantenedor General</span></a>
+                <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><span>•</span><span class='label'>Trabajadores Obs.</span></a>
+                <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><span>•</span><span class='label'>Tipos por Etapa</span></a>
+                <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><span>•</span><span class='label'>Tipo Documento Empleado</span></a>
+                <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><span>•</span><span class='label'>Cargo</span></a>
+                <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><span>•</span><span class='label'>Actualizar Trabajador</span></a>
               </div>
             </div>
-            <div id='grp_vacacional' data-group='vacacional' class='{vac_cls}'>
-              <button type='button' class='{vac_head}' onclick="toggleGroup('grp_vacacional')"><span>🏖️</span><span class='label'>2. Gestión Vacacional</span><span class='chev'>∨</span></button>
+            <div id='grp_con_documentaria' data-group='con_documentaria' class='menu-group nested force-open'>
+              <button type='button' class='menu-title'><span>🪪</span><span class='label'>Gestión Documentaria</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls_vac}' onclick='saveSideScroll()' href='/admin/vacaciones'><span>📊</span><span class='label'>Dashboard vacacional</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/vacaciones#cargar-saldos'><span>🗓️</span><span class='label'>Saldos Vacacionales</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/vacaciones#solicitudes'><span>📄</span><span class='label'>Solicitudes de Vacaciones</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/vacaciones#aprobaciones'><span>✅</span><span class='label'>Aprobaciones</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/vacaciones#reportes'><span>📑</span><span class='label'>Reportes</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/plantilla_gestion/vacacional'><span>⬇️</span><span class='label'>Plantilla Vacacional</span></a>
+                <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><span>•</span><span class='label'>Renovación Contrato</span></a>
+                <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><span>•</span><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
+                <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><span>•</span><span class='label'>Ficha Trabajador</span></a>
+                <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><span>•</span><span class='label'>Plantilla Documentos</span></a>
+                <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><span>•</span><span class='label'>Firma / Facial / Digital</span></a>
+                <a class='menu-item sub-mini' onclick='saveSideScroll()' href='/admin/plantilla_gestion/contratacion'><span>•</span><span class='label'>Plantilla Contratación</span></a>
+                <a class='{cls('nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nisira'><span>•</span><span class='label'>Contratación NISIRA</span></a>
+                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><span>•</span><span class='label'>Descargas</span></a>
               </div>
             </div>
-            <div id='grp_contratacion' data-group='contratacion' class='{con_cls}'>
-              <button type='button' class='{con_head}' onclick="toggleGroup('grp_contratacion')"><span>🧾</span><span class='label'>3. Gestión Contratación</span><span class='chev'>∨</span></button>
-              <div class='submenu'>
-                <a class='menu-item {'active' if active_type == 'Gestion Contratacion' and active_sub == 'flujo' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><span>☰</span><span class='label'>Flujos de aprobación</span></a>
-                <a class='menu-item {'active' if active_type == 'Gestion Contratacion' and active_sub == 'carga' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><span>⬆️</span><span class='label'>Carga Masiva</span></a>
-                <a class='menu-item {'active' if active_type == 'Gestion Contratacion' and active_sub == 'reportes' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><span>▤</span><span class='label'>Reportes</span></a>
-
-                <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested {'force-open' if active_sub in ['maestros','observados','tipos_etapa','tipo_empleado','cargo','actualizar'] else ''}'>
-                  <button type='button' class='menu-title {'active' if active_sub in ['maestros','observados','tipos_etapa','tipo_empleado','cargo','actualizar'] else ''}' onclick="toggleGroup('grp_con_maestros')"><span>💼</span><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
-                  <div class='submenu'>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'maestros' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><span>•</span><span class='label'>Mantenedor General</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'observados' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><span>•</span><span class='label'>Trabajadores Obs.</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'tipos_etapa' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><span>•</span><span class='label'>Tipos de Documento por Etapa</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'tipo_empleado' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><span>•</span><span class='label'>Tipo Documento Empleado</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'cargo' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><span>•</span><span class='label'>Cargo</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'actualizar' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><span>•</span><span class='label'>Actualizar Trabajador</span></a>
-                  </div>
-                </div>
-                <div id='grp_con_documentaria' data-group='con_documentaria' class='menu-group nested {'force-open' if active_sub in ['renovacion','documentaria','ficha','plantillas','nisira','descargas','firma'] else ''}'>
-                  <button type='button' class='menu-title {'active' if active_sub in ['renovacion','documentaria','ficha','plantillas','nisira','descargas','firma'] else ''}' onclick="toggleGroup('grp_con_documentaria')"><span>🪪</span><span class='label'>Gestión Documentaria</span><span class='chev'>∨</span></button>
-                  <div class='submenu'>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'renovacion' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><span>•</span><span class='label'>Renovación Contrato</span></a>
-                    <a class='{archivos_cls}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><span>•</span><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'ficha' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><span>•</span><span class='label'>Ficha Trabajador</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'plantillas' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><span>•</span><span class='label'>Plantilla Documentos</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'firma' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><span>•</span><span class='label'>Firma / Facial / Digital</span></a>
-                    <a class='menu-item sub-mini' onclick='saveSideScroll()' href='/admin/plantilla_gestion/contratacion'><span>•</span><span class='label'>Plantilla Contratación</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'nisira' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nisira'><span>•</span><span class='label'>Contratación NISIRA</span></a>
-                    <a class='menu-item sub-mini {'active' if active_sub == 'descargas' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><span>•</span><span class='label'>Descargas</span></a>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div id='grp_trabajadores_admin' data-group='trabajadores_admin' class='menu-group nested {'force-open' if active in ['Trabajadores','Usuarios'] or active_sub == 'anuncios' else ''}'>
-              <button type='button' class='menu-title {'active' if active in ['Trabajadores','Usuarios'] or active_sub == 'anuncios' else ''}' onclick="toggleGroup('grp_trabajadores_admin')"><span>👥</span><span class='label'>Trabajadores / Usuarios y claves</span><span class='chev'>∨</span></button>
-              <div class='submenu'>
-                <a class='{cls_trab}' onclick='saveSideScroll()' href='/admin/trabajadores'><span>👥</span><span class='label'>Trabajadores</span></a>
-                <a class='{cls_users}' onclick='saveSideScroll()' href='/admin/usuarios'><span>🔐</span><span class='label'>Usuarios y claves</span></a>
-                <a class='menu-item {'active' if active_type == 'Gestion Contratacion' and active_sub == 'anuncios' else ''}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><span>📢</span><span class='label'>Anuncios</span></a>
-              </div>
-            </div>
-            <a class='{cls_test}' onclick='saveSideScroll()' href='/admin/modo_prueba'><span>🧪</span><span class='label'>Modo prueba y limpieza</span></a>
+            <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><span>📢</span><span class='label'>Anuncios</span></a>
           </div>
         </div>"""
-    user_docs_keys = [k for k,_,_ in TIPOS_PAGO] + [k for k,_,_ in TIPOS_EMPRESA] + [k for k,_,_ in TIPOS_PERSONALES]
-    user_docs_cls = 'menu-group force-open' if active_type in user_docs_keys else 'menu-group'
-    documentos_generales = '' if session.get('admin_id') else f"""
-      <div id='grp_user_documental' data-group='user_documental' class='{user_docs_cls}'>
-        <button type='button' class='menu-title' onclick="toggleGroup('grp_user_documental')"><span>🗃️</span><span class='label'>Gestión Documental</span><span class='chev'>∨</span></button>
-        <div class='submenu'><a class='menu-item' onclick='saveSideScroll()' href='/panel'><span>📊</span><span class='label'>Dashboard documental</span></a>
-          <div id='grp_pago' data-group='pago' class='{pago_cls}'>
-            <button type='button' class='menu-title' onclick="toggleGroup('grp_pago')"><span>▣</span><span class='label'>Documentos de pago</span><span class='chev'>∨</span></button>
-            <div class='submenu'>{pago}</div>
-          </div>
-          <div id='grp_empresa' data-group='empresa' class='{emp_cls}'>
-            <button type='button' class='menu-title' onclick="toggleGroup('grp_empresa')"><span>▦</span><span class='label'>Documentos de la empresa</span><span class='chev'>∨</span></button>
-            <div class='submenu'>{emp}</div>
-          </div>
-          <div id='grp_personal' data-group='personal' class='{per_cls}'>
-            <button type='button' class='menu-title' onclick="toggleGroup('grp_personal')"><span>▤</span><span class='label'>Documentos personales</span><span class='chev'>∨</span></button>
-            <div class='submenu'>{per}</div>
-          </div>
-        </div>
-      </div>"""
-    user_gestiones = '' if session.get('admin_id') else f"""
-      <div id='grp_user_vacacional' data-group='user_vacacional' class='menu-group {'force-open' if active == 'Gestion Vacacional' else ''}'>
-        <button type='button' class='menu-title {'active' if active == 'Gestion Vacacional' else ''}' onclick="toggleGroup('grp_user_vacacional')"><span>🏖️</span><span class='label'>Gestión Vacacional</span><span class='chev'>∨</span></button>
-        <div class='submenu'><a class='menu-item {'active' if active == 'Gestion Vacacional' else ''}' onclick='saveSideScroll()' href='/vacaciones/mi_solicitud'><span>📊</span><span class='label'>Dashboard vacacional</span></a><a class='menu-item {'active' if active == 'Gestion Vacacional' else ''}' onclick='saveSideScroll()' href='/vacaciones/mi_solicitud#solicitar'><span>🗓️</span><span class='label'>Saldo y solicitud</span></a><a class='menu-item {'active' if active == 'Gestion Vacacional' else ''}' onclick='saveSideScroll()' href='/vacaciones/aprobaciones_jefe'><span>✅</span><span class='label'>Aprobaciones jefe</span></a></div>
-      </div>
-      <div id='grp_user_contrato' data-group='user_contrato' class='menu-group {'force-open' if active == 'Gestion Contratacion' else ''}'>
-        <button type='button' class='menu-title {'active' if active == 'Gestion Contratacion' else ''}' onclick="toggleGroup('grp_user_contrato')"><span>🧾</span><span class='label'>Gestión Contrato</span><span class='chev'>∨</span></button>
-        <div class='submenu'><a class='menu-item {'active' if active == 'Gestion Contratacion' else ''}' onclick='saveSideScroll()' href='/contratacion/mis_documentos'><span>📊</span><span class='label'>Dashboard contrato</span></a><a class='menu-item {'active' if active == 'Gestion Contratacion' else ''}' onclick='saveSideScroll()' href='/contratacion/mis_documentos#mis-contratos'><span>📄</span><span class='label'>Mis contratos</span></a></div>
-      </div>"""
-    return f"""
+        return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><span>👤</span><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><span>🚪</span><span class='label'>Salir</span></a></div></div></nav>"""
+    return """
     <nav>
-      {documentos_generales}
-      {user_gestiones}
-      {admin}
-      <div id='grp_cuenta' data-group='cuenta' class='menu-group {'force-open' if active == 'Inicio' else ''}'>
-        <button type='button' class='menu-title {'active' if active == 'Inicio' else ''}' onclick="toggleGroup('grp_cuenta')"><span>👤</span><span class='label'>Mi cuenta</span><span class='chev'>∨</span></button>
-        <div class='submenu'><a class='menu-item {'active' if active == 'Inicio' else ''}' onclick='saveSideScroll()' href='/panel'><span>🏠</span><span class='label'>Inicio</span></a><a class='menu-item' href='/logout'><span>🚪</span><span class='label'>Salir</span></a></div>
+      <div id='grp_user_contrato' data-group='user_contrato' class='menu-group force-open'>
+        <button type='button' class='menu-title active' onclick="toggleGroup('grp_user_contrato')"><span>🧾</span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
+        <div class='submenu'><a class='menu-item active' onclick='saveSideScroll()' href='/contratacion/mis_documentos'><span>📊</span><span class='label'>Mis documentos</span></a></div>
       </div>
+      <div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><span>👤</span><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><span>🚪</span><span class='label'>Salir</span></a></div></div>
     </nav>"""
 
 
@@ -2247,6 +2133,7 @@ def seleccionar_empresa():
 @app.route('/panel')
 @worker_required
 def panel():
+    return redirect(url_for('mis_documentos_contratacion'))
     dni = session['dni']; sincronizar_documentos_carpeta(dni); t = get_trabajador(dni)
     if not t:
         flash('No se encontró tu trabajador activo. Vuelve a iniciar sesión o contacta a RRHH.', 'err')
