@@ -6843,20 +6843,6 @@ try:
 '''
 except Exception:
     pass
-
-
-# =========================================================
-# PARCHE FINAL 125 - UI PLANTILLAS + LOGIN MÓVIL + SIDEBAR
-# =========================================================
-try:
-    FINAL_UI_PATCH_CSS += "\n/* ===== PATCH 125: CORRECCIÓN VISUAL DEFINITIVA ===== */\n:root{--ui-green:#10b981;--ui-green2:#059669;--ui-dark:#0f172a;--ui-muted:#64748b;--ui-line:#dbe7f1;--ui-bg:#f3f8f7;}\nhtml,body{background:var(--ui-bg)!important;color:var(--ui-dark)!important;}\n.login-page,.login-wrap,.login-container{min-height:100dvh!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:18px!important;overflow:hidden!important;}\n.login-card{width:min(610px,calc(100vw - 28px))!important;max-width:610px!important;margin:0 auto!important;padding:34px 42px 38px!important;border-radius:28px!important;overflow:hidden!important;position:relative!important;background:#fff!important;box-shadow:0 24px 60px rgba(15,23,42,.12)!important;}\n.login-card .login-icon,.login-card .logo-circle,.login-card .login-avatar,.login-card .brand-circle{position:relative!important;margin:0 auto 16px!important;top:auto!important;left:auto!important;right:auto!important;transform:none!important;width:96px!important;height:96px!important;z-index:1!important;opacity:1!important;}\n.login-card h1,.login-title,.login-card .title{font-size:38px!important;line-height:1.05!important;letter-spacing:-1.4px!important;text-align:center!important;margin:8px auto 8px!important;white-space:normal!important;max-width:100%!important;position:relative!important;z-index:2!important;}\n.login-card h2{font-size:18px!important;text-align:center!important;color:#667085!important;margin:0 0 18px!important;}\n.login-card label{display:block!important;margin:12px 0 7px!important;font-size:14px!important;font-weight:800!important;color:#1f2937!important;}\n.login-card input,.login-card select{height:48px!important;min-height:48px!important;font-size:15px!important;border-radius:16px!important;}\n.login-card .input-row,.login-card .field-row{min-height:54px!important;border-radius:18px!important;}\n.login-card button,.login-card .btn-green{height:56px!important;min-height:56px!important;border-radius:18px!important;font-size:20px!important;margin-top:18px!important;}\n@media(max-width:700px){.login-page,.login-wrap,.login-container{align-items:center!important;padding:10px!important;min-height:100svh!important}.login-card{width:calc(100vw - 22px)!important;max-width:420px!important;padding:22px 20px 24px!important;border-radius:24px!important;max-height:calc(100svh - 22px)!important;overflow:auto!important}.login-card .login-icon,.login-card .logo-circle,.login-card .login-avatar,.login-card .brand-circle{width:72px!important;height:72px!important;margin-bottom:8px!important}.login-card h1,.login-title,.login-card .title{font-size:26px!important;line-height:1.08!important;letter-spacing:-.7px!important;margin:4px 0 6px!important}.login-card h2,.login-subtitle{font-size:14px!important;line-height:1.25!important;margin-bottom:12px!important}.login-card label{font-size:13px!important;margin:9px 0 5px!important}.login-card input,.login-card select{height:44px!important;min-height:44px!important;font-size:14px!important;border-radius:14px!important}.login-card .input-row,.login-card .field-row{min-height:48px!important;border-radius:16px!important}.login-card button,.login-card .btn-green{height:50px!important;min-height:50px!important;font-size:18px!important;border-radius:16px!important;margin-top:14px!important}}\n@media(max-width:390px){.login-card h1,.login-title,.login-card .title{font-size:23px!important}.login-card{padding:18px 16px!important}}\n.mobile-head{position:sticky!important;top:0!important;z-index:350!important;background:#074b39!important;color:#fff!important;height:58px!important;display:none;align-items:center!important;justify-content:space-between!important;padding:0 16px!important}.mobile-head .toggle,.side-top .toggle,.hambox{cursor:pointer!important;pointer-events:auto!important;touch-action:manipulation!important}.side{scroll-behavior:auto!important;overscroll-behavior:contain!important}.side-user{position:sticky!important;bottom:10px!important;z-index:10!important;backdrop-filter:blur(8px)!important}\n@media(max-width:900px){.mobile-head{display:flex!important}.app,.app.side-collapsed{display:block!important;grid-template-columns:1fr!important}.side{position:fixed!important;top:0!important;left:0!important;transform:translateX(-105%)!important;width:min(86vw,310px)!important;height:100dvh!important;z-index:300!important;transition:transform .22s ease!important;box-shadow:16px 0 40px rgba(15,23,42,.28)!important}.side.open{transform:translateX(0)!important;left:0!important}.side.collapsed{width:min(86vw,310px)!important;transform:translateX(-105%)!important}.side.open.collapsed{transform:translateX(0)!important}body.menu-open{overflow:hidden!important}body.menu-open:after{content:'';position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:250}.main{padding:14px!important;width:100%!important;max-width:100vw!important;overflow-x:hidden!important}}\n.main h1,.c-title,.admin-title h1{color:#0b2340!important;font-weight:850!important;letter-spacing:-.6px!important}.c-card,.pro-card,.dash-card,.card,.table-wrap{background:#fff!important;border:1px solid #d9e6f2!important;box-shadow:0 16px 40px rgba(15,23,42,.07)!important;color:#102033!important}.pro-card.nice-form,.nice-form,.pro-form,.c-form{background:#fff!important;border:1px solid #dbe7f1!important;border-radius:20px!important;box-shadow:0 14px 34px rgba(15,23,42,.06)!important}.pro-card.nice-form b,.nice-form b,.pro-form b,.c-form b{background:#eef4f8!important;color:#17263a!important;font-weight:750!important}.pro-card.nice-form input,.pro-card.nice-form select,.pro-card.nice-form textarea,.nice-form input,.nice-form select,.nice-form textarea,.pro-form input,.pro-form select,.pro-form textarea,.c-form input,.c-form select,.c-form textarea{background:#fff!important;color:#0f172a!important;border:1px solid #cfdceb!important;box-shadow:none!important;font-weight:600!important}.table-wrap{overflow:auto!important;border-radius:20px!important;background:#fff!important}table,.c-table{background:#fff!important;color:#17263a!important;border-collapse:separate!important;border-spacing:0!important;min-width:980px!important}th,.c-table th{background:#f1f6fb!important;color:#24344a!important;font-size:13px!important;font-weight:850!important;text-transform:none!important;border:1px solid #dbe5ef!important;padding:13px 14px!important}td,.c-table td{background:#fff!important;color:#17263a!important;font-size:14px!important;font-weight:650!important;border:1px solid #dbe5ef!important;padding:13px 14px!important;opacity:1!important;text-shadow:none!important}tr:nth-child(even) td{background:#fafcff!important}tr:hover td{background:#f4fbf8!important}td *,.c-table td *,.table-wrap *{opacity:1!important;color:inherit!important;text-shadow:none!important}.c-table select,table select{background:#fff!important;color:#17263a!important;border:1px solid #cfdceb!important;font-weight:700!important}.c-btn,.crear-btn,.btn-blue,.btn-green,.module-tools button{opacity:1!important;color:#fff!important;font-weight:800!important;text-shadow:none!important}.c-btn.gray,.btn-gray,.module-tools .gray{background:#1e293b!important;color:#fff!important}td .c-btn,td .btn,td button{min-height:36px!important;border-radius:14px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;color:#0f766e!important;background:#e8fff4!important;border:1px solid #86efac!important}\n.gestion-card,.gestion-contratacion-only{position:relative!important;overflow:hidden!important}.gestion-card .gestion-icon,.gestion-contratacion-only .gestion-icon{position:relative!important;z-index:1!important;flex:0 0 auto!important}.gestion-card h2,.gestion-card p,.gestion-card a{position:relative!important;z-index:2!important}@media(max-width:700px){.gestion-card,.gestion-contratacion-only{display:flex!important;flex-direction:column!important;align-items:center!important;text-align:center!important;padding:26px 20px!important;gap:12px!important}.gestion-card .gestion-icon,.gestion-contratacion-only .gestion-icon{width:74px!important;height:74px!important;margin:0 auto 4px!important;order:-1!important;position:relative!important;top:auto!important;left:auto!important;transform:none!important}.gestion-card h2{font-size:25px!important;line-height:1.08!important;margin:4px 0 8px!important}.gestion-card p{font-size:16px!important;line-height:1.45!important}.gestion-card .btn-blue,.gestion-card a{width:100%!important;max-width:310px!important;margin:8px auto 0!important}}\n"
-except Exception:
-    pass
-try:
-    FINAL_UI_PATCH_JS += '\n<script id="patch-125-sidebar-login">\n(function(){\n  function side(){return document.querySelector(\'.side\')}\n  function shell(){return document.querySelector(\'.app\')}\n  window.saveSideScroll=function(){try{const s=side(); if(s)localStorage.setItem(\'sideScroll\',String(s.scrollTop||0)); localStorage.setItem(\'mainScroll\',String(window.scrollY||document.documentElement.scrollTop||0));}catch(e){}};\n  window.restoreSideScroll=function(){try{const s=side(); if(s)s.scrollTop=parseInt(localStorage.getItem(\'sideScroll\')||\'0\',10)||0;}catch(e){}};\n  window.toggleSide=function(){const s=side(),a=shell(); if(!s)return; if(window.innerWidth<=900){s.classList.remove(\'collapsed\'); if(a)a.classList.remove(\'side-collapsed\'); const open=!s.classList.contains(\'open\'); s.classList.toggle(\'open\',open); document.body.classList.toggle(\'menu-open\',open);}else{const c=!s.classList.contains(\'collapsed\'); s.classList.toggle(\'collapsed\',c); if(a)a.classList.toggle(\'side-collapsed\',c); localStorage.setItem(\'sideCollapsed\',c?\'1\':\'0\');}};\n  window.toggleGroup=function(id){const g=document.getElementById(id); if(!g)return; g.classList.toggle(\'closed\'); try{localStorage.setItem(\'group_\'+id,g.classList.contains(\'closed\')?\'1\':\'0\')}catch(e){}};\n  function init(){const s=side(),a=shell(); if(s){if(window.innerWidth<=900){s.classList.remove(\'collapsed\'); if(a)a.classList.remove(\'side-collapsed\');}else{const c=localStorage.getItem(\'sideCollapsed\')===\'1\';s.classList.toggle(\'collapsed\',c);if(a)a.classList.toggle(\'side-collapsed\',c);} setTimeout(window.restoreSideScroll,80);} document.querySelectorAll(\'.menu-item,a[href]\').forEach(el=>{if(!el.dataset.patch125){el.dataset.patch125=\'1\';el.addEventListener(\'click\',function(){window.saveSideScroll();if(window.innerWidth<=900){const s=side();if(s)s.classList.remove(\'open\');document.body.classList.remove(\'menu-open\');}},true);}}); document.addEventListener(\'click\',function(ev){if(window.innerWidth<=900&&document.body.classList.contains(\'menu-open\')){const s=side();if(s&&!s.contains(ev.target)&&!ev.target.closest(\'.toggle,.hambox\')){s.classList.remove(\'open\');document.body.classList.remove(\'menu-open\');}}},true);}\n  if(document.readyState===\'loading\')document.addEventListener(\'DOMContentLoaded\',init);else init(); window.addEventListener(\'beforeunload\',window.saveSideScroll);\n})();\n</script>\n'
-except Exception:
-    pass
-
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
     host = os.getenv('HOST', '0.0.0.0')
@@ -6887,3 +6873,167 @@ if __name__ == '__main__':
         print('No se pudo iniciar con SSL:', e)
         print('Reintentando en HTTP solo para PC localhost...')
         app.run(host=host, port=port, debug=debug)
+
+
+# =============================
+# OVERRIDES UI MOBILE / PANEL / LOGIN
+# =============================
+from flask import Response
+
+@app.after_request
+def inject_ui_overrides(response):
+    try:
+        ctype = response.headers.get("Content-Type","")
+        if "text/html" in ctype and response.status_code == 200:
+            html_resp = response.get_data(as_text=True)
+
+            override = """
+<style id="ui-overrides-final">
+/* TABLAS Y LETRAS PLANTILLAS */
+table td, table td *, table th, table th *{
+    color:#1f2937 !important;
+    opacity:1 !important;
+}
+table tbody tr{
+    background:#ffffff !important;
+}
+table tbody td{
+    font-size:14px !important;
+    font-weight:600 !important;
+}
+
+/* PANEL FIJO */
+.sidebar,
+.side-menu,
+#sidebar,
+aside{
+    position:fixed !important;
+    top:0 !important;
+    left:0 !important;
+    height:100vh !important;
+    overflow-y:auto !important;
+    z-index:9999 !important;
+}
+.main-content,
+.content,
+.dashboard-content{
+    margin-left:290px !important;
+}
+
+/* LOGIN */
+.login-card,
+.auth-card,
+.login-container{
+    max-width:680px !important;
+    margin:auto !important;
+    overflow:hidden !important;
+}
+.login-card h1,
+.auth-card h1{
+    font-size:58px !important;
+    line-height:1.0 !important;
+    text-align:center !important;
+    padding-top:70px !important;
+}
+.login-logo,
+.auth-logo{
+    top:-25px !important;
+    transform:translateX(-50%) !important;
+    z-index:1 !important;
+}
+.login-card h1,
+.auth-card h1{
+    position:relative !important;
+    z-index:5 !important;
+}
+
+/* MOBILE */
+@media(max-width:768px){
+
+    .main-content,
+    .content,
+    .dashboard-content{
+        margin-left:0 !important;
+        width:100% !important;
+        padding:12px !important;
+    }
+
+    .login-card,
+    .auth-card,
+    .login-container{
+        width:92% !important;
+        max-width:92% !important;
+        margin:20px auto !important;
+        border-radius:28px !important;
+        padding:18px !important;
+    }
+
+    .login-card h1,
+    .auth-card h1{
+        font-size:34px !important;
+        line-height:1.1 !important;
+        padding-top:55px !important;
+    }
+
+    .login-logo,
+    .auth-logo{
+        width:120px !important;
+        height:120px !important;
+        top:-12px !important;
+    }
+
+    .sidebar,
+    .side-menu,
+    #sidebar,
+    aside{
+        transform:translateX(-100%);
+        transition:0.3s ease;
+        width:260px !important;
+    }
+
+    .sidebar.open,
+    .side-menu.open,
+    #sidebar.open,
+    aside.open{
+        transform:translateX(0) !important;
+    }
+}
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+
+    // BOTON HAMBURGUESA MOBILE
+    const buttons = document.querySelectorAll('.menu-toggle,.hamburger,.sidebar-toggle,.mobile-toggle');
+
+    buttons.forEach(btn=>{
+        btn.onclick=function(e){
+            e.preventDefault();
+            const sidebar=document.querySelector('.sidebar,#sidebar,.side-menu,aside');
+            if(sidebar){
+                sidebar.classList.toggle('open');
+            }
+        }
+    });
+
+    // MANTENER POSICION SCROLL
+    document.querySelectorAll('a').forEach(a=>{
+        a.addEventListener('click', function(){
+            sessionStorage.setItem('scroll-pos', window.scrollY);
+        });
+    });
+
+    const saved = sessionStorage.getItem('scroll-pos');
+    if(saved){
+        setTimeout(()=>window.scrollTo(0, parseInt(saved)), 100);
+    }
+
+});
+</script>
+"""
+            if "ui-overrides-final" not in html_resp:
+                html_resp = html_resp.replace("</body>", override + "</body>")
+                response.set_data(html_resp)
+    except Exception as e:
+        print("override error", e)
+    return response
