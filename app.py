@@ -569,10 +569,6 @@ def sincronizar_jefes_vacaciones(con):
     except Exception:
         pass
 
-@app.context_processor
-def inject_ui_fixes():
-    return dict(UI_FIXES_PRO=UI_FIXES_PRO)
-
 def init_db():
     with db() as con:
         con.execute("""
@@ -2815,7 +2811,6 @@ table td form{margin:0!important}.c-table td{vertical-align:middle!important}.c-
 <style id="ui-orden-final-omar">
 body{font-family:Inter,system-ui,Arial!important;background:#eef7f5!important;color:#08243f!important}.main,.content,.app-main{padding:20px 24px!important}h1,h2,.c-title{color:#08243f!important;font-weight:900!important;letter-spacing:-.035em!important}.dash-hero{display:flex!important;justify-content:space-between!important;align-items:center!important;gap:24px!important;padding:32px!important;border-radius:24px!important;background:#fff!important;border:1px solid #dbe7f1!important;box-shadow:0 18px 44px rgba(15,23,42,.06)!important}.dash-hero h1{font-size:40px!important;margin:0 0 10px!important}.muted2{color:#5d6b82!important;font-weight:650!important;line-height:1.45!important}.c-card,.pro-card,.dash-card,.table-wrap{background:#fff!important;border:1px solid #dbe7f1!important;border-radius:22px!important;box-shadow:0 16px 38px rgba(15,23,42,.055)!important;overflow:hidden!important}.req-pro-grid{display:grid!important;grid-template-columns:minmax(420px,1fr) minmax(420px,1fr)!important;gap:22px!important;margin:18px 0 22px!important}.nice-form,.pro-form,.compact-form,.c-form{display:grid!important;grid-template-columns:180px minmax(0,1fr) 180px minmax(0,1fr)!important;gap:14px 18px!important;align-items:center!important;padding:26px!important}.nice-form h3,.pro-section-title,.section-head{grid-column:1/-1!important;margin:0 0 10px!important;padding:12px 16px!important;border-radius:14px!important;background:linear-gradient(90deg,#e9fff6,#f8fafc)!important;border:1px solid #b9f4d6!important;color:#073b2d!important;font-size:17px!important;font-weight:900!important}.nice-form b,.pro-form b,.compact-form b,.c-form b{display:flex!important;align-items:center!important;justify-content:flex-end!important;min-height:42px!important;padding:9px 12px!important;background:#f1f6fa!important;border-radius:12px!important;color:#0b2239!important;font-size:14px!important;font-weight:900!important;text-align:right!important;opacity:1!important}.nice-form input,.nice-form select,.nice-form textarea,.pro-form input,.pro-form select,.pro-form textarea,.compact-form input,.compact-form select,.compact-form textarea,.c-form input,.c-form select,.c-form textarea{width:100%!important;min-height:48px!important;border:1px solid #cfe0ef!important;border-radius:14px!important;background:#fff!important;color:#102033!important;padding:11px 14px!important;font-size:15px!important;font-weight:650!important;box-sizing:border-box!important}.nice-form textarea,.pro-form textarea,.compact-form textarea{min-height:84px!important}.full,.actions,.scan-box{grid-column:1/-1!important}.actions,.scan-tools,.scan-counter{display:flex!important;gap:10px!important;align-items:center!important;flex-wrap:wrap!important}.c-btn,.btn-green,.btn-blue{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:48px!important;padding:0 22px!important;border-radius:16px!important;background:linear-gradient(135deg,#14b979,#079765)!important;color:#fff!important;font-weight:900!important;border:0!important;text-decoration:none!important;box-shadow:0 14px 28px rgba(5,150,105,.18)!important}.c-btn.gray{background:#1f2937!important}.scan-box{background:#f8fffc!important;border:1px dashed #a7f3d0!important;border-radius:18px!important;padding:16px!important}.scan-camera{min-height:120px!important;border-radius:16px!important;background:#f1f5f9!important;display:grid!important;place-items:center!important;color:#4b5563!important;font-weight:800!important;margin-bottom:12px!important}.scan-camera video{width:100%!important;max-height:240px!important;border-radius:16px!important;object-fit:cover!important}.scan-counter span{background:#ecfdf5!important;color:#047857!important;border:1px solid #bbf7d0!important;border-radius:999px!important;padding:7px 10px!important;font-weight:900!important}.c-filter,.module-tools{display:grid!important;grid-template-columns:180px minmax(260px,1fr) auto auto!important;gap:14px!important;align-items:center!important;margin:18px 0!important}.c-filter input,.module-tools input,.module-tools select{min-height:46px!important;border:1px solid #cfe0ef!important;border-radius:14px!important;background:#fff!important;padding:10px 14px!important;color:#102033!important}.clean-table,.c-table{width:100%!important;border-collapse:separate!important;border-spacing:0!important;min-width:1100px!important}.clean-table th,.c-table th{background:#f3f7fb!important;color:#334155!important;font-size:13px!important;font-weight:900!important;text-align:left!important;padding:14px 16px!important;border-bottom:1px solid #dbe7f1!important}.clean-table td,.c-table td{padding:14px 16px!important;border-bottom:1px solid #edf2f7!important;color:#111827!important;font-weight:700!important;vertical-align:middle!important}.col-delete{width:96px!important;min-width:96px!important;text-align:center!important}.delete-mini,.action-delete,.btn-del{display:inline-flex!important;align-items:center!important;justify-content:center!important;max-width:90px!important;min-width:70px!important;height:34px!important;padding:0 10px!important;border-radius:999px!important;background:#eafff7!important;border:1px solid #99f6cc!important;color:#047857!important;font-size:12px!important;font-weight:900!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}.status-pill{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:108px!important;padding:9px 12px!important;border-radius:999px!important;background:#eafff7!important;border:1px solid #99f6cc!important;color:#059669!important;font-weight:900!important;white-space:nowrap!important}.doc-dash-pro{margin:18px 0!important;padding:28px!important;display:grid!important;grid-template-columns:1fr auto!important;gap:22px!important;align-items:center!important}.doc-dash-pro h2{font-size:32px!important;margin:0 0 8px!important}.doc-dash-pro h2 span{color:#059669!important}.doc-mini-kpis,.doc-actions{grid-column:1/-1!important;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:16px!important}.doc-mini-kpis b,.doc-actions span{background:#fff!important;border:1px solid #dbe7f1!important;border-radius:18px!important;padding:20px!important;font-size:18px!important}.doc-mini-kpis span{display:block!important;margin-top:12px!important;color:#059669!important;font-size:28px!important}.side{background:#063c31!important}.brand,.brand *{color:#ecfff8!important;font-weight:950!important}.side .menu-item,.side .menu-title{border-radius:18px!important;margin:8px 12px!important;padding:14px 16px!important;color:#eafff7!important;font-size:15px!important;font-weight:900!important;display:flex!important;align-items:center!important;gap:12px!important}.side .menu-item span:first-child,.side .menu-title span:first-child{width:36px!important;height:36px!important;border-radius:12px!important;background:rgba(255,255,255,.10)!important;display:grid!important;place-items:center!important}.side .menu-item.active,.side .menu-title.active{background:linear-gradient(135deg,#19bd78,#0c9362)!important;color:#05251e!important}.dash-card .quick-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;gap:10px!important}.dash-card .quick-grid a{background:#ecfdf5!important;color:#064e3b!important;border:1px solid #bbf7d0!important;border-radius:14px!important;padding:13px!important;font-weight:900!important;text-decoration:none!important}.photo-id-layout,.split-two,.admin-course-grid{display:grid!important;grid-template-columns:minmax(0,1.25fr) minmax(360px,.75fr)!important;gap:22px!important}.worker-eval{padding:24px!important;border-radius:22px!important}.eval-grid{display:grid!important;grid-template-columns:160px 1fr!important;gap:12px!important;align-items:center!important}.camera-box{display:grid!important;grid-template-columns:minmax(180px,260px) 1fr!important;gap:16px!important;align-items:start!important}.camera-box video,.camera-box img{width:100%!important;border-radius:16px!important;background:#111!important;min-height:220px!important;object-fit:cover!important}.cam-actions{display:flex!important;gap:10px!important;flex-wrap:wrap!important}@media(max-width:1050px){.req-pro-grid,.photo-id-layout,.split-two,.admin-course-grid{grid-template-columns:1fr!important}.nice-form,.pro-form,.compact-form,.c-form{grid-template-columns:1fr!important}.nice-form b,.pro-form b,.compact-form b,.c-form b{justify-content:flex-start!important;text-align:left!important}.c-filter,.module-tools{grid-template-columns:1fr!important}.dash-hero{flex-direction:column!important;align-items:flex-start!important}.dash-hero h1{font-size:30px!important}.doc-mini-kpis,.doc-actions{grid-template-columns:1fr!important}}
 </style>
-{% if UI_FIXES_PRO %}{{ UI_FIXES_PRO|safe }}{% endif %}
 </body></html>
 '''
 
@@ -6116,7 +6111,7 @@ html,body{overflow-x:hidden!important;}
         ctrl=[r for r in controles_next if r['modulo']==modulo]
         ctrl_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['total'])}</td><td>{h(r['procesados'])}</td><td>{h(r['observados'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ctrl]) or "<tr><td colspan='8'>Sin controles registrados.</td></tr>"
         base_post_rows=''.join([f"<tr><td><input type='checkbox' name='sel' value='{h(r['dni'])}'></td><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['fecha_ingreso'])}</td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='9'>Sin trabajadores registrados en Nuevos/Reingresantes.</td></tr>"
-        foto_rows = ''
+        foto_rows=''.join([f"<tr><td><input type='checkbox' name='sel' value='{h(r['dni'])}'></td><td>{('<img class=\'foto-mini\' src=\'/foto_trabajador/'+h(r['dni'])+'\'>') if r['foto_ruta'] else '<span class=\'photo-dot photo-no\'>SIN FOTO</span>'}</td><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td><span class='{('photo-dot photo-ok' if r['foto_ruta'] else 'photo-dot photo-no')}'>{'CON FOTO' if r['foto_ruta'] else 'SIN FOTO'}</span></td><td><span class='status-pill ok'>{h(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</span></td><td><button type='button' class='c-btn gray'>Ver</button></td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='9'>Sin base de fotos.</td></tr>"
         base_extra = f"<div class='filter-row-pro'><b>Base trabajadores registrados</b><input oninput=\"filtrarTabla(this,'tabla_base_post')\" placeholder='Filtrar por DNI, nombres, requerimiento...'><select><option>Todos</option><option>Con foto</option><option>Sin foto</option><option>Pendiente</option></select><button type='button' class='c-btn gray'>Modificar estado</button><button type='button' class='c-btn'>Avanzar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_base_post' class='c-table'><tr><th></th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Sede</th><th>Cargo</th><th>Estado</th><th>Ingreso</th></tr>{base_post_rows}</table></div>"
         extra = base_extra if sec!='fotocheck' else f'''<div class='c-card' style='padding:18px'><h2>Fotos / fotocheck + Zebra ZC300</h2><p class='muted2'>Base conectada con Nuevos/Reingresantes. Muestra quién tiene foto, quién falta y deja lista la impresión del fotocheck CR80 para Zebra ZC300 mediante USB/driver/Browser Print.</p><div class='zebra-card'><div><b>Flujo preparado</b><ol><li>Foto tomada en Alta.</li><li>Validación de DNI y trabajador.</li><li>Generación de plantilla CR80.</li><li>Conexión Zebra ZC300 por USB/driver.</li><li>Impresión, reimpresión y cargo firmado.</li></ol><div class='quick-grid'><a>Foto desde alta</a><a>Plantilla CR80</a><a>Impresión Zebra ZC300</a><a>Reimpresión</a><a>Cargo firmado</a><a>Exportar lote</a></div></div><div><b>Datos de impresión</b><input placeholder='Impresora: Zebra ZC300'><input placeholder='Serial / IP / USB'><select><option>USB / DRIVER WINDOWS</option><option>ZEBRA BROWSER PRINT</option><option>RED / IP</option></select><input placeholder='Plantilla CR80 - Horizontal'><button type='button' class='c-btn' onclick='alert(&quot;Conector preparado. Para imprimir desde Render se requiere PC puente/Browser Print o app local con driver Zebra instalado.&quot;)'>🔌 Conectar Zebra</button></div></div></div><div class='filter-row-pro'><b>Base fotocheck</b><input oninput="filtrarTabla(this,'tabla_fotos')" placeholder='Filtrar DNI o trabajador...'><select><option>Todos</option><option>Con foto</option><option>Sin foto</option><option>Pendiente impresión</option></select><button type='button' class='c-btn gray'>Generar PDF</button><button type='button' class='c-btn'>Imprimir seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_fotos' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Cargo</th><th>Estado foto</th><th>Fotocheck</th><th>Acción</th></tr>{foto_rows}</table></div>'''
         content=wrap(f"""
@@ -6878,144 +6873,3 @@ if __name__ == '__main__':
         print('No se pudo iniciar con SSL:', e)
         print('Reintentando en HTTP solo para PC localhost...')
         app.run(host=host, port=port, debug=debug)
-
-
-
-# =============================
-# UI FIXES PRO - MOBILE / SIDEBAR / LOGIN / PLANTILLAS
-# =============================
-UI_FIXES_PRO = """
-<style>
-.table,
-.table td,
-.table th,
-table td,
-table th{
-    color:#1f2937 !important;
-    opacity:1 !important;
-    text-shadow:none !important;
-}
-
-tbody td{
-    color:#334155 !important;
-    font-weight:600 !important;
-}
-
-.sidebar,
-.side-menu,
-.left-panel,
-.sidebar-wrapper{
-    position:fixed !important;
-    left:0 !important;
-    top:0 !important;
-    height:100vh !important;
-    overflow-y:auto !important;
-    z-index:999 !important;
-}
-
-.main-content,
-.content-wrapper,
-.page-content{
-    margin-left:270px !important;
-}
-
-html{
-    scroll-behavior:auto !important;
-}
-
-body{
-    overflow-x:hidden !important;
-}
-
-.login-logo,
-.header-logo,
-.logo-login{
-    position:relative !important;
-    top:-8px !important;
-    z-index:5 !important;
-}
-
-.login-title,
-.header-title{
-    position:relative !important;
-    z-index:10 !important;
-}
-
-@media (max-width:768px){
-
-    .login-card,
-    .login-container,
-    .login-box{
-        width:92% !important;
-        max-width:360px !important;
-        margin:auto !important;
-        padding:18px !important;
-        border-radius:18px !important;
-    }
-
-    .login-title,
-    .titulo-login{
-        font-size:22px !important;
-        text-align:center !important;
-    }
-
-    .login-logo img,
-    .logo-login img{
-        max-width:70px !important;
-        height:auto !important;
-    }
-
-    input,
-    select,
-    button{
-        min-height:44px !important;
-        font-size:14px !important;
-    }
-
-    .sidebar{
-        transform:translateX(-100%);
-        transition:all .3s ease;
-    }
-
-    .sidebar.active{
-        transform:translateX(0);
-    }
-
-    .menu-toggle,
-    .hamburger,
-    .btn-menu{
-        display:flex !important;
-        cursor:pointer !important;
-        z-index:9999 !important;
-    }
-
-    .main-content,
-    .content-wrapper,
-    .page-content{
-        margin-left:0 !important;
-        width:100% !important;
-    }
-
-    .topbar,
-    .header{
-        padding-left:65px !important;
-    }
-}
-</style>
-
-<script>
-document.addEventListener("DOMContentLoaded", function(){
-
-    const btn = document.querySelector(".menu-toggle, .hamburger, .btn-menu");
-    const sidebar = document.querySelector(".sidebar, .side-menu, .left-panel");
-
-    if(btn && sidebar){
-        btn.addEventListener("click", function(e){
-            e.preventDefault();
-            sidebar.classList.toggle("active");
-        });
-    }
-
-});
-</script>
-"""
