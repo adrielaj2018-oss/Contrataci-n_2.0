@@ -947,6 +947,25 @@ def init_db():
             except Exception: pass
 
         con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_ingresos(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dni TEXT, trabajador TEXT, empresa TEXT, sede TEXT, requerimiento TEXT, actividad TEXT,
+            tipo_ingreso TEXT DEFAULT 'NUEVO', estado TEXT DEFAULT 'PENDIENTE', fecha_ingreso TEXT,
+            cargo TEXT, area TEXT, correo TEXT, celular TEXT, observacion TEXT, fecha_registro TEXT, registrado_por TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_nisira_lotes(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, lote_codigo TEXT, empresa TEXT, sede TEXT, requerimiento TEXT, actividad TEXT,
+            total INTEGER DEFAULT 0, estado TEXT DEFAULT 'GENERADO', endpoint TEXT, api_key_ref TEXT, fecha_registro TEXT, creado_por TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_checklist_next(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, modulo TEXT, sede TEXT, requerimiento TEXT, actividad TEXT,
+            total INTEGER DEFAULT 0, procesados INTEGER DEFAULT 0, observados INTEGER DEFAULT 0, estado TEXT DEFAULT 'PENDIENTE',
+            fecha_registro TEXT, registrado_por TEXT
+        )''')
+
+        con.execute('''
         CREATE TABLE IF NOT EXISTS trabajadores_observados(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tipo_persona TEXT DEFAULT 'Trabajador',
@@ -2522,6 +2541,11 @@ def sidebar(active):
           <button type='button' class='menu-title active' onclick="toggleGroup('grp_contratacion')"><span>🧾</span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
           <div class='submenu'>
             <a class='{cls('dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=dashboard'><span>📊</span><span class='label'>Dashboard</span></a>
+            <a class='{cls('nuevos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nuevos'><span>🧑‍💼</span><span class='label'>Nuevos / Reingresantes</span></a>
+            <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><span>🔗</span><span class='label'>Integración NISIRA</span></a>
+            <a class='{cls('documentos_postulante')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentos_postulante'><span>🗃️</span><span class='label'>Docs Postulante</span></a>
+            <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><span>📋</span><span class='label'>Datos Completos</span></a>
+            <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><span>🖼️</span><span class='label'>Fotocheck</span></a>
             <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><span>🧭</span><span class='label'>Flujos de aprobación</span></a>
             <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><span>⬆️</span><span class='label'>Carga Masiva</span></a>
             <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><span>▤</span><span class='label'>Reportes</span></a>
@@ -4710,6 +4734,105 @@ def admin_contratacion():
     sec = request.args.get('sec','dashboard')
     if request.method=='POST':
         accion = request.form.get('accion','doc')
+        if accion == 'guardar_ingreso':
+            dni = normalizar_dni(request.form.get('dni'))
+            nombre = clean(request.form.get('trabajador')).upper()
+            empresa = clean(request.form.get('empresa')) or 'AQUANQA'
+            sede = clean(request.form.get('sede'))
+            requerimiento = clean(request.form.get('requerimiento'))
+            actividad = clean(request.form.get('actividad'))
+            tipo_ingreso = clean(request.form.get('tipo_ingreso')) or 'NUEVO'
+            fecha_ingreso = fecha_sin_hora(request.form.get('fecha_ingreso'))
+            cargo = clean(request.form.get('cargo'))
+            area = clean(request.form.get('area'))
+            correo = clean(request.form.get('correo')).lower()
+            celular = clean(request.form.get('celular'))
+            obs = clean(request.form.get('observacion'))
+            if not dni or not nombre:
+                flash('Completa DNI y trabajador.', 'error')
+                return redirect(url_for('admin_contratacion', sec='nuevos'))
+            with db() as con:
+                existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+                if existe:
+                    con.execute("""UPDATE trabajadores SET nombre=?, empresa=?, cargo=?, area=?, correo=?, celular=?, activo=1, fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso), observacion=? WHERE dni=?""", (nombre,empresa,cargo,area,correo,celular,fecha_ingreso,obs,dni))
+                    tipo_ingreso = 'REINGRESANTE'
+                else:
+                    con.execute("""INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,observacion,usuario_portal,clave_portal) VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?)""", (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha_ingreso,celular,obs,dni,dni))
+                con.execute("""INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (dni,nombre,empresa,sede,requerimiento,actividad,tipo_ingreso,'REGISTRADO',fecha_ingreso,cargo,area,correo,celular,obs,now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash(f'Trabajador {tipo_ingreso} registrado correctamente.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='nuevos'))
+        if accion == 'importar_ingresos_excel':
+            f = request.files.get('archivo')
+            if not f or not f.filename:
+                flash('Selecciona el Excel de nuevos/reingresantes.', 'error')
+                return redirect(url_for('admin_contratacion', sec='nuevos'))
+            carpeta = UPLOAD_DIR/'contratacion'/'ingresos'; carpeta.mkdir(parents=True, exist_ok=True)
+            path = carpeta/(now_file()+'_INGRESOS_'+secure_filename(f.filename)); f.save(path)
+            ok = 0
+            try:
+                wb = load_workbook(path, data_only=True); ws = wb.active; idx = _headers_excel(ws)
+                with db() as con:
+                    for row in ws.iter_rows(min_row=2):
+                        dni = normalizar_dni(_celda(row, idx, 'DNI','Documento','Numero Documento','Número Documento'))
+                        nombre = clean(_celda(row, idx, 'Trabajador','Nombre','Apellidos y Nombres','Nombres')).upper()
+                        if not dni or not nombre:
+                            continue
+                        empresa = clean(_celda(row, idx, 'Empresa','Compañía','Compania')) or 'AQUANQA'
+                        sede = clean(_celda(row, idx, 'Sede'))
+                        req = clean(_celda(row, idx, 'Requerimiento'))
+                        act = clean(_celda(row, idx, 'Actividad'))
+                        fecha = fecha_sin_hora(_celda(row, idx, 'Fecha Ingreso','Fecha Inicio'))
+                        cargo = clean(_celda(row, idx, 'Cargo','Puesto'))
+                        area = clean(_celda(row, idx, 'Area','Área'))
+                        correo = clean(_celda(row, idx, 'Correo','Email')).lower()
+                        celular = clean(_celda(row, idx, 'Celular','Telefono','Teléfono'))
+                        existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+                        tipo = 'REINGRESANTE' if existe else 'NUEVO'
+                        if existe:
+                            con.execute('UPDATE trabajadores SET nombre=?,empresa=?,cargo=?,area=?,correo=?,celular=?,activo=1,fecha_ingreso=COALESCE(NULLIF(?,""),fecha_ingreso) WHERE dni=?', (nombre,empresa,cargo,area,correo,celular,fecha,dni))
+                        else:
+                            con.execute('INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,usuario_portal,clave_portal) VALUES(?,?,?,?,?,?,1,?,?,?,?,?)', (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha,celular,dni,dni))
+                        con.execute('INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (dni,nombre,empresa,sede,req,act,tipo,'IMPORTADO',fecha,cargo,area,correo,celular,now_txt(),session.get('admin_user','admin')))
+                        ok += 1
+                    con.commit()
+                flash(f'Excel importado: {ok} trabajadores registrados/actualizados.', 'ok')
+            except Exception as e:
+                flash('Error importando ingresos: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec='nuevos'))
+        if accion == 'guardar_nisira_config':
+            set_config('nisira_base_url', clean(request.form.get('base_url')))
+            set_config('nisira_api_key_ref', clean(request.form.get('api_key_ref')))
+            set_config('nisira_endpoint_trabajadores', clean(request.form.get('endpoint_trabajadores')) or '/api/trabajadores')
+            set_config('nisira_modo', clean(request.form.get('modo')) or 'PRUEBA')
+            flash('Configuración NISIRA guardada. Queda lista para conectar el API real.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
+        if accion == 'generar_lote_nisira':
+            empresa = clean(request.form.get('empresa')) or 'AQUANQA'
+            sede = clean(request.form.get('sede'))
+            req = clean(request.form.get('requerimiento'))
+            act = clean(request.form.get('actividad'))
+            codigo = 'NIS-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S')
+            with db() as con:
+                total = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE estado IN ("REGISTRADO","IMPORTADO","PENDIENTE")').fetchone()[0]
+                con.execute('INSERT INTO contratacion_nisira_lotes(lote_codigo,empresa,sede,requerimiento,actividad,total,estado,endpoint,api_key_ref,fecha_registro,creado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (codigo,empresa,sede,req,act,total,'GENERADO - PENDIENTE API',get_config('nisira_endpoint_trabajadores','/api/trabajadores'),get_config('nisira_api_key_ref',''),now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash(f'Lote {codigo} generado. Pendiente de enviar al API NISIRA cuando se agreguen credenciales reales.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
+        if accion == 'guardar_checklist_next':
+            modulo = clean(request.form.get('modulo'))
+            sede = clean(request.form.get('sede'))
+            req = clean(request.form.get('requerimiento'))
+            act = clean(request.form.get('actividad'))
+            total = int(request.form.get('total') or 0)
+            proc = int(request.form.get('procesados') or 0)
+            obs = int(request.form.get('observados') or 0)
+            estado = clean(request.form.get('estado')) or 'PENDIENTE'
+            with db() as con:
+                con.execute('INSERT INTO contratacion_checklist_next(modulo,sede,requerimiento,actividad,total,procesados,observados,estado,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?)', (modulo,sede,req,act,total,proc,obs,estado,now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash('Control registrado correctamente.', 'ok')
+            return redirect(url_for('admin_contratacion', sec=request.args.get('sec','documentos_postulante')))
         if accion == 'anuncio':
             f = request.files.get('archivo')
             titulo = clean(request.form.get('titulo')) or 'Anuncio de contratación'
@@ -5073,6 +5196,9 @@ def admin_contratacion():
         observados=con.execute('SELECT * FROM trabajadores_observados ORDER BY id DESC LIMIT 500').fetchall()
         tipo_empleado=con.execute('SELECT * FROM contratacion_tipo_empleado ORDER BY descripcion LIMIT 1000').fetchall()
         cargos=con.execute('SELECT * FROM contratacion_cargos ORDER BY nombre LIMIT 2000').fetchall()
+        ingresos=con.execute('SELECT * FROM contratacion_ingresos ORDER BY id DESC LIMIT 500').fetchall()
+        lotes_nisira=con.execute('SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC LIMIT 200').fetchall()
+        controles_next=con.execute('SELECT * FROM contratacion_checklist_next ORDER BY id DESC LIMIT 300').fetchall()
 
         # Filtros reales de Plantilla Documentos
         f_nombre = clean(request.args.get('f_nombre'))
@@ -5193,16 +5319,44 @@ def admin_contratacion():
           </div>
           <div class='dash-kpis'>
             <div class='dash-card'><small>Trabajadores</small><b>{total_trab}</b></div>
+            <div class='dash-card'><small>Nuevos/Reingresantes</small><b>{len(ingresos)}</b></div>
+            <div class='dash-card'><small>Lotes NISIRA</small><b>{len(lotes_nisira)}</b></div>
             <div class='dash-card'><small>Documentos</small><b>{docs_total}</b></div>
-            <div class='dash-card'><small>Plantillas</small><b>{plant_total}</b></div>
-            <div class='dash-card'><small>Observados activos</small><b>{obs_total}</b></div>
           </div>
           <div class='dash-grid'>
             <div class='dash-card'><h2>Avance documentario</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>{docs_total} documentos / {total_trab} trabajadores.</p></div>
-            <div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=flujo'>Flujos</a><a href='/admin/contratacion?sec=renovacion'>Renovación</a><a href='/admin/contratacion?sec=firma'>Firma digital</a></div></div>
+            <div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=nuevos'>Registrar ingresos</a><a href='/admin/contratacion?sec=integracion_nisira'>Integración NISIRA</a><a href='/admin/contratacion?sec=documentos_postulante'>Docs Postulante</a><a href='/admin/contratacion?sec=datos_completos'>Datos completos</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/admin/contratacion?sec=firma'>Firma digital</a></div></div>
           </div>
           <div class='dash-card table-wrap'><h2>Últimos trabajadores</h2><table class='c-table'><tr><th>Empresa</th><th>DNI</th><th>Trabajador</th><th>Correo</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
         </section>
+        """)
+    elif sec=='nuevos':
+        ingreso_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos]) or "<tr><td colspan='9'>Sin registros de ingresos.</td></tr>"
+        content=wrap(f"""
+        <h2 class='c-title'>Registro de trabajadores nuevos y reingresantes</h2>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Altas de contratación</h1><p class='muted2'>Registra ingresos nuevos o reingresos antes de generar documentos, fotocheck o lote para NISIRA.</p></div><a class='c-btn' href='/admin/plantilla_gestion/contratacion'>⬇ Plantilla contratación</a></div>
+        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><b>DNI</b><input name='dni' maxlength='8' required><b>Trabajador</b><input name='trabajador' required><b>Tipo ingreso</b><select name='tipo_ingreso'><option>NUEVO</option><option>REINGRESANTE</option></select><b>Empresa</b><input name='empresa' value='AQUANQA'><b>Sede</b><input name='sede' placeholder='Blueberries / Arato / Olmos / Packing'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Actividad</b><input name='actividad' placeholder='OB_PODA / COSECHA'><b>Fecha ingreso</b><input type='date' name='fecha_ingreso'><b>Cargo</b><input name='cargo'><b>Área</b><input name='area'><b>Correo</b><input name='correo' type='email'><b>Celular</b><input name='celular'><b>Observación</b><textarea name='observacion' rows='2'></textarea><span></span><button class='c-btn'>💾 Registrar trabajador</button></form>
+        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='importar_ingresos_excel'><b>Carga Excel</b><input type='file' name='archivo' accept='.xlsx,.xls' required><span></span><button class='c-btn gray'>⬆ Importar nuevos/reingresantes</button></form>
+        <div class='c-card table-wrap'><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Tipo</th><th>Empresa</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Estado</th></tr>{ingreso_rows}</table></div>
+        """)
+    elif sec=='integracion_nisira':
+        lote_rows=''.join([f"<tr><td><b>{h(r['lote_codigo'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['total'])}</td><td>{h(r['estado'])}</td><td>{h(r['endpoint'])}</td><td>{h(r['fecha_registro'])}</td></tr>" for r in lotes_nisira]) or "<tr><td colspan='9'>Sin lotes generados.</td></tr>"
+        base_url=h(get_config('nisira_base_url','')); api_ref=h(get_config('nisira_api_key_ref','')); endpoint=h(get_config('nisira_endpoint_trabajadores','/api/trabajadores')); modo=get_config('nisira_modo','PRUEBA')
+        content=wrap(f"""
+        <h2 class='c-title'>Integración RH NISIRA</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Conector NISIRA</h1><p class='muted2'>Reemplaza la migración SAP/NEXT por un espacio preparado para conectar el API de NISIRA, principalmente la base de trabajadores.</p></div><span class='status-pill ok'>Modo {h(modo)}</span></div>
+        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_nisira_config'><b>Base URL NISIRA</b><input name='base_url' value='{base_url}' placeholder='https://servidor-nisira/api'><b>Endpoint trabajadores</b><input name='endpoint_trabajadores' value='{endpoint}' placeholder='/api/trabajadores'><b>Token/API Key Ref.</b><input name='api_key_ref' value='{api_ref}' placeholder='Variable de entorno o referencia segura'><b>Modo</b><select name='modo'><option {'selected' if modo=='PRUEBA' else ''}>PRUEBA</option><option {'selected' if modo=='PRODUCCION' else ''}>PRODUCCION</option></select><span></span><button class='c-btn'>💾 Guardar configuración</button></form>
+        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='generar_lote_nisira'><b>Empresa</b><input name='empresa' value='AQUANQA'><b>Sede</b><input name='sede' placeholder='Blueberries / Arato / Olmos'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Actividad</b><input name='actividad' placeholder='OB_PODA'><span></span><button class='c-btn'>🔗 Generar lote para NISIRA</button></form>
+        <div class='c-card' style='padding:18px'><h2>Mapeo inicial sugerido</h2><p class='muted2'>DNI, trabajador, empresa, sede, requerimiento, actividad, fecha ingreso, cargo, área, correo, celular y estado. El envío real queda listo para activarse cuando coloques URL/token de NISIRA.</p></div><div class='c-card table-wrap'><table class='c-table'><tr><th>Lote</th><th>Empresa</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Total</th><th>Estado</th><th>Endpoint</th><th>Fecha</th></tr>{lote_rows}</table></div>
+        """)
+    elif sec in ['documentos_postulante','datos_completos','fotocheck']:
+        tit = {'documentos_postulante':'Documentos de postulantes','datos_completos':'Datos completos','fotocheck':'Migración de fotos para fotocheck'}[sec]
+        modulo = {'documentos_postulante':'DOCS_POSTULANTE','datos_completos':'DATOS_COMPLETOS','fotocheck':'FOTOCHECK'}[sec]
+        ctrl=[r for r in controles_next if r['modulo']==modulo]
+        ctrl_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['total'])}</td><td>{h(r['procesados'])}</td><td>{h(r['observados'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ctrl]) or "<tr><td colspan='8'>Sin controles registrados.</td></tr>"
+        extra = "" if sec!='fotocheck' else "<div class='c-card' style='padding:18px'><h2>Fotos / fotocheck</h2><p class='muted2'>Controla quién tiene foto, descarga imágenes y prepara cargos de fotocheck antes del envío a NISIRA.</p><button class='c-btn gray' type='button'>⬇ Descargar imágenes</button> <button class='c-btn' type='button'>📄 Generar cargos fotocheck</button></div>"
+        content=wrap(f"""
+        <h2 class='c-title'>{tit}</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>{tit}</h1><p class='muted2'>Control inspirado en NEXT: sede, requerimiento, actividad, búsqueda, selección y estados para contratación.</p></div><a class='c-btn' href='/admin/contratacion?sec=integracion_nisira'>Enviar a NISIRA</a></div>
+        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_checklist_next'><input type='hidden' name='modulo' value='{modulo}'><b>Sede</b><input name='sede' placeholder='TODOS / Blueberries / Arato'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Actividad</b><input name='actividad' placeholder='OB_PODA'><b>Total Excel/NEXT</b><input type='number' name='total' value='0'><b>Procesados</b><input type='number' name='procesados' value='0'><b>Observados</b><input type='number' name='observados' value='0'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>APTO</option><option>PROCESADO</option><option>OBSERVADO</option></select><span></span><button class='c-btn'>💾 Registrar control</button></form>{extra}<div class='c-card table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Total</th><th>Procesados</th><th>Observados</th><th>Estado</th></tr>{ctrl_rows}</table></div>
         """)
     elif sec=='flujo':
         rows=''.join([f"<tr class='{ 'selected' if i==0 else ''}'><td><input type='checkbox' {'checked' if i==0 else ''}></td><td>🔍 📄</td><td>{232105-i}</td><td><span class='c-badge green'>APROBADO</span></td><td>{'Eliminar Contrato' if i%2==0 else 'Eliminar Alta Trabajador'}</td><td>{now_txt()}</td><td>{now_txt()}</td><td>{(trabajadores[i]['nombre'] if i < len(trabajadores) else 'TRABAJADOR DEMO')}</td></tr>" for i in range(10)])
@@ -5767,7 +5921,7 @@ def admin_contratacion():
         </script>
         """)
     elif sec=='nisira':
-        content=wrap("<h2 class='c-title'>Contratación NISIRA</h2><div class='c-card' style='padding:22px'><p class='muted2'>Sección preparada para importar contratos / altas desde NISIRA y cruzar por DNI.</p><button class='c-btn'>Sincronizar NISIRA</button></div>")
+        return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
     elif sec=='descargas':
         content=wrap(f"<h2 class='c-title'>Descargas</h2><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th></tr>{docs_rows or '<tr><td colspan=6>No hay archivos.</td></tr>'}</table></div>")
     else:
