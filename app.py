@@ -2839,6 +2839,155 @@ h2{
     }
 }
 
+
+/* ====== COMPACTACION TOTAL UI ====== */
+
+.sidebar,
+.side-panel,
+.menu-lateral{
+    width: 235px !important;
+    min-width: 235px !important;
+    max-width: 235px !important;
+    padding: 6px 8px !important;
+    overflow-x: hidden !important;
+}
+
+.main-content,
+.page-content,
+.content-wrapper{
+    margin-left: 245px !important;
+    width: calc(100% - 245px) !important;
+    padding: 12px !important;
+}
+
+/* ===== MENU ITEMS ===== */
+.sidebar .menu-item,
+.sidebar .nav-link,
+.sidebar .submenu-item{
+    padding: 10px 12px !important;
+    margin-bottom: 5px !important;
+    min-height: 42px !important;
+    border-radius: 14px !important;
+    font-size: 15px !important;
+}
+
+/* ===== CARDS ===== */
+.card,
+.form-card,
+.module-card,
+.section-card,
+.dashboard-card{
+    padding: 12px 14px !important;
+    margin-bottom: 12px !important;
+    border-radius: 16px !important;
+}
+
+/* ===== TITULOS ===== */
+h1{
+    font-size: 44px !important;
+    line-height: 1.1 !important;
+    margin-bottom: 12px !important;
+}
+
+h2{
+    font-size: 26px !important;
+}
+
+.section-header{
+    padding: 10px 16px !important;
+    min-height: auto !important;
+}
+
+/* ===== GRID MÁS COMPACTO ===== */
+.row{
+    margin-bottom: 10px !important;
+}
+
+.col,
+[class*="col-"]{
+    padding: 6px !important;
+}
+
+/* ===== INPUTS ===== */
+input,
+select,
+textarea{
+    min-height: 42px !important;
+    padding: 8px 12px !important;
+    font-size: 15px !important;
+    border-radius: 12px !important;
+}
+
+textarea{
+    min-height: 90px !important;
+}
+
+/* ===== LABELS ===== */
+label,
+.field-title{
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    margin-bottom: 4px !important;
+}
+
+/* ===== BOTONES ===== */
+button,
+.btn{
+    min-height: 42px !important;
+    padding: 8px 18px !important;
+    border-radius: 14px !important;
+    font-size: 15px !important;
+}
+
+/* ===== CAMARA ===== */
+.camera-box,
+.camera-preview{
+    width: 260px !important;
+    height: 260px !important;
+    margin: auto !important;
+}
+
+/* ===== TABLAS ===== */
+table{
+    font-size: 14px !important;
+}
+
+th, td{
+    padding: 10px !important;
+}
+
+/* ===== CELULAR ===== */
+@media (max-width:768px){
+
+    .sidebar,
+    .side-panel{
+        width: 82px !important;
+        min-width: 82px !important;
+    }
+
+    .main-content,
+    .page-content,
+    .content-wrapper{
+        margin-left: 82px !important;
+        width: calc(100% - 82px) !important;
+        padding: 8px !important;
+    }
+
+    h1{
+        font-size: 30px !important;
+    }
+
+    .card,
+    .module-card{
+        padding: 10px !important;
+    }
+
+    input,
+    select{
+        min-height: 38px !important;
+    }
+}
+
 </style>
 <script>
 function side(){return document.querySelector('.side')}
