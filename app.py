@@ -2553,6 +2553,128 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
 /* AJUSTE PRO: etiquetas visibles, tablas sin columnas cortadas y botones limpios */
 .c-form b,.pro-form b,.c-card b{color:#10243d!important;background:#f1f5f9!important;border-radius:10px!important;padding:10px 12px!important;text-align:right!important;opacity:1!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;min-height:42px!important}.c-card h1,.c-card h2,.c-title{color:#08243f!important}.table-wrap{width:100%!important;max-width:100%!important;overflow-x:auto!important}.c-table th,.c-table td{white-space:normal!important;min-width:96px!important}.c-table th:first-child,.c-table td:first-child{min-width:80px!important}.btn-del{background:#e8fff4!important;color:#047857!important;border:1px solid #99f6e4!important;border-radius:999px!important;font-weight:1000!important;padding:8px 12px!important;cursor:pointer!important}.mini-actions{display:flex!important;gap:8px!important;align-items:center!important;flex-wrap:wrap!important}.photo-dot{display:inline-flex;padding:7px 10px;border-radius:999px;font-weight:1000;border:1px solid #cbd5e1}.photo-ok{background:#dcfce7;color:#047857;border-color:#86efac}.photo-no{background:#fee2e2;color:#991b1b;border-color:#fecaca}.select-grid{display:grid;grid-template-columns:repeat(2,minmax(130px,1fr));gap:8px}.bio-box{display:grid;gap:8px}.bio-actions{display:flex;gap:8px;flex-wrap:wrap}.foto-mini{width:46px;height:46px;border-radius:10px;object-fit:cover;border:2px solid #dbeafe;background:#fff}.zebra-card{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}.zebra-card input,.zebra-card select{margin-bottom:10px}.filter-row-pro{display:grid;grid-template-columns:220px 1fr 1fr auto auto;gap:12px;align-items:center;margin:14px 0}.filter-row-pro input,.filter-row-pro select{min-height:42px}@media(max-width:900px){.zebra-card,.filter-row-pro{grid-template-columns:1fr!important}.c-form b{text-align:left!important;justify-content:flex-start!important}}
 
+
+
+/* =========================================================
+   FIX PRO FINAL: formularios legibles, distribución ordenada
+   ========================================================= */
+.req-pro-grid{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:22px!important;
+  align-items:start!important;
+  width:100%!important;
+}
+.pro-card.nice-form,
+.learning-grid .nice-form{
+  display:grid!important;
+  grid-template-columns:190px minmax(260px,1fr) 190px minmax(260px,1fr)!important;
+  gap:16px 18px!important;
+  align-items:center!important;
+  padding:28px!important;
+  overflow:visible!important;
+}
+.pro-card.nice-form b,
+.ingreso-form b,
+.learning-grid .nice-form b{
+  min-width:0!important;
+  min-height:50px!important;
+  white-space:normal!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  line-height:1.18!important;
+  color:#09213b!important;
+  background:#edf3f8!important;
+  border-radius:14px!important;
+  padding:12px 14px!important;
+  font-size:15px!important;
+  font-weight:900!important;
+  display:flex!important;
+  justify-content:flex-end!important;
+  align-items:center!important;
+  text-align:right!important;
+}
+.pro-card.nice-form input,
+.pro-card.nice-form select,
+.pro-card.nice-form textarea,
+.ingreso-form input,
+.ingreso-form select,
+.ingreso-form textarea,
+.learning-grid .nice-form input,
+.learning-grid .nice-form select,
+.learning-grid .nice-form textarea{
+  min-width:0!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-height:52px!important;
+  box-sizing:border-box!important;
+  overflow:visible!important;
+  color:#10243d!important;
+  -webkit-text-fill-color:#10243d!important;
+  font-size:15.5px!important;
+  font-weight:650!important;
+}
+.pro-card.nice-form textarea,
+.ingreso-form textarea,
+.learning-grid .nice-form textarea{min-height:96px!important;}
+.pro-card.nice-form .actions,
+.learning-grid .nice-form .actions{grid-column:2 / -1!important;}
+.pro-section-title,.section-head{
+  grid-column:1/-1!important;
+  margin:0 0 12px!important;
+  padding:14px 18px!important;
+  border-radius:14px!important;
+  background:linear-gradient(90deg,#eafff6,#f8fafc)!important;
+  border:1px solid #a7f3d0!important;
+  color:#073b2d!important;
+  font-size:19px!important;
+  font-weight:950!important;
+}
+#form_scan_req .scan-box{
+  grid-column:1/-1!important;
+  display:grid!important;
+  grid-template-columns:minmax(320px,1fr) minmax(280px,.8fr)!important;
+  gap:16px!important;
+  align-items:start!important;
+  padding:20px!important;
+}
+#form_scan_req .scan-camera{min-height:220px!important;margin:0!important;}
+#form_scan_req .scan-tools{display:grid!important;grid-template-columns:repeat(2,minmax(160px,1fr))!important;gap:12px!important;margin:0!important;}
+#form_scan_req .scan-counter,#form_scan_req .mini-list,#form_scan_req .muted2{grid-column:1/-1!important;}
+.ingreso-form{display:grid!important;grid-template-columns:190px minmax(240px,1fr) 190px minmax(240px,1fr)!important;gap:16px 18px!important;align-items:center!important;padding:28px!important;}
+.ingreso-form>span:empty{display:none!important;}
+.ingreso-form .camera-box{display:grid!important;grid-template-columns:260px minmax(220px,1fr)!important;gap:16px!important;align-items:start!important;}
+.ingreso-form .camera-box video,.ingreso-form .camera-box img{min-height:260px!important;}
+.ingreso-form .bio-box{display:grid!important;gap:12px!important;}
+.learning-grid{display:grid!important;grid-template-columns:1fr!important;gap:22px!important;align-items:start!important;}
+.learning-grid .eval-side{position:static!important;width:100%!important;}
+.learning-grid .eval-grid{display:grid!important;grid-template-columns:190px minmax(260px,1fr) 190px minmax(260px,1fr)!important;gap:14px 18px!important;}
+.learning-grid .eval-grid b{min-height:50px!important;background:#edf3f8!important;color:#09213b!important;border-radius:14px!important;padding:12px 14px!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;text-align:right!important;font-weight:900!important;}
+.learning-grid .eval-grid input,.learning-grid .eval-grid select{min-height:52px!important;border:1px solid #cfe0ef!important;border-radius:14px!important;padding:12px 14px!important;}
+.table-wrap,.proceso-box{overflow-x:auto!important;max-width:100%!important;}
+.clean-table,.c-table{min-width:1180px!important;}
+.clean-table th,.clean-table td,.c-table th,.c-table td{white-space:normal!important;vertical-align:middle!important;}
+.col-delete,th.col-delete,td.col-delete{width:94px!important;min-width:94px!important;max-width:94px!important;text-align:center!important;}
+.delete-mini,.btn-del,.action-delete{max-width:82px!important;min-width:72px!important;height:32px!important;font-size:12px!important;padding:0 8px!important;overflow:hidden!important;white-space:nowrap!important;text-overflow:ellipsis!important;}
+.side .menu-title i.bi,.side .menu-item i.bi{
+  width:38px!important;height:38px!important;min-width:38px!important;border-radius:12px!important;
+  display:grid!important;place-items:center!important;background:rgba(255,255,255,.12)!important;
+  color:#dff8ed!important;font-size:19px!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)!important;
+}
+.side .menu-title.active i.bi,.side .menu-item.active i.bi,.side .menu-item.parent-active i.bi{background:rgba(255,255,255,.20)!important;color:#06281f!important;}
+.side .menu-title .label,.side .menu-item .label{display:block!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;line-height:1.25!important;font-weight:850!important;}
+.side.collapsed .menu-title .label,.side.collapsed .menu-item .label{display:none!important;}
+@media(max-width:1200px){
+  .pro-card.nice-form,.ingreso-form,.learning-grid .nice-form,.learning-grid .eval-grid{grid-template-columns:170px minmax(0,1fr)!important;}
+  .pro-card.nice-form .actions,.learning-grid .nice-form .actions{grid-column:1/-1!important;}
+  #form_scan_req .scan-box{grid-template-columns:1fr!important;}
+}
+@media(max-width:720px){
+  .pro-card.nice-form,.ingreso-form,.learning-grid .nice-form,.learning-grid .eval-grid{grid-template-columns:1fr!important;padding:18px!important;}
+  .pro-card.nice-form b,.ingreso-form b,.learning-grid .nice-form b,.learning-grid .eval-grid b{justify-content:flex-start!important;text-align:left!important;}
+  .ingreso-form .camera-box{grid-template-columns:1fr!important;}
+}
+
 </style>
 <script>
 function side(){return document.querySelector('.side')}
@@ -2686,62 +2808,62 @@ def sidebar(active):
             return 'menu-item sub-mini active' if active_sub == sec else 'menu-item sub-mini'
         admin = f"""
         <div id='grp_contratacion' data-group='contratacion' class='menu-group force-open'>
-          <button type='button' class='menu-title active' onclick="toggleGroup('grp_contratacion')"><span>🧾</span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
+          <button type='button' class='menu-title active' onclick="toggleGroup('grp_contratacion')"><i class='bi bi-clipboard-data'></i><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
           <div class='submenu'>
-            <a class='{cls('dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=dashboard'><span>📊</span><span class='label'>Dashboard</span></a>
-            <a class='{cls('requerimientos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=requerimientos'><span>🎫</span><span class='label'>Requerimientos / Tickets</span></a>
-            <a class='{cls('nuevos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nuevos'><span>🧑‍💼</span><span class='label'>Nuevos / Reingresantes</span></a>
-            <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><span>🩺</span><span class='label'>Evaluación Médica</span></a>
-            <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><span>🎥</span><span class='label'>Inducción</span></a>
-            <a class='{cls('cursos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cursos'><span>📚</span><span class='label'>Cursos / Capacitación</span></a>
-            <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><span>🥾</span><span class='label'>Indumentaria</span></a>
-            <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><span>🔗</span><span class='label'>Integración NISIRA</span></a>
+            <a class='{cls('dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=dashboard'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard</span></a>
+            <a class='{cls('requerimientos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=requerimientos'><i class='bi bi-ticket-perforated'></i><span class='label'>Requerimientos / Tickets</span></a>
+            <a class='{cls('nuevos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nuevos'><i class='bi bi-person-plus'></i><span class='label'>Nuevos / Reingresantes</span></a>
+            <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
+            <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
+            <a class='{cls('cursos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cursos'><i class='bi bi-journal-text'></i><span class='label'>Cursos / Capacitación</span></a>
+            <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
+            <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-diagram-3'></i><span class='label'>Integración NISIRA</span></a>
             <div id='grp_documentaria' data-group='documentaria' class='menu-group nested force-open'>
-              <button type='button' class='menu-title' onclick="toggleGroup('grp_documentaria')"><span>📁</span><span class='label'>Gestión documentaria</span><span class='chev'>∨</span></button>
+              <button type='button' class='menu-title' onclick="toggleGroup('grp_documentaria')"><i class='bi bi-folder2-open'></i><span class='label'>Gestión documentaria</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls('documentos_postulante')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentos_postulante'><span>🗃️</span><span class='label'>Docs Postulante</span></a>
-                <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><span>📋</span><span class='label'>Datos Completos</span></a>
-                <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><span>🖼️</span><span class='label'>Fotocheck</span></a>
+                <a class='{cls('documentos_postulante')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentos_postulante'><i class='bi bi-file-earmark-person'></i><span class='label'>Docs Postulante</span></a>
+                <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Datos Completos</span></a>
+                <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
               </div>
             </div>
-            <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><span>🧭</span><span class='label'>Flujos de aprobación</span></a>
-            <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><span>⬆️</span><span class='label'>Carga Masiva</span></a>
-            <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><span>▤</span><span class='label'>Gestión documentaria / Reportes</span></a>
+            <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><i class='bi bi-signpost-split'></i><span class='label'>Flujos de aprobación</span></a>
+            <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
+            <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><i class='bi bi-bar-chart-line'></i><span class='label'>Gestión documentaria / Reportes</span></a>
             <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
-              <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><span>🗂️</span><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
+              <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><span>🧩</span><span class='label'>Mantenedor General</span></a>
-                <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><span>👥</span><span class='label'>Trabajadores Obs.</span></a>
-                <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><span>🏷️</span><span class='label'>Tipos por Etapa</span></a>
-                <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><span>🪪</span><span class='label'>Tipo Documento Empleado</span></a>
-                <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><span>💼</span><span class='label'>Cargo</span></a>
-                <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><span>🔄</span><span class='label'>Actualizar Trabajador</span></a>
+                <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><i class='bi bi-grid'></i><span class='label'>Mantenedor General</span></a>
+                <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><i class='bi bi-people'></i><span class='label'>Trabajadores Obs.</span></a>
+                <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><i class='bi bi-tags'></i><span class='label'>Tipos por Etapa</span></a>
+                <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><i class='bi bi-card-checklist'></i><span class='label'>Tipo Documento Empleado</span></a>
+                <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><i class='bi bi-briefcase'></i><span class='label'>Cargo</span></a>
+                <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><i class='bi bi-arrow-repeat'></i><span class='label'>Actualizar Trabajador</span></a>
               </div>
             </div>
             <div id='grp_con_documentaria' data-group='con_documentaria' class='menu-group nested force-open'>
-              <button type='button' class='menu-title' onclick="toggleGroup('grp_con_documentaria')"><span>📁</span><span class='label'>Gestión Documentaria</span><span class='chev'>∨</span></button>
+              <button type='button' class='menu-title' onclick="toggleGroup('grp_con_documentaria')"><i class='bi bi-folder2-open'></i><span class='label'>Gestión Documentaria</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><span>📝</span><span class='label'>Renovación Contrato</span></a>
-                <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><span>📂</span><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
-                <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><span>👤</span><span class='label'>Ficha Trabajador</span></a>
-                <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><span>📄</span><span class='label'>Plantilla Documentos</span></a>
-                <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><span>✍️</span><span class='label'>Firma / Facial / Digital</span></a>
-                <a class='menu-item sub-mini' onclick='saveSideScroll()' href='/admin/plantilla_gestion/contratacion'><span>📑</span><span class='label'>Plantilla Contratación</span></a>
-                <a class='{cls('nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nisira'><span>🔗</span><span class='label'>Contratación NISIRA</span></a>
-                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><span>⬇️</span><span class='label'>Descargas</span></a>
+                <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><i class='bi bi-file-earmark-text'></i><span class='label'>Renovación Contrato</span></a>
+                <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
+                <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
+                <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantilla Documentos</span></a>
+                <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
+                <a class='menu-item sub-mini' onclick='saveSideScroll()' href='/admin/plantilla_gestion/contratacion'><i class='bi bi-files'></i><span class='label'>Plantilla Contratación</span></a>
+                <a class='{cls('nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nisira'><i class='bi bi-link-45deg'></i><span class='label'>Contratación NISIRA</span></a>
+                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Descargas</span></a>
               </div>
             </div>
-            <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><span>📢</span><span class='label'>Anuncios</span></a>
+            <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><i class='bi bi-megaphone'></i><span class='label'>Anuncios</span></a>
           </div>
         </div>"""
-        return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><span>👤</span><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><span>🚪</span><span class='label'>Salir</span></a></div></div></nav>"""
+        return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div></nav>"""
     return """
     <nav>
       <div id='grp_user_contrato' data-group='user_contrato' class='menu-group force-open'>
-        <button type='button' class='menu-title active' onclick="toggleGroup('grp_user_contrato')"><span>🧾</span><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
+        <button type='button' class='menu-title active' onclick="toggleGroup('grp_user_contrato')"><i class='bi bi-clipboard-data'></i><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
         <div class='submenu'><a class='menu-item active' onclick='saveSideScroll()' href='/contratacion/mis_documentos'><span>📊</span><span class='label'>Mis documentos</span></a></div>
       </div>
-      <div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><span>👤</span><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><span>🚪</span><span class='label'>Salir</span></a></div></div>
+      <div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div>
     </nav>"""
 
 
