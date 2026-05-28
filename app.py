@@ -569,13 +569,11 @@ def sincronizar_jefes_vacaciones(con):
     except Exception:
         pass
 
-def 
-
 @app.context_processor
 def inject_ui_fixes():
     return dict(UI_FIXES_PRO=UI_FIXES_PRO)
 
-init_db():
+def init_db():
     with db() as con:
         con.execute("""
         CREATE TABLE IF NOT EXISTS usuarios_admin(
@@ -6118,7 +6116,7 @@ html,body{overflow-x:hidden!important;}
         ctrl=[r for r in controles_next if r['modulo']==modulo]
         ctrl_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['total'])}</td><td>{h(r['procesados'])}</td><td>{h(r['observados'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ctrl]) or "<tr><td colspan='8'>Sin controles registrados.</td></tr>"
         base_post_rows=''.join([f"<tr><td><input type='checkbox' name='sel' value='{h(r['dni'])}'></td><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['fecha_ingreso'])}</td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='9'>Sin trabajadores registrados en Nuevos/Reingresantes.</td></tr>"
-        foto_rows=''.join([f"<tr><td><input type='checkbox' name='sel' value='{h(r['dni'])}'></td><td>{('<img class=\'foto-mini\' src=\'/foto_trabajador/'+h(r['dni'])+'\'>') if r['foto_ruta'] else '<span class=\'photo-dot photo-no\'>SIN FOTO</span>'}</td><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td><span class='{('photo-dot photo-ok' if r['foto_ruta'] else 'photo-dot photo-no')}'>{'CON FOTO' if r['foto_ruta'] else 'SIN FOTO'}</span></td><td><span class='status-pill ok'>{h(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</span></td><td><button type='button' class='c-btn gray'>Ver</button></td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='9'>Sin base de fotos.</td></tr>"
+        foto_rows = ''
         base_extra = f"<div class='filter-row-pro'><b>Base trabajadores registrados</b><input oninput=\"filtrarTabla(this,'tabla_base_post')\" placeholder='Filtrar por DNI, nombres, requerimiento...'><select><option>Todos</option><option>Con foto</option><option>Sin foto</option><option>Pendiente</option></select><button type='button' class='c-btn gray'>Modificar estado</button><button type='button' class='c-btn'>Avanzar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_base_post' class='c-table'><tr><th></th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Sede</th><th>Cargo</th><th>Estado</th><th>Ingreso</th></tr>{base_post_rows}</table></div>"
         extra = base_extra if sec!='fotocheck' else f'''<div class='c-card' style='padding:18px'><h2>Fotos / fotocheck + Zebra ZC300</h2><p class='muted2'>Base conectada con Nuevos/Reingresantes. Muestra quién tiene foto, quién falta y deja lista la impresión del fotocheck CR80 para Zebra ZC300 mediante USB/driver/Browser Print.</p><div class='zebra-card'><div><b>Flujo preparado</b><ol><li>Foto tomada en Alta.</li><li>Validación de DNI y trabajador.</li><li>Generación de plantilla CR80.</li><li>Conexión Zebra ZC300 por USB/driver.</li><li>Impresión, reimpresión y cargo firmado.</li></ol><div class='quick-grid'><a>Foto desde alta</a><a>Plantilla CR80</a><a>Impresión Zebra ZC300</a><a>Reimpresión</a><a>Cargo firmado</a><a>Exportar lote</a></div></div><div><b>Datos de impresión</b><input placeholder='Impresora: Zebra ZC300'><input placeholder='Serial / IP / USB'><select><option>USB / DRIVER WINDOWS</option><option>ZEBRA BROWSER PRINT</option><option>RED / IP</option></select><input placeholder='Plantilla CR80 - Horizontal'><button type='button' class='c-btn' onclick='alert(&quot;Conector preparado. Para imprimir desde Render se requiere PC puente/Browser Print o app local con driver Zebra instalado.&quot;)'>🔌 Conectar Zebra</button></div></div></div><div class='filter-row-pro'><b>Base fotocheck</b><input oninput="filtrarTabla(this,'tabla_fotos')" placeholder='Filtrar DNI o trabajador...'><select><option>Todos</option><option>Con foto</option><option>Sin foto</option><option>Pendiente impresión</option></select><button type='button' class='c-btn gray'>Generar PDF</button><button type='button' class='c-btn'>Imprimir seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_fotos' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Cargo</th><th>Estado foto</th><th>Fotocheck</th><th>Acción</th></tr>{foto_rows}</table></div>'''
         content=wrap(f"""
