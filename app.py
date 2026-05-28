@@ -6768,7 +6768,7 @@ def admin_firma_digital():
 
 
 # Parche solicitado por usuario: sidebar compacto, cámara en requerimientos y biometría debajo de detener.
-FINAL_UI_PATCH_CSS += r'''
+FINAL_UI_PATCH_CSS = r'''
 /* === PARCHE DEFINITIVO 28-05: sin franja verde enorme + cámara/botones visibles === */
 .app{grid-template-columns:260px minmax(0,1fr)!important;}
 .app.side-collapsed{grid-template-columns:76px minmax(0,1fr)!important;}
