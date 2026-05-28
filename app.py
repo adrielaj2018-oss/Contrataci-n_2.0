@@ -628,6 +628,10 @@ def init_db():
             ('indumentaria', 'ALTER TABLE trabajadores ADD COLUMN indumentaria TEXT'),
             ('carnet_conadis', 'ALTER TABLE trabajadores ADD COLUMN carnet_conadis TEXT'),
             ('observacion', 'ALTER TABLE trabajadores ADD COLUMN observacion TEXT'),
+            ('modalidad', 'ALTER TABLE trabajadores ADD COLUMN modalidad TEXT'),
+            ('cuenta_bancaria', 'ALTER TABLE trabajadores ADD COLUMN cuenta_bancaria TEXT'),
+            ('biometria_estado', "ALTER TABLE trabajadores ADD COLUMN biometria_estado TEXT DEFAULT 'PENDIENTE'"),
+            ('fotocheck_estado', "ALTER TABLE trabajadores ADD COLUMN fotocheck_estado TEXT DEFAULT 'PENDIENTE'"),
         ]:
             try: con.execute(ddl)
             except Exception: pass
@@ -991,6 +995,31 @@ def init_db():
             cargo_pdf TEXT, fecha_entrega TEXT, observacion TEXT, fecha_registro TEXT, registrado_por TEXT
         )''')
         for col, ddl in [
+            ('tipo_examen', 'ALTER TABLE contratacion_medica ADD COLUMN tipo_examen TEXT'),
+            ('protocolo', 'ALTER TABLE contratacion_medica ADD COLUMN protocolo TEXT'),
+            ('riesgo_puesto', 'ALTER TABLE contratacion_medica ADD COLUMN riesgo_puesto TEXT'),
+            ('aptitud', 'ALTER TABLE contratacion_medica ADD COLUMN aptitud TEXT'),
+            ('restricciones', 'ALTER TABLE contratacion_medica ADD COLUMN restricciones TEXT'),
+            ('recomendaciones', 'ALTER TABLE contratacion_medica ADD COLUMN recomendaciones TEXT'),
+            ('fecha_vencimiento', 'ALTER TABLE contratacion_medica ADD COLUMN fecha_vencimiento TEXT'),
+            ('responsable_seguimiento', 'ALTER TABLE contratacion_medica ADD COLUMN responsable_seguimiento TEXT'),
+            ('proveedor_contacto', 'ALTER TABLE contratacion_medica ADD COLUMN proveedor_contacto TEXT'),
+            ('costo', 'ALTER TABLE contratacion_medica ADD COLUMN costo TEXT'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
+        for col, ddl in [
+            ('tipo_video', 'ALTER TABLE contratacion_capacitacion ADD COLUMN tipo_video TEXT'),
+            ('archivo_video_nombre', 'ALTER TABLE contratacion_capacitacion ADD COLUMN archivo_video_nombre TEXT'),
+            ('ruta_video', 'ALTER TABLE contratacion_capacitacion ADD COLUMN ruta_video TEXT'),
+            ('duracion_min', 'ALTER TABLE contratacion_capacitacion ADD COLUMN duracion_min TEXT'),
+            ('preguntas', 'ALTER TABLE contratacion_capacitacion ADD COLUMN preguntas TEXT'),
+            ('intentos', 'ALTER TABLE contratacion_capacitacion ADD COLUMN intentos TEXT'),
+            ('aprobador', 'ALTER TABLE contratacion_capacitacion ADD COLUMN aprobador TEXT'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
+        for col, ddl in [
             ('foto_ruta', 'ALTER TABLE contratacion_ingresos ADD COLUMN foto_ruta TEXT'),
             ('huella_ruta', 'ALTER TABLE contratacion_ingresos ADD COLUMN huella_ruta TEXT'),
             ('origen_validacion', 'ALTER TABLE contratacion_ingresos ADD COLUMN origen_validacion TEXT'),
@@ -999,6 +1028,13 @@ def init_db():
             ('estado_documentos', "ALTER TABLE contratacion_ingresos ADD COLUMN estado_documentos TEXT DEFAULT 'PENDIENTE'"),
             ('estado_indumentaria', "ALTER TABLE contratacion_ingresos ADD COLUMN estado_indumentaria TEXT DEFAULT 'PENDIENTE'"),
             ('estado_nisira', "ALTER TABLE contratacion_ingresos ADD COLUMN estado_nisira TEXT DEFAULT 'PENDIENTE'"),
+            ('direccion', 'ALTER TABLE contratacion_ingresos ADD COLUMN direccion TEXT'),
+            ('modalidad', 'ALTER TABLE contratacion_ingresos ADD COLUMN modalidad TEXT'),
+            ('jefe', 'ALTER TABLE contratacion_ingresos ADD COLUMN jefe TEXT'),
+            ('cuenta_bancaria', 'ALTER TABLE contratacion_ingresos ADD COLUMN cuenta_bancaria TEXT'),
+            ('talla_indumentaria', 'ALTER TABLE contratacion_ingresos ADD COLUMN talla_indumentaria TEXT'),
+            ('contacto_emergencia', 'ALTER TABLE contratacion_ingresos ADD COLUMN contacto_emergencia TEXT'),
+            ('biometria_estado', "ALTER TABLE contratacion_ingresos ADD COLUMN biometria_estado TEXT DEFAULT 'PENDIENTE'"),
         ]:
             try: con.execute(ddl)
             except Exception: pass
@@ -2532,6 +2568,14 @@ window.addEventListener('DOMContentLoaded',()=>{
   }
 });
 </script>
+
+<style id='pro-contratacion-2026'>
+.single-gestion{{grid-template-columns:minmax(320px,760px)!important;max-width:860px}}.gestion-contratacion-only{{min-height:180px!important}}.contratacion-only-dashboard{{grid-template-columns:1fr!important}}.pro-form{{display:grid!important;grid-template-columns:150px minmax(220px,1fr) 150px minmax(220px,1fr)!important;gap:14px 16px!important;align-items:center!important}}.pro-form b{{color:#27364a!important;background:#f3f7fa!important;padding:8px 10px!important;border-radius:10px!important;font-size:13px!important}}.pro-form input,.pro-form select,.pro-form textarea{{min-height:42px!important;background:#fff!important;color:#102033!important;border:1px solid #d9e3ee!important}}.module-tools{{display:grid;grid-template-columns:minmax(260px,1fr) auto auto;gap:12px;align-items:center;background:#ffffff;border:1px solid #dfe8f1;border-radius:16px;padding:12px 14px;margin:14px 0;box-shadow:0 10px 24px rgba(9,46,75,.06)}}.module-tools input{{background:#fff!important;color:#102033!important;border:1px solid #d9e3ee!important}}.camera-box{{border:1px dashed #c9d8e8;border-radius:16px;padding:12px;background:#f7fafc}}.camera-box video,.camera-box img{{width:100%;max-height:260px;background:#111;border-radius:14px;object-fit:cover}}.cam-actions{{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}}.photo-id-layout{{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin:14px 0}}.photo-id-layout>div{{background:#f8fafc;border:1px solid #dfe8f1;border-radius:16px;padding:16px}}.photo-id-layout input{{display:block;width:100%;margin:8px 0;background:#fff!important;color:#102033!important}}.dash-hero{{align-items:center!important}}.c-card,.dash-hero,.table-wrap{{overflow:hidden}}.c-table{{min-width:980px}}.table-wrap{{overflow-x:auto!important}}@media(max-width:900px){{.pro-form{{grid-template-columns:1fr!important}}.pro-form b{{margin-top:8px}}.module-tools{{grid-template-columns:1fr}}.photo-id-layout{{grid-template-columns:1fr}}.single-gestion{{grid-template-columns:1fr!important}}.admin-title h1,.dash-hero h1{{font-size:28px!important}}}}
+</style>
+<script>
+function filtrarTabla(input, tablaId){{var q=(input.value||'').toLowerCase();var t=document.getElementById(tablaId);if(!t)return;Array.from(t.rows).forEach(function(r,i){{if(i===0)return;r.style.display=r.innerText.toLowerCase().indexOf(q)>=0?'':'none';}});}}
+</script>
+
 </body></html>
 '''
 
@@ -3066,55 +3110,23 @@ def admin():
         </div>
       </div>
 
-      <div class='gestion-cards'>
-        <div class='card gestion-card'>
-          <div class='gestion-icon'>📁</div>
-          <div><h2>Gestión Documental</h2><p class='muted'>Administre y controle todos los documentos de la organización.</p><a class='btn-warn' href='/admin/modulo/documentos'>Ir al Dashboard <span>→</span></a></div>
-        </div>
-        <div class='card gestion-card green'>
-          <div class='gestion-icon'>☂️</div>
-          <div><h2>Gestión Vacacional</h2><p class='muted'>Administre saldos y solicitudes de vacaciones de los trabajadores.</p><a class='btn-green' href='/admin/vacaciones'>Ir al Dashboard <span>→</span></a></div>
-        </div>
-        <div class='card gestion-card purple'>
-          <div class='gestion-icon'>📄</div>
-          <div><h2>Gestión Contratación</h2><p class='muted'>Gestione procesos de contratación, candidatos y contratos.</p><a class='btn-blue' href='/admin/contratacion'>Ir al Dashboard <span>→</span></a></div>
+      <div class='gestion-cards single-gestion'>
+        <div class='card gestion-card purple gestion-contratacion-only'>
+          <div class='gestion-icon'>🧾</div>
+          <div><h2>Gestión Contratación</h2><p class='muted'>Centro único para requerimientos, altas, control médico, capacitación, indumentaria, fotocheck, firma y conexión NISIRA.</p><a class='btn-blue' href='/admin/contratacion'>Ir al Dashboard <span>→</span></a></div>
         </div>
       </div>
 
-      <div class='dashboards-admin'>
-        <div class='card dashboard-panel'>
-          <h2>📁 Dashboard - Gestión Documental</h2>
-          <div class='mini-grid'>
-            <div class='dash-metric'><span>Trabajadores</span><b>{trabajadores}</b><em class='mi'>👥</em></div>
-            <div class='dash-metric'><span>Documentos</span><b>{docs}</b><em class='mi'>📄</em></div>
-            <div class='dash-metric'><span>Recibidos / Abiertos</span><b>{leidos}</b><em class='mi'>👁️</em></div>
-            <div class='dash-metric'><span>Aprobados</span><b>{aprobados}</b><em class='mi'>✓</em></div>
-            <div class='dash-metric'><span>Rechazados</span><b>{rechazados}</b><em class='mi'>−</em></div>
-            <div class='dash-metric'><span>Empresas</span><b>{emp}</b><em class='mi'>🏢</em></div>
-          </div>
-          <a class='btn-warn full-link' href='/admin/modulo/documentos'>Ver Dashboard Completo <span>→</span></a>
-        </div>
-        <div class='card dashboard-panel green'>
-          <h2>☂️ Dashboard - Gestión Vacacional</h2>
-          <div class='mini-grid'>
-            <div class='dash-metric'><span>Saldos Registrados</span><b>{vac_saldos}</b><em class='mi'>🗓️</em></div>
-            <div class='dash-metric'><span>Solicitudes</span><b>{vac_solicitudes}</b><em class='mi'>📄</em></div>
-            <div class='dash-metric'><span>Pendientes</span><b>{vac_pendientes}</b><em class='mi'>⏱️</em></div>
-            <div class='dash-metric'><span>Aprobadas</span><b>{vac_aprobadas}</b><em class='mi'>✓</em></div>
-            <div class='dash-metric'><span>Rechazadas</span><b>0</b><em class='mi'>−</em></div>
-            <div class='dash-metric'><span>En Proceso</span><b>{vac_pendientes}</b><em class='mi'>…</em></div>
-          </div>
-          <a class='btn-green full-link' href='/admin/vacaciones'>Ver Dashboard Completo <span>→</span></a>
-        </div>
+      <div class='dashboards-admin contratacion-only-dashboard'>
         <div class='card dashboard-panel purple'>
           <h2>🧾 Dashboard - Gestión Contratación</h2>
           <div class='mini-grid'>
-            <div class='dash-metric'><span>Procesos Activos</span><b>{con_docs}</b><em class='mi'>💼</em></div>
-            <div class='dash-metric'><span>Candidatos</span><b>0</b><em class='mi'>👥</em></div>
-            <div class='dash-metric'><span>Contratos Activos</span><b>{con_docs}</b><em class='mi'>📄</em></div>
-            <div class='dash-metric'><span>Contratos por Vencer</span><b>0</b><em class='mi'>⏱️</em></div>
-            <div class='dash-metric'><span>Contratos Vencidos</span><b>0</b><em class='mi'>−</em></div>
-            <div class='dash-metric'><span>Contratos Finalizados</span><b>0</b><em class='mi'>✓</em></div>
+            <div class='dash-metric'><span>Tickets / procesos</span><b>{con_tipos}</b><em class='mi'>🎫</em></div>
+            <div class='dash-metric'><span>Trabajadores registrados</span><b>{trabajadores}</b><em class='mi'>👥</em></div>
+            <div class='dash-metric'><span>Documentos / contratos</span><b>{con_docs}</b><em class='mi'>📄</em></div>
+            <div class='dash-metric'><span>Control médico</span><b>{vac_saldos}</b><em class='mi'>🩺</em></div>
+            <div class='dash-metric'><span>Capacitaciones</span><b>{vac_solicitudes}</b><em class='mi'>🎥</em></div>
+            <div class='dash-metric'><span>Pendientes</span><b>{vac_pendientes}</b><em class='mi'>⏱️</em></div>
           </div>
           <a class='btn-blue full-link' href='/admin/contratacion'>Ver Dashboard Completo <span>→</span></a>
         </div>
@@ -4725,7 +4737,10 @@ function stopCamera(){{if(stream){{stream.getTracks().forEach(t=>t.stop()); stre
 function prepararEnvio(){{if(!captured||!document.getElementById('captura_base64').value){{alert('Primero capture la foto de evidencia.');return false;}}return true;}}
 document.addEventListener('DOMContentLoaded',()=>{{stMsg(secureOk()?'Intentando encender cámara automáticamente...':'⚠️ Para celular necesitas HTTPS. Usa Render o APP_SSL=1 local.'); setTimeout(()=>{{if(!captured)startCamera();}},350);}});
 </script>
-    </body></html>"""
+    
+
+
+</body></html>"""
     return content
 
 
@@ -4785,6 +4800,26 @@ def admin_contratacion():
     sec = request.args.get('sec','dashboard')
     if request.method=='POST':
         accion = request.form.get('accion','doc')
+        # Acciones PRO: eliminar registros operativos desde las tablas de cada módulo.
+        if accion in {'eliminar_requerimiento','eliminar_ingreso','eliminar_medica','eliminar_capacitacion','eliminar_indumentaria','eliminar_checklist'}:
+            tablas = {
+                'eliminar_requerimiento': ('contratacion_requerimientos','req_id','requerimientos'),
+                'eliminar_ingreso': ('contratacion_ingresos','ingreso_id','nuevos'),
+                'eliminar_medica': ('contratacion_medica','medica_id','medica'),
+                'eliminar_capacitacion': ('contratacion_capacitacion','capacitacion_id','capacitacion'),
+                'eliminar_indumentaria': ('contratacion_indumentaria','indumentaria_id','indumentaria'),
+                'eliminar_checklist': ('contratacion_checklist_next','checklist_id', sec),
+            }
+            tabla, campo_id, destino = tablas[accion]
+            try:
+                rid = int(request.form.get(campo_id) or 0)
+                with db() as con:
+                    con.execute(f'DELETE FROM {tabla} WHERE id=?', (rid,))
+                    con.commit()
+                flash('Registro eliminado correctamente.', 'ok')
+            except Exception as e:
+                flash('No se pudo eliminar el registro: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec=destino))
         if accion == 'guardar_requerimiento':
             ticket = clean(request.form.get('ticket')) or ('REQ-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
             empresa = clean(request.form.get('empresa')) or 'AQUANQA'
@@ -4810,8 +4845,14 @@ def admin_contratacion():
             if f and f.filename:
                 carpeta=UPLOAD_DIR/'contratacion'/'medica'/dni; carpeta.mkdir(parents=True, exist_ok=True)
                 nombre_arch=now_file()+'_'+secure_filename(f.filename); path=carpeta/nombre_arch; f.save(path); ruta=str(path)
+            obs_base = clean(request.form.get('observacion'))
+            obs_extra = []
+            for etiqueta, campo in [('Tipo examen','tipo_examen'),('Protocolo','protocolo'),('Riesgo puesto','riesgo_puesto'),('Aptitud','aptitud'),('Restricciones','restricciones'),('Recomendaciones','recomendaciones'),('Vence','fecha_vencimiento'),('Seguimiento','responsable_seguimiento'),('Contacto proveedor','proveedor_contacto'),('Costo','costo')]:
+                val = clean(request.form.get(campo))
+                if val: obs_extra.append(f'{etiqueta}: {val}')
+            obs_final = (obs_base + (' | ' if obs_base and obs_extra else '') + ' | '.join(obs_extra)).strip()
             with db() as con:
-                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('requerimiento')), clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), clean(request.form.get('clinica')), nombre_arch, ruta, clean(request.form.get('observacion')), now_txt(), session.get('admin_user','admin')))
+                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por,tipo_examen,protocolo,riesgo_puesto,aptitud,restricciones,recomendaciones,fecha_vencimiento,responsable_seguimiento,proveedor_contacto,costo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('requerimiento')), clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), clean(request.form.get('clinica')), nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_examen')), clean(request.form.get('protocolo')), clean(request.form.get('riesgo_puesto')), clean(request.form.get('aptitud')), clean(request.form.get('restricciones')), clean(request.form.get('recomendaciones')), fecha_sin_hora(request.form.get('fecha_vencimiento')), clean(request.form.get('responsable_seguimiento')), clean(request.form.get('proveedor_contacto')), clean(request.form.get('costo'))))
                 con.execute('UPDATE contratacion_ingresos SET estado_medico=? WHERE dni=?', (clean(request.form.get('estado')) or 'PENDIENTE', dni))
                 con.commit()
             flash('Evaluación médica registrada.', 'ok')
@@ -4822,8 +4863,18 @@ def admin_contratacion():
             if f and f.filename:
                 carpeta=UPLOAD_DIR/'contratacion'/'capacitacion'/dni; carpeta.mkdir(parents=True, exist_ok=True)
                 nombre_arch=now_file()+'_'+secure_filename(f.filename); path=carpeta/nombre_arch; f.save(path); ruta=str(path)
+            vf=request.files.get('archivo_video'); ruta_video=''; nombre_video=''
+            if vf and vf.filename:
+                carpeta=UPLOAD_DIR/'contratacion'/'videos'; carpeta.mkdir(parents=True, exist_ok=True)
+                nombre_video=now_file()+'_'+secure_filename(vf.filename); path=carpeta/nombre_video; vf.save(path); ruta_video=str(path)
+            obs_base=clean(request.form.get('observacion'))
+            obs_extra=[]
+            for etiqueta,campo in [('Tipo video','tipo_video'),('Duración min','duracion_min'),('Preguntas','preguntas'),('Intentos','intentos'),('Aprobador','aprobador')]:
+                val=clean(request.form.get(campo))
+                if val: obs_extra.append(f'{etiqueta}: {val}')
+            obs_final=(obs_base + (' | ' if obs_base and obs_extra else '') + ' | '.join(obs_extra)).strip()
             with db() as con:
-                con.execute('''INSERT INTO contratacion_capacitacion(dni,trabajador,curso,video_url,estado,nota,fecha_inicio,fecha_fin,evidencia_nombre,ruta_evidencia,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('curso')), clean(request.form.get('video_url')), clean(request.form.get('estado')) or 'PENDIENTE', clean(request.form.get('nota')), fecha_sin_hora(request.form.get('fecha_inicio')), fecha_sin_hora(request.form.get('fecha_fin')), nombre_arch, ruta, clean(request.form.get('observacion')), now_txt(), session.get('admin_user','admin')))
+                con.execute('''INSERT INTO contratacion_capacitacion(dni,trabajador,curso,video_url,estado,nota,fecha_inicio,fecha_fin,evidencia_nombre,ruta_evidencia,observacion,fecha_registro,registrado_por,tipo_video,archivo_video_nombre,ruta_video,duracion_min,preguntas,intentos,aprobador) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('curso')), clean(request.form.get('video_url')), clean(request.form.get('estado')) or 'PENDIENTE', clean(request.form.get('nota')), fecha_sin_hora(request.form.get('fecha_inicio')), fecha_sin_hora(request.form.get('fecha_fin')), nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_video')), nombre_video, ruta_video, clean(request.form.get('duracion_min')), clean(request.form.get('preguntas')), clean(request.form.get('intentos')), clean(request.form.get('aprobador'))))
                 con.execute('UPDATE contratacion_ingresos SET estado_capacitacion=? WHERE dni=?', (clean(request.form.get('estado')) or 'PENDIENTE', dni))
                 con.commit()
             flash('Capacitación registrada.', 'ok')
@@ -4849,6 +4900,12 @@ def admin_contratacion():
             area = clean(request.form.get('area'))
             correo = clean(request.form.get('correo')).lower()
             celular = clean(request.form.get('celular'))
+            direccion = clean(request.form.get('direccion'))
+            modalidad = clean(request.form.get('modalidad'))
+            jefe = clean(request.form.get('jefe'))
+            cuenta_bancaria = clean(request.form.get('cuenta_bancaria'))
+            talla_indumentaria = clean(request.form.get('talla_indumentaria'))
+            contacto_emergencia = clean(request.form.get('contacto_emergencia'))
             obs = clean(request.form.get('observacion'))
             origen_validacion = clean(request.form.get('origen_validacion')) or 'BASE INTERNA / NISIRA PENDIENTE'
             foto_ruta = ''
@@ -4880,7 +4937,8 @@ def admin_contratacion():
                     tipo_ingreso = 'REINGRESANTE'
                 else:
                     con.execute("""INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,observacion,usuario_portal,clave_portal,foto_ruta) VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?)""", (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha_ingreso,celular,obs,dni,dni,foto_ruta))
-                con.execute("""INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por,foto_ruta,huella_ruta,origen_validacion) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (dni,nombre,empresa,sede,requerimiento,actividad,tipo_ingreso,'REGISTRADO',fecha_ingreso,cargo,area,correo,celular,obs,now_txt(),session.get('admin_user','admin'),foto_ruta,huella_ruta,origen_validacion))
+                con.execute("""UPDATE trabajadores SET direccion=COALESCE(NULLIF(?,''),direccion), modalidad=COALESCE(NULLIF(?,''),modalidad), jefe_nombre=COALESCE(NULLIF(?,''),jefe_nombre), cuenta_bancaria=COALESCE(NULLIF(?,''),cuenta_bancaria), indumentaria=COALESCE(NULLIF(?,''),indumentaria), contacto_emergencia=COALESCE(NULLIF(?,''),contacto_emergencia), biometria_estado=? WHERE dni=?""", (direccion, modalidad, jefe, cuenta_bancaria, talla_indumentaria, contacto_emergencia, 'CAPTURADA' if huella_ruta else 'PENDIENTE', dni))
+                con.execute("""INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por,foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,biometria_estado) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (dni,nombre,empresa,sede,requerimiento,actividad,tipo_ingreso,'REGISTRADO',fecha_ingreso,cargo,area,correo,celular,obs,now_txt(),session.get('admin_user','admin'),foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,'CAPTURADA' if huella_ruta else 'PENDIENTE'))
                 con.commit()
             flash(f'Trabajador {tipo_ingreso} registrado correctamente.', 'ok')
             return redirect(url_for('admin_contratacion', sec='nuevos'))
@@ -5427,81 +5485,77 @@ def admin_contratacion():
 /* === PARCHE FINAL CLARO - GESTIÓN CONTRATACIÓN === */
 .main{background:linear-gradient(135deg,#f8fbfd 0%,#eef6f3 100%)!important;color:#111827!important;padding:24px!important;overflow-x:hidden!important}.c-title,h1,h2,h3{color:#111827!important;text-shadow:none!important}.muted,.muted2,p,label,b{color:#344054!important;text-shadow:none!important}.c-card,.filter-card,.table-wrap,.avatar-panel,.profile-main,.profile-col,.anuncio-upload,.created-box,.periodos-box{background:#ffffff!important;border:1px solid #dbe5ee!important;color:#111827!important;border-radius:22px!important;box-shadow:0 18px 42px rgba(15,23,42,.08)!important}.c-filter input,.c-filter select,.c-form input,.c-form select,input,select,textarea{background:#ffffff!important;color:#111827!important;border:1.3px solid #cfd8e3!important;border-radius:14px!important;font-weight:650!important;box-shadow:none!important}input::placeholder,textarea::placeholder{color:#667085!important}.c-table,table{background:#ffffff!important;color:#111827!important}.c-table th,th{background:#f3f6f9!important;color:#475467!important;border-color:#dbe5ee!important;text-transform:none!important;letter-spacing:0!important}.c-table td,td{background:#ffffff!important;color:#111827!important;border-color:#e3e9f0!important;font-weight:650!important}.c-table tr:nth-child(even) td{background:#fbfcfe!important}.c-table tr:hover td{background:#eef8f2!important}.plantilla-table td,.plantilla-table td *{color:#111827!important}.plantilla-table th{color:#475467!important}.c-btn,.btn-green,.btn-blue,.crear-btn{background:linear-gradient(135deg,#15b978,#059669)!important;color:white!important;border:0!important;border-radius:16px!important;box-shadow:0 10px 22px rgba(5,150,105,.20)!important}.c-btn.gray,.btn.gray,.gray{background:#20262d!important;color:#ffffff!important}.icon-btn{color:#059669!important}.tpl-link{color:#0f172a!important}.state-select{background:white!important;color:#059669!important;border:1px solid #d1d5db!important}.tabs{background:#fff!important;border-bottom:1px solid #e3e9f0!important}.tab{color:#667085!important}.tab.active{color:#111827!important;border-bottom-color:#15b978!important}.toolbar{color:#667085!important}.tile-grid{margin:24px 0!important}.c-tile{background:#ffffff!important;border:1px solid #dbe5ee!important;color:#111827!important;border-radius:22px!important;box-shadow:0 18px 42px rgba(15,23,42,.08)!important}.tile-icon{background:#dcfce7!important;color:#059669!important;border-radius:20px!important}.ficha-tabs .tab{color:#667085!important}.ficha-tabs .tab.active{color:#059669!important;border-bottom-color:#15b978!important}.mini-chip{background:#ecfdf3!important;color:#047857!important;border:1px solid #bbf7d0!important}.period-row td{background:#f0fdf4!important;color:#047857!important}.topbar{background:transparent!important;color:#111827!important}.dashboard-contratacion{display:grid;gap:20px}.dash-hero{background:#fff;border:1px solid #dbe5ee;border-radius:26px;padding:26px;display:flex;justify-content:space-between;gap:16px;align-items:center;box-shadow:0 18px 42px rgba(15,23,42,.08)}.dash-hero h1{margin:0;font-size:36px}.dash-kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:18px}.dash-card{background:#fff;border:1px solid #dbe5ee;border-radius:22px;padding:22px;box-shadow:0 18px 42px rgba(15,23,42,.07)}.dash-card small{color:#667085;font-weight:650}.dash-card b{display:block;font-size:34px;color:#101828;margin-top:8px}.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.progress{height:30px;background:#e9eef4;border-radius:999px;overflow:hidden}.progress span{display:block;height:100%;background:#168a55;color:white;text-align:center;font-weight:900;line-height:30px}.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.quick-grid a{text-decoration:none;text-align:center;padding:14px;border-radius:16px;background:#f3f8f5;color:#065f46;font-weight:900;border:1px solid #bbf7d0}.nr-tabs{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}.nr-tabs a{background:#fff;border:1px solid #dbe5ee;border-radius:14px;padding:12px 20px;text-decoration:none;color:#344054;font-weight:900}.nr-tabs a.active{background:#10b981;color:#fff}.camera-box{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:18px;padding:12px}.camera-box video,.camera-box img{width:100%;max-width:330px;border-radius:14px;background:#111827;display:block;margin-bottom:10px}.cam-actions{display:flex;gap:8px;flex-wrap:wrap}@media(max-width:900px){.main{padding:16px!important}.dash-hero{display:block}.dash-hero h1{font-size:28px}.dash-kpis{grid-template-columns:1fr 1fr}.dash-grid{grid-template-columns:1fr}.quick-grid{grid-template-columns:1fr}.c-table,table{min-width:760px!important}.table-wrap{overflow:auto!important}.c-filter{grid-template-columns:1fr!important}.c-bar,.plantilla-top{flex-direction:column!important;align-items:stretch!important}.c-btn,.crear-btn{justify-content:center!important;width:100%!important}.side{width:min(86vw,330px)!important}.side.open{transform:translateX(0)!important}.app{grid-template-columns:1fr!important}}
 
-    </style>"""
+.compact-form{display:grid!important;grid-template-columns:170px minmax(180px,1fr) 170px minmax(180px,1fr)!important;gap:12px 18px!important;align-items:center!important}.compact-form textarea{min-height:76px}.compact-form b{font-size:13px;color:#334155!important}.table-wrap{overflow:auto!important}.icon-btn{border:0;background:#ecfdf5!important;color:#047857!important;border-radius:10px;padding:7px 9px;cursor:pointer}.icon-btn:hover{background:#bbf7d0!important}.c-form input[type=file]{padding:9px!important}@media(max-width:900px){.compact-form{grid-template-columns:1fr!important}.compact-form b{margin-top:6px}}</style>"""
     def wrap(inner):
         return css + inner
     if sec=='dashboard':
         total_trab = len(trabajadores)
-        docs_total = len(docs)
-        plant_total = len(plantillas)
-        obs_total = len(obs_activos)
-        avance = min(100, round((docs_total / total_trab * 100), 1)) if total_trab else 0
-        ult_rows=''.join([f"<tr><td>{h(t['empresa'])}</td><td><b>{h(t['dni'])}</b></td><td>{h(t['nombre'])}</td><td>{h(t['correo'] or '')}</td><td>{h(t['cargo'] or '')}</td><td>{'ACTIVO' if t['activo'] else 'INACTIVO'}</td></tr>" for t in trabajadores[:8]]) or "<tr><td colspan='6'>Sin registros.</td></tr>"
+        total_req = len(requerimientos)
+        total_ing = len(ingresos)
+        total_med = len(medicas)
+        total_cap = len(capacitaciones)
+        total_ind = len(indumentarias)
+        total_nisira = len(lotes_nisira)
+        aptos = len([r for r in medicas if (r['estado'] or '').upper()=='APTO'])
+        avance = min(100, round(((total_med+total_cap+total_ind) / max(total_ing*3,1))*100, 1)) if total_ing else 0
+        ult_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos[:10]]) or "<tr><td colspan='7'>Sin ingresos registrados.</td></tr>"
         content=wrap(f"""
         <section class='dashboard-contratacion'>
           <div class='dash-hero'>
-            <div><h1>Dashboard general</h1><p class='muted2'>Control general de Gestión Contratación: procesos, documentos, plantillas y trabajadores.</p></div>
-            <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=carga'>Carga masiva</a><a class='c-btn gray' href='/admin/contratacion?sec=plantillas'>Plantillas</a></div>
+            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, capacitación, indumentaria, fotocheck y NISIRA. Se retiró Gestión Documental y Gestión Vacacional.</p></div>
+            <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=requerimientos'>Nuevo ticket</a><a class='c-btn gray' href='/admin/contratacion?sec=nuevos'>Registrar trabajador</a></div>
           </div>
-          <div class='dash-kpis'>
-            <div class='dash-card'><small>Trabajadores</small><b>{total_trab}</b></div>
-            <div class='dash-card'><small>Nuevos/Reingresantes</small><b>{len(ingresos)}</b></div>
-            <div class='dash-card'><small>Lotes NISIRA</small><b>{len(lotes_nisira)}</b></div>
-            <div class='dash-card'><small>Documentos</small><b>{docs_total}</b></div>
-          </div>
-          <div class='dash-grid'>
-            <div class='dash-card'><h2>Avance documentario</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>{docs_total} documentos / {total_trab} trabajadores.</p></div>
-            <div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Nuevos/Reing.</a><a href='/admin/contratacion?sec=medica'>Médica</a><a href='/admin/contratacion?sec=capacitacion'>Capacitación</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=integracion_nisira'>NISIRA</a></div></div>
-          </div>
-          <div class='dash-card table-wrap'><h2>Últimos trabajadores</h2><table class='c-table'><tr><th>Empresa</th><th>DNI</th><th>Trabajador</th><th>Correo</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
+          <div class='dash-kpis'><div class='dash-card'><small>Tickets</small><b>{total_req}</b></div><div class='dash-card'><small>Nuevos/Reingresantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Lotes NISIRA</small><b>{total_nisira}</b></div></div>
+          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, capacitación e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=capacitacion'>Videos</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a></div></div></div>
+          <div class='dash-card table-wrap'><h2>Últimos registros del embudo</h2><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Ingreso</th><th>Sede</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
         </section>
         """)
     elif sec=='requerimientos':
-        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['area'])}</td><td>{h(r['cargo'])}</td><td>{h(r['actividad'])}</td><td>{h(r['cantidad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
+        req_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar ticket?')\"><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['area'])}</td><td>{h(r['cargo'])}</td><td>{h(r['actividad'])}</td><td>{h(r['cantidad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='11'>Sin requerimientos registrados.</td></tr>"
         content=wrap(f"""
         <h2 class='c-title'>Requerimientos / Tickets de personal</h2>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Ticket de contratación</h1><p class='muted2'>Cada ingreso debe nacer desde un ticket por sede, área, cargo, actividad y cantidad solicitada. Esto ordena todo el embudo.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Registrar trabajadores</a></div>
         <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_requerimiento'><b>Ticket</b><input name='ticket' placeholder='REQ-2026-0001'><b>Empresa</b><input name='empresa' value='AQUANQA'><b>Sede</b><input name='sede' placeholder='Blueberries / Arato / Olmos'><b>Área</b><input name='area' placeholder='Campo / Packing / RRHH'><b>Cargo</b><input name='cargo' placeholder='Operario / Auxiliar'><b>Actividad</b><input name='actividad' placeholder='OB_PODA / COSECHA'><b>Cantidad</b><input type='number' name='cantidad' value='0'><b>Fecha ingreso objetivo</b><input type='date' name='fecha_ingreso'><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Observación</b><textarea name='observacion' rows='2'></textarea><span></span><button class='c-btn'>💾 Crear ticket</button></form>
-        <div class='c-card table-wrap'><table class='c-table'><tr><th>Ticket</th><th>Empresa</th><th>Sede</th><th>Área</th><th>Cargo</th><th>Actividad</th><th>Cant.</th><th>Ingreso</th><th>Estado</th><th>Responsable</th></tr>{req_rows}</table></div>
+        <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table'><tr><th>Eliminar</th><th>Ticket</th><th>Empresa</th><th>Sede</th><th>Área</th><th>Cargo</th><th>Actividad</th><th>Cant.</th><th>Ingreso</th><th>Estado</th><th>Responsable</th></tr>{req_rows}</table></div>
         """)
     elif sec=='nuevos':
-        ingreso_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos]) or "<tr><td colspan='9'>Sin registros de ingresos.</td></tr>"
+        ingreso_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar registro?')\"><input type='hidden' name='accion' value='eliminar_ingreso'><input type='hidden' name='ingreso_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td>{h(r['area'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos]) or "<tr><td colspan='13'>Sin registros de ingresos.</td></tr>"
         content=wrap(f"""
         <h2 class='c-title'>Registro de trabajadores nuevos y reingresantes</h2>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Altas de contratación</h1><p class='muted2'>Registra ingresos nuevos o reingresos antes de generar documentos, fotocheck o lote para NISIRA.</p></div><a class='c-btn' href='/admin/plantilla_gestion/contratacion'>⬇ Plantilla contratación</a></div>
         <div class='nr-tabs'><a class='active' href='#nuevo'>Nuevo</a><a href='#reingresante'>Reingresante</a><span>El DNI detecta si ya existe y cambia automáticamente a REINGRESANTE.</span></div>
-        <form method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><b>DNI</b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()'><b>Trabajador</b><input name='trabajador' id='trabajador_ingreso' required><b>Tipo ingreso</b><select name='tipo_ingreso' id='tipo_ingreso'><option>NUEVO</option><option>REINGRESANTE</option></select><b>Empresa</b><input name='empresa' value='AQUANQA'><b>Sede</b><input name='sede' placeholder='Blueberries / Arato / Olmos / Packing'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Actividad</b><input name='actividad' placeholder='OB_PODA / COSECHA'><b>Fecha ingreso</b><input type='date' name='fecha_ingreso'><b>Cargo</b><input name='cargo'><b>Área</b><input name='area'><b>Correo</b><input name='correo' type='email'><b>Celular</b><input name='celular'><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>Apagar</button></div><small>En celular usa HTTPS/Render para permitir cámara.</small></div><b>Huella digital</b><div><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><small>Preparado para lector biométrico/API. Por ahora permite adjuntar evidencia o captura de huella.</small></div><b>Observación</b><textarea name='observacion' rows='2'></textarea><span></span><button class='c-btn'>💾 Registrar trabajador</button></form>
+        <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><b>DNI</b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()' placeholder='8 dígitos'><b>Trabajador</b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Tipo ingreso</b><select name='tipo_ingreso' id='tipo_ingreso'><option>NUEVO</option><option>REINGRESANTE</option></select><b>Empresa</b><input name='empresa' id='empresa_ingreso' value='AQUANQA'><b>Celular</b><input name='celular' id='celular_ingreso'><b>Correo</b><input name='correo' id='correo_ingreso' type='email'><b>Dirección</b><input name='direccion' placeholder='Dirección actual'><b>Puesto / Cargo</b><input name='cargo' id='cargo_ingreso'><b>Sede</b><input name='sede' placeholder='Blueberries / Arato / Olmos / Packing'><b>Área</b><input name='area' id='area_ingreso'><b>Actividad</b><input name='actividad' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'><option>CAMPAÑA</option><option>PERMANENTE</option><option>INTERMITENTE</option><option>PART TIME</option></select><b>Fecha ingreso</b><input type='date' name='fecha_ingreso'><b>Jefe inmediato</b><input name='jefe'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>Apagar</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><small>Preparado para lector ZK9500/API biométrica. Por ahora permite adjuntar evidencia o captura de huella.</small></div><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button class='c-btn'>💾 Guardar trabajador</button></form>
         <script>
         const trabajadoresBase = {{}};
         {';'.join([f"trabajadoresBase['{h(t['dni'])}']={{nombre:'{h(t['nombre'])}',empresa:'{h(t['empresa'])}',cargo:'{h(t['cargo'] or '')}',area:'{h(t['area'] or '')}',correo:'{h(t['correo'] or '')}'}}" for t in trabajadores[:700]])};
-        function detectarReingreso(){{const dni=document.getElementById('dni_ingreso').value.replace(/\D/g,''); const t=trabajadoresBase[dni]; const tipo=document.getElementById('tipo_ingreso'); const origen=document.getElementById('origen_validacion'); if(t){{tipo.value='REINGRESANTE'; origen.value='BASE HISTORICA INTERNA'; if(!document.getElementById('trabajador_ingreso').value) document.getElementById('trabajador_ingreso').value=t.nombre;}} else {{tipo.value='NUEVO'; origen.value='NUEVO / CONSULTA NISIRA PENDIENTE';}}}}
+        function detectarReingreso(){{const dni=document.getElementById('dni_ingreso').value.replace(/\D/g,''); const t=trabajadoresBase[dni]; const tipo=document.getElementById('tipo_ingreso'); const origen=document.getElementById('origen_validacion'); if(t){{tipo.value='REINGRESANTE'; origen.value='BASE HISTORICA INTERNA'; if(!document.getElementById('trabajador_ingreso').value) document.getElementById('trabajador_ingreso').value=t.nombre; ['empresa','cargo','area','correo','celular'].forEach(k=>{{const el=document.getElementById(k+'_ingreso'); if(el && !el.value) el.value=t[k]||'';}});}} else {{tipo.value='NUEVO'; origen.value='NUEVO / CONSULTA NISIRA PENDIENTE';}}}}
         let streamIngreso=null; async function activarCamaraIngreso(){{try{{streamIngreso=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'user'}},audio:false}});document.getElementById('camVideo').srcObject=streamIngreso;}}catch(e){{alert('No se pudo activar cámara. Use HTTPS/Render o adjunte foto.')}}}}
         function capturarFotoIngreso(){{const v=document.getElementById('camVideo'),c=document.getElementById('camCanvas'),img=document.getElementById('camPreview'); if(!v||!v.videoWidth){{alert('Active la cámara primero.');return;}} c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0); const data=c.toDataURL('image/jpeg',0.90); document.getElementById('foto_base64').value=data; img.src=data; img.style.display='block';}}
         function apagarCamaraIngreso(){{if(streamIngreso){{streamIngreso.getTracks().forEach(t=>t.stop());streamIngreso=null;}}}}
         </script>
         <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='importar_ingresos_excel'><b>Carga Excel</b><input type='file' name='archivo' accept='.xlsx,.xls' required><span></span><button class='c-btn gray'>⬆ Importar nuevos/reingresantes</button></form>
-        <div class='c-card table-wrap'><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Tipo</th><th>Empresa</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Estado</th></tr>{ingreso_rows}</table></div>
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='Filtrar DNI, trabajador, sede, cargo, estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_ingreso' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_ingresos' class='c-table'><tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Tipo</th><th>Empresa</th><th>Sede</th><th>Cargo</th><th>Área</th><th>Requerimiento</th><th>Actividad</th><th>Ingreso</th><th>Estado</th></tr>{ingreso_rows}</table></div>
         """)
     elif sec=='medica':
-        med_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['clinica'])}</td><td>{h(r['fecha_programada'])}</td><td>{h(r['fecha_resultado'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['observacion'])}</td></tr>" for r in medicas]) or "<tr><td colspan='9'>Sin evaluaciones médicas.</td></tr>"
+        med_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['clinica'])}</td><td>{h(r['fecha_programada'])}</td><td>{h(r['fecha_resultado'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['observacion'])}</td></tr>" for r in medicas]) or "<tr><td colspan='10'>Sin evaluaciones médicas.</td></tr>"
         content=wrap(f"""
         <h2 class='c-title'>Evaluación médica</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Control médico</h1><p class='muted2'>Solo los trabajadores APTOS deben pasar a capacitación y firma de documentos.</p></div><a class='c-btn' href='/admin/contratacion?sec=capacitacion'>Ir a capacitación</a></div>
-        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_medica'><b>DNI</b><input name='dni' maxlength='8' required><b>Requerimiento</b><input name='requerimiento'><b>Clínica</b><input name='clinica'><b>Fecha programada</b><input type='date' name='fecha_programada'><b>Fecha resultado</b><input type='date' name='fecha_resultado'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>PROGRAMADO</option><option>APTO</option><option>NO APTO</option><option>OBSERVADO</option></select><b>Resultado PDF/imagen</b><input type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' rows='2'></textarea><span></span><button class='c-btn'>💾 Registrar evaluación</button></form>
-        <div class='c-card table-wrap'><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Clínica</th><th>Programada</th><th>Resultado</th><th>Estado</th><th>Observación</th></tr>{med_rows}</table></div>
+        <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card c-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_medica'><b>DNI</b><input name='dni' maxlength='8' required placeholder='8 dígitos'><b>Requerimiento</b><input name='requerimiento' placeholder='REQ-2026-0001 / LABORES'><b>Tipo examen</b><select name='tipo_examen'><option>PRE OCUPACIONAL</option><option>PERIÓDICO</option><option>RETIRO</option><option>CAMBIO DE PUESTO</option></select><b>Clínica / proveedor</b><input name='clinica' placeholder='Centro médico autorizado'><b>Protocolo médico</b><input name='protocolo' placeholder='Básico, alto riesgo, manipulación alimentos, altura, etc.'><b>Riesgo del puesto</b><select name='riesgo_puesto'><option>BAJO</option><option>MEDIO</option><option>ALTO</option></select><b>Fecha programada</b><input type='date' name='fecha_programada'><b>Fecha resultado</b><input type='date' name='fecha_resultado'><b>Fecha vencimiento</b><input type='date' name='fecha_vencimiento'><b>Estado operativo</b><select name='estado'><option>PENDIENTE</option><option>PROGRAMADO</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option><option>OBSERVADO</option></select><b>Aptitud médica</b><select name='aptitud'><option>PENDIENTE</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option></select><b>Restricciones</b><input name='restricciones' placeholder='Ej. no cargar peso, lentes, control, etc.'><b>Recomendaciones</b><input name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'><b>Responsable seguimiento</b><input name='responsable_seguimiento' placeholder='RRHH / SST / Médico ocupacional'><b>Contacto proveedor</b><input name='proveedor_contacto' placeholder='Correo / teléfono'><b>Costo</b><input name='costo' placeholder='S/ 0.00'><b>Resultado PDF/imagen</b><input type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle libre'></textarea><span></span><button class='c-btn'>💾 Registrar evaluación</button></form>
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, clínica, aptitud, observación'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_medica' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_medica' class='c-table'><tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Clínica</th><th>Programada</th><th>Resultado</th><th>Estado</th><th>Observación</th></tr>{med_rows}</table></div>
         """)
     elif sec=='capacitacion':
-        cap_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['curso'])}</td><td>{h(r['video_url'])}</td><td>{h(r['nota'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['observacion'])}</td></tr>" for r in capacitaciones]) or "<tr><td colspan='8'>Sin capacitaciones.</td></tr>"
+        cap_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar capacitación?')\"><input type='hidden' name='accion' value='eliminar_capacitacion'><input type='hidden' name='capacitacion_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['curso'])}</td><td>{h(r['video_url'])}</td><td>{h(r['nota'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['observacion'])}</td></tr>" for r in capacitaciones]) or "<tr><td colspan='9'>Sin capacitaciones.</td></tr>"
         content=wrap(f"""
         <h2 class='c-title'>Capacitación con videos</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Inducción y cursos</h1><p class='muted2'>Registra videos de inducción, SST, buenas prácticas, EPP y evaluación por trabajador.</p></div><a class='c-btn' href='/admin/contratacion?sec=firma'>Ir a firma</a></div>
-        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_capacitacion'><b>DNI</b><input name='dni' maxlength='8' required><b>Curso</b><select name='curso'><option>Inducción general</option><option>SST</option><option>Reglamento interno</option><option>Buenas prácticas agrícolas</option><option>Uso de EPP</option><option>Código de conducta</option></select><b>URL video</b><input name='video_url' placeholder='https://...'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>VIDEO VISTO</option><option>APROBADO</option><option>DESAPROBADO</option></select><b>Nota / resultado</b><input name='nota'><b>Fecha inicio</b><input type='date' name='fecha_inicio'><b>Fecha fin</b><input type='date' name='fecha_fin'><b>Evidencia</b><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.xlsx'><b>Observación</b><textarea name='observacion' rows='2'></textarea><span></span><button class='c-btn'>💾 Registrar capacitación</button></form>
-        <div class='c-card table-wrap'><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Curso</th><th>Video</th><th>Nota</th><th>Estado</th><th>Observación</th></tr>{cap_rows}</table></div>
+        <form id='form_capacitacion' method='post' enctype='multipart/form-data' class='c-card c-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_capacitacion'><b>DNI</b><input name='dni' maxlength='8' required placeholder='8 dígitos'><b>Curso</b><select name='curso'><option>Inducción general</option><option>SST</option><option>Reglamento interno</option><option>Buenas prácticas agrícolas</option><option>Uso de EPP</option><option>Código de conducta</option><option>Manipulación de alimentos</option><option>Bioseguridad</option></select><b>Tipo video</b><select name='tipo_video'><option>URL EXTERNA</option><option>ARCHIVO MP4</option><option>YOUTUBE / DRIVE</option><option>MICROLEARNING</option></select><b>URL video</b><input name='video_url' placeholder='https://...'><b>Cargar video MP4</b><input type='file' name='archivo_video' accept='.mp4,.webm,.mov'><b>Duración min.</b><input name='duracion_min' type='number' min='0' placeholder='0'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>EVALUADO</option><option>APROBADO</option><option>DESAPROBADO</option></select><b>Nota / resultado</b><input name='nota' placeholder='Ej. 18/20'><b>Preguntas evaluación</b><input name='preguntas' placeholder='Cantidad o link de evaluación'><b>Intentos permitidos</b><input name='intentos' type='number' min='1' value='1'><b>Fecha inicio</b><input type='date' name='fecha_inicio'><b>Fecha fin</b><input type='date' name='fecha_fin'><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b>Evidencia</b><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.xlsx'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observación, comentario del curso o resultado.'></textarea><span></span><button class='c-btn'>💾 Registrar capacitación</button></form>
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_capacitacion')" placeholder='Filtrar DNI, curso, estado, nota'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_capacitacion' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_capacitacion' class='c-table'><tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Curso</th><th>Video</th><th>Nota</th><th>Estado</th><th>Observación</th></tr>{cap_rows}</table></div>
         """)
     elif sec=='indumentaria':
         ind_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['polo'])}</td><td>{h(r['pantalon'])}</td><td>{h(r['botas'])}</td><td>{h(r['fotocheck'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['fecha_entrega'])}</td></tr>" for r in indumentarias]) or "<tr><td colspan='9'>Sin entregas registradas.</td></tr>"
         content=wrap(f"""
-        <h2 class='c-title'>Entrega de indumentaria</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Indumentaria y fotocheck</h1><p class='muted2'>Controla entrega de EPP, uniformes, fotocheck y cargos.</p></div><a class='c-btn' href='/admin/contratacion?sec=integracion_nisira'>Validar NISIRA</a></div>
-        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_indumentaria'><b>DNI</b><input name='dni' maxlength='8' required><b>Requerimiento</b><input name='requerimiento'><b>Polo</b><input name='polo'><b>Pantalón</b><input name='pantalon'><b>Botas</b><input name='botas'><b>Casaca</b><input name='casaca'><b>Gorro</b><input name='gorro'><b>Lentes</b><input name='lentes'><b>Guantes</b><input name='guantes'><b>Fotocheck</b><select name='fotocheck'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Otros</b><input name='otros'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>ENTREGADO</option><option>OBSERVADO</option></select><b>Fecha entrega</b><input type='date' name='fecha_entrega'><b>Observación</b><textarea name='observacion' rows='2'></textarea><span></span><button class='c-btn'>💾 Registrar entrega</button></form>
-        <div class='c-card table-wrap'><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Entrega</th></tr>{ind_rows}</table></div>
+        <h2 class='c-title'>Entrega de indumentaria</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Indumentaria y fotocheck</h1><p class='muted2'>Controla entrega de EPP, uniformes, tallas, fotocheck, cargo de entrega y validación previa a NISIRA.</p></div><a class='c-btn' href='/admin/contratacion?sec=integracion_nisira'>Validar NISIRA</a></div>
+        <form id='form_indumentaria' method='post' class='c-card c-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_indumentaria'><b>DNI</b><input name='dni' maxlength='8' required><b>Requerimiento</b><input name='requerimiento'><b>Polo</b><input name='polo'><b>Pantalón</b><input name='pantalon'><b>Botas</b><input name='botas'><b>Casaca</b><input name='casaca'><b>Gorro</b><input name='gorro'><b>Lentes</b><input name='lentes'><b>Guantes</b><input name='guantes'><b>Fotocheck</b><select name='fotocheck'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Otros</b><input name='otros'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>ENTREGADO</option><option>OBSERVADO</option></select><b>Fecha entrega</b><input type='date' name='fecha_entrega'><b>Observación</b><textarea name='observacion' rows='2'></textarea><span></span><button class='c-btn'>💾 Registrar entrega</button></form>
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar DNI, trabajador, prenda o estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_indumentaria' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_indumentaria' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Entrega</th></tr>{ind_rows}</table></div>
         """)
     elif sec=='integracion_nisira':
         lote_rows=''.join([f"<tr><td><b>{h(r['lote_codigo'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['total'])}</td><td>{h(r['estado'])}</td><td>{h(r['endpoint'])}</td><td>{h(r['fecha_registro'])}</td></tr>" for r in lotes_nisira]) or "<tr><td colspan='9'>Sin lotes generados.</td></tr>"
@@ -5517,7 +5571,7 @@ def admin_contratacion():
         modulo = {'documentos_postulante':'DOCS_POSTULANTE','datos_completos':'DATOS_COMPLETOS','fotocheck':'FOTOCHECK'}[sec]
         ctrl=[r for r in controles_next if r['modulo']==modulo]
         ctrl_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['total'])}</td><td>{h(r['procesados'])}</td><td>{h(r['observados'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ctrl]) or "<tr><td colspan='8'>Sin controles registrados.</td></tr>"
-        extra = "" if sec!='fotocheck' else "<div class='c-card' style='padding:18px'><h2>Fotos / fotocheck</h2><p class='muted2'>Controla quién tiene foto, descarga imágenes y prepara cargos de fotocheck antes del envío a NISIRA.</p><button class='c-btn gray' type='button'>⬇ Descargar imágenes</button> <button class='c-btn' type='button'>📄 Generar cargos fotocheck</button></div>"
+        extra = "" if sec!='fotocheck' else "<div class='c-card' style='padding:18px'><h2>Fotos / fotocheck + Zebra ZC300</h2><p class='muted2'>Preparado para consumir la foto tomada en Nuevos/Reingresantes, validar DNI, crear diseño CR80, generar lote y mandar a impresión cuando se conecte el driver Zebra ZC300. Incluye serial/equipo, plantilla, reimpresión y cargo de entrega.</p><div class='photo-id-layout'><div><b>Flujo preparado</b><ol><li>Tomar foto en Alta.</li><li>Validar DNI y trabajador.</li><li>Generar fotocheck CR80.</li><li>Enviar a Zebra ZC300 / Browser Print.</li><li>Registrar entrega y cargo firmado.</li></ol></div><div><b>Datos de impresión</b><input placeholder='Impresora: Zebra ZC300'><input placeholder='Serial / IP / USB'><input placeholder='Plantilla CR80 - Horizontal'><button type='button' class='c-btn'>Preparar impresión</button></div></div><div class='quick-grid'><a>Foto desde alta</a><a>Plantilla CR80</a><a>Impresión Zebra ZC300</a><a>Reimpresión</a><a>Cargo firmado</a><a>Exportar lote</a></div></div>"
         content=wrap(f"""
         <h2 class='c-title'>{tit}</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>{tit}</h1><p class='muted2'>Control inspirado en NEXT: sede, requerimiento, actividad, búsqueda, selección y estados para contratación.</p></div><a class='c-btn' href='/admin/contratacion?sec=integracion_nisira'>Enviar a NISIRA</a></div>
         <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_checklist_next'><input type='hidden' name='modulo' value='{modulo}'><b>Sede</b><input name='sede' placeholder='TODOS / Blueberries / Arato'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Actividad</b><input name='actividad' placeholder='OB_PODA'><b>Total Excel/NEXT</b><input type='number' name='total' value='0'><b>Procesados</b><input type='number' name='procesados' value='0'><b>Observados</b><input type='number' name='observados' value='0'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>APTO</option><option>PROCESADO</option><option>OBSERVADO</option></select><span></span><button class='c-btn'>💾 Registrar control</button></form>{extra}<div class='c-card table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Total</th><th>Procesados</th><th>Observados</th><th>Estado</th></tr>{ctrl_rows}</table></div>
