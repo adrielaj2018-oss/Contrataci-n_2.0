@@ -2743,6 +2743,102 @@ textarea{min-height:70px!important;}
   .records-toolbar{grid-template-columns:1fr!important;}
 }
 
+
+
+/* ===== PANEL LATERAL COMPACTO ===== */
+.sidebar,
+.side-panel,
+.sidebar-menu{
+    width: 260px !important;
+    min-width: 260px !important;
+    max-width: 260px !important;
+    padding: 8px 10px !important;
+    overflow-x: hidden !important;
+}
+
+.sidebar .menu-item,
+.sidebar .nav-link,
+.sidebar .submenu-item{
+    margin-bottom: 6px !important;
+    padding: 10px 12px !important;
+    border-radius: 16px !important;
+    min-height: 48px !important;
+}
+
+/* ===== ELIMINAR ESPACIO VACIO DEL PANEL ===== */
+.main-content,
+.content-wrapper,
+.page-content{
+    margin-left: 270px !important;
+    width: calc(100% - 270px) !important;
+}
+
+/* ===== RECUADROS MÁS COMPACTOS ===== */
+.card,
+.module-card,
+.form-card,
+.section-card,
+.dashboard-card{
+    padding: 16px !important;
+    border-radius: 18px !important;
+    margin-bottom: 14px !important;
+}
+
+/* ===== LABELS Y CAMPOS MÁS PRO ===== */
+label,
+.field-title{
+    font-size: 15px !important;
+    font-weight: 700 !important;
+}
+
+input,
+select,
+textarea{
+    min-height: 46px !important;
+    padding: 10px 14px !important;
+    border-radius: 14px !important;
+    font-size: 15px !important;
+}
+
+/* ===== TITULOS ===== */
+h1{
+    font-size: 52px !important;
+}
+
+h2{
+    font-size: 30px !important;
+}
+
+.section-header{
+    padding: 12px 18px !important;
+    border-radius: 16px !important;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px){
+    .sidebar,
+    .side-panel{
+        width: 88px !important;
+        min-width: 88px !important;
+    }
+
+    .main-content,
+    .content-wrapper,
+    .page-content{
+        margin-left: 88px !important;
+        width: calc(100% - 88px) !important;
+    }
+
+    .card,
+    .module-card{
+        padding: 12px !important;
+    }
+
+    h1{
+        font-size: 34px !important;
+    }
+}
+
 </style>
 <script>
 function side(){return document.querySelector('.side')}
