@@ -6863,6 +6863,306 @@ try:
 except Exception:
     pass
 
+
+# =========================================================
+# MÓDULO PRO INTEGRADO - CONTRATOS, DOCUMENTOS, FIRMAS Y RENOVACIONES
+# =========================================================
+CAMPOS_RENOVACION_EXCEL = ['DNI','Nombres y apellidos','Empresa','Cargo','Regimen','Fecha inicio','Fecha fin actual','Nueva fecha inicio','Nueva fecha fin','Basico','Correo','Celular','Jefe inmediato','Estado','DireccionActual','Distrito','Provincia','Departamento','Sede','TipoTrabajador']
+TIPOS_DATO_CAMPO_PRO = ['texto','numero','fecha','moneda','lista desplegable','automatico']
+FUENTES_CAMPO_PRO = ['Excel','base de trabajadores','digitacion manual','calculo automatico']
+
+CSS_CONTRATACION_PRO = r'''
+.pro-hero{display:flex;justify-content:space-between;gap:18px;align-items:center;background:#fff;border:1px solid #dbe6ef;border-radius:22px;padding:28px 34px;margin-bottom:18px;box-shadow:0 16px 34px rgba(15,41,71,.08)}
+.pro-hero h1{margin:0;color:#0f2b46;font-size:36px;letter-spacing:-.6px}.pro-hero p{color:#60758d;font-size:16px;margin:8px 0 0}.protabs{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px}.protab{padding:10px 16px;border-radius:999px;background:#fff;border:1px solid #d8e6ef;color:#14314d!important;text-decoration:none;font-weight:750}.protab.active{background:#10b981;color:#fff!important;border-color:#10b981;box-shadow:0 10px 24px rgba(16,185,129,.25)}.pro-kpis{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:12px;margin-bottom:18px}.pro-kpi{background:#fff;border:1px solid #dbe6ef;border-radius:18px;padding:18px;box-shadow:0 12px 28px rgba(15,41,71,.06)}.pro-kpi span{display:block;color:#60758d;font-weight:650}.pro-kpi b{display:block;font-size:30px;color:#0f2b46;margin-top:6px}.pro-card{background:#fff;border:1px solid #dbe6ef;border-radius:22px;padding:24px;margin-bottom:18px;box-shadow:0 16px 34px rgba(15,41,71,.07)}.pro-card h2{margin:0 0 16px;color:#0f2b46;font-size:24px}.pro-grid-form{display:grid;grid-template-columns:repeat(2,minmax(240px,1fr));gap:14px 18px}.pro-grid-form label{font-weight:760;color:#18324d}.pro-grid-form input,.pro-grid-form select,.pro-grid-form textarea,.pro-filters input,.pro-filters select{width:100%;margin-top:7px;border:1.4px solid #cbd8e6;border-radius:13px;padding:11px 13px;background:#fff;color:#172b43;font-weight:560}.pro-grid-form textarea{min-height:80px}.span2{grid-column:1/-1}.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.btn,.btn-green{display:inline-flex;align-items:center;justify-content:center;border-radius:12px;padding:10px 15px;text-decoration:none;border:0;font-weight:800;cursor:pointer}.btn{background:#1f2937;color:#fff!important}.btn-green{background:#10b981;color:#fff!important}.mini-btn{font-size:12px;padding:7px 10px;border-radius:999px;margin:2px}.pro-table{min-width:1200px;width:100%;border-collapse:separate;border-spacing:0}.pro-table th{background:#f1f6fa;color:#25364d;font-weight:760;text-align:left;padding:13px;border:1px solid #dbe6ef}.pro-table td{background:#fff;color:#24364d;padding:13px;border:1px solid #e2eaf2;font-weight:560}.pro-table tr:nth-child(even) td{background:#f9fcfd}.pro-filters{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px;margin-bottom:14px}.flow-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.flow-steps b{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:16px;padding:16px;text-align:center}.muted{color:#60758d}.field-config-table input,.field-config-table select{width:100%;border:1px solid #cbd8e6;border-radius:10px;padding:8px;color:#172b43;background:#fff}.signature-box{max-width:860px;margin:24px auto;background:#fff;border:1px solid #dbe6ef;border-radius:24px;padding:26px;box-shadow:0 16px 34px rgba(15,41,71,.10)}
+@media(max-width:1000px){.pro-kpis{grid-template-columns:repeat(2,1fr)}.pro-grid-form,.pro-filters,.flow-steps{grid-template-columns:1fr}.pro-hero{align-items:flex-start;flex-direction:column}.pro-hero h1{font-size:28px}}
+'''
+
+def detectar_campos_docx_pro(path):
+    campos=[]; vistos=set()
+    def add(txt):
+        for m in re.findall(r'«\s*([^»]+?)\s*»', txt or ''):
+            c=clean(m)
+            if c and c not in vistos:
+                vistos.add(c); campos.append(c)
+    if Document is None: return campos
+    try:
+        doc=Document(path)
+        for p in doc.paragraphs: add(p.text)
+        for t in doc.tables:
+            for r in t.rows:
+                for cell in r.cells: add(cell.text)
+        for s in doc.sections:
+            for p in s.header.paragraphs: add(p.text)
+            for p in s.footer.paragraphs: add(p.text)
+    except Exception as e: print('No se pudo detectar campos Word:', e)
+    return campos
+
+def inferir_tipo_dato_pro(campo):
+    c=(campo or '').lower()
+    if 'fecha' in c: return 'fecha'
+    if 'basico' in c or 'básico' in c or 'remun' in c or 'sueldo' in c: return 'moneda'
+    if 'numero' in c or 'cantidad' in c or 'meses' in c: return 'numero'
+    if 'regimen' in c or 'estado' in c or 'tipo' in c: return 'lista desplegable'
+    return 'texto'
+
+def asegurar_tablas_contratacion_flujo_pro():
+    with db() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS contratacion_flujo_plantillas(id INTEGER PRIMARY KEY AUTOINCREMENT,nombre TEXT,descripcion TEXT,grupo_trabajador TEXT,regimen TEXT,tipo_documento TEXT,proceso TEXT,categoria TEXT,version TEXT DEFAULT 'Versión 01',estado TEXT DEFAULT 'ACTIVA',archivo_nombre TEXT,ruta_archivo TEXT,campos_detectados TEXT,fecha_carga TEXT,cargado_por TEXT)""")
+        con.execute("""CREATE TABLE IF NOT EXISTS contratacion_flujo_campos(id INTEGER PRIMARY KEY AUTOINCREMENT,plantilla_id INTEGER,campo TEXT,tipo_dato TEXT DEFAULT 'texto',fuente_dato TEXT DEFAULT 'Excel',obligatorio TEXT DEFAULT 'SI',visible_trabajador TEXT DEFAULT 'SI',editable_admin TEXT DEFAULT 'SI',opciones TEXT,fecha_config TEXT,configurado_por TEXT)""")
+        con.execute("""CREATE TABLE IF NOT EXISTS contratacion_flujo_lotes(id INTEGER PRIMARY KEY AUTOINCREMENT,plantilla_id INTEGER,proceso TEXT,nombre_lote TEXT,total INTEGER DEFAULT 0,generados INTEGER DEFAULT 0,enviados INTEGER DEFAULT 0,firmados INTEGER DEFAULT 0,observados INTEGER DEFAULT 0,rechazados INTEGER DEFAULT 0,vencidos INTEGER DEFAULT 0,fecha_carga TEXT,fecha_vencimiento TEXT,creado_por TEXT)""")
+        con.execute("""CREATE TABLE IF NOT EXISTS contratacion_flujo_docs(id INTEGER PRIMARY KEY AUTOINCREMENT,lote_id INTEGER,plantilla_id INTEGER,dni TEXT,trabajador TEXT,empresa TEXT,regimen TEXT,tipo_trabajador TEXT,tipo_documento TEXT,proceso TEXT,correo TEXT,celular TEXT,estado_firma TEXT DEFAULT 'GENERADO',fecha_generado TEXT,fecha_envio TEXT,fecha_firma TEXT,fecha_vencimiento TEXT,token_firma TEXT,archivo_word TEXT,archivo_pdf TEXT,observacion TEXT,ip_firma TEXT,user_agent_firma TEXT)""")
+        con.execute("""CREATE TABLE IF NOT EXISTS contratacion_flujo_auditoria(id INTEGER PRIMARY KEY AUTOINCREMENT,entidad TEXT,entidad_id INTEGER,accion TEXT,detalle TEXT,usuario TEXT,fecha TEXT,ip TEXT)""")
+        con.commit()
+
+def auditoria_contratacion_pro(entidad, entidad_id, accion, detalle=''):
+    try:
+        with db() as con:
+            con.execute('INSERT INTO contratacion_flujo_auditoria(entidad,entidad_id,accion,detalle,usuario,fecha,ip) VALUES(?,?,?,?,?,?,?)',(entidad,entidad_id,accion,detalle,session.get('admin_user') or session.get('dni') or 'sistema',now_txt(),request.remote_addr if request else ''))
+            con.commit()
+    except Exception as e: print('Auditoría PRO no registrada:', e)
+
+def reemplazar_campos_docx_pro(origen, destino, datos):
+    if Document is None: raise RuntimeError('python-docx no está disponible.')
+    doc=Document(origen)
+    def repl(p):
+        txt=''.join(run.text for run in p.runs)
+        if '«' not in txt: return
+        nuevo=txt
+        for k,v in datos.items(): nuevo=nuevo.replace('«'+str(k)+'»', str(v or ''))
+        if nuevo!=txt:
+            for run in p.runs: run.text=''
+            if p.runs: p.runs[0].text=nuevo
+            else: p.add_run(nuevo)
+    for p in doc.paragraphs: repl(p)
+    for t in doc.tables:
+        for r in t.rows:
+            for cell in r.cells:
+                for p in cell.paragraphs: repl(p)
+    for s in doc.sections:
+        for p in s.header.paragraphs: repl(p)
+        for p in s.footer.paragraphs: repl(p)
+    doc.save(destino)
+
+def datos_trabajador_para_campos_pro(row_excel, trabajador_db=None):
+    datos={clean(k):(fecha_sin_hora(v) if hasattr(v,'strftime') else clean(v)) for k,v in row_excel.items()}
+    alias={'DNI':'DNI','Dni':'DNI','NombreCompletoTrabajador':'Nombres y apellidos','Cargo':'Cargo','Regimen':'Regimen','Régimen':'Regimen','Basico':'Basico','Básico':'Basico','FechaInicioContrato':'Nueva fecha inicio','FechaFinContrato':'Nueva fecha fin','FechaInicio':'Fecha inicio','FechaFinActual':'Fecha fin actual','Correo':'Correo','Celular':'Celular','Sede':'Sede','Empresa':'Empresa','Distrito':'Distrito','Provincia':'Provincia','Departamento':'Departamento','DireccionActual':'DireccionActual','TipoTrabajador':'TipoTrabajador','JefeInmediato':'Jefe inmediato'}
+    for campo, fuente in alias.items():
+        if campo not in datos and fuente in datos: datos[campo]=datos.get(fuente,'')
+    if trabajador_db:
+        mp={'DNI':'dni','NombreCompletoTrabajador':'nombre','Nombres y apellidos':'nombre','Empresa':'empresa','Cargo':'cargo','Correo':'correo','Celular':'celular','DireccionActual':'direccion','Distrito':'distrito','Provincia':'provincia','Departamento':'departamento'}
+        for campo,col in mp.items():
+            try:
+                if not datos.get(campo) and col in trabajador_db.keys(): datos[campo]=trabajador_db[col] or ''
+            except Exception: pass
+    return datos
+
+def tabla_plantillas_pro(plantillas):
+    rows=[]
+    for p in plantillas:
+        campos=', '.join(json.loads(p['campos_detectados'] or '[]')[:8]) if (p['campos_detectados'] or '').startswith('[') else ''
+        acciones=f"<a class='btn mini-btn' href='/admin/contratacion/pro/plantilla/{p['id']}/campos'>Configurar campos</a> <a class='btn mini-btn' href='/admin/contratacion/pro/plantilla/{p['id']}/preview'>Vista previa</a>"
+        rows.append(f"<tr><td>{acciones}</td><td><span class='status-pill'>{html.escape(p['estado'] or '')}</span></td><td>{html.escape(p['nombre'] or '')}</td><td>{html.escape(p['grupo_trabajador'] or '')}</td><td>{html.escape(p['regimen'] or '')}</td><td>{html.escape(p['tipo_documento'] or '')}</td><td>{html.escape(p['proceso'] or '')}</td><td>{html.escape(p['version'] or '')}</td><td>{html.escape(campos)}</td><td>{html.escape(p['fecha_carga'] or '')}</td></tr>")
+    return "<div class='table-wrap'><table class='pro-table'><tr><th>Proceso</th><th>Estado</th><th>Nombre plantilla</th><th>Grupo</th><th>Régimen</th><th>Tipo documento</th><th>Proceso</th><th>Versión</th><th>Campos detectados</th><th>Fecha</th></tr>"+(''.join(rows) or '<tr><td colspan=10>Sin plantillas cargadas.</td></tr>')+'</table></div>'
+
+def tabla_lotes_pro(lotes):
+    rows=''.join([f"<tr><td><a class='btn mini-btn' href='/admin/contratacion/pro/lote/{l['id']}/enviar'>Enviar masivamente</a> <a class='btn mini-btn' href='/admin/contratacion/pro/lote/{l['id']}/reenviar'>Reenviar pendientes</a></td><td>{html.escape(l['nombre_lote'] or '')}</td><td>{html.escape(l['proceso'] or '')}</td><td>{l['total']}</td><td>{l['generados']}</td><td>{l['enviados']}</td><td>{l['firmados']}</td><td>{html.escape(l['fecha_vencimiento'] or '')}</td></tr>" for l in lotes])
+    return "<div class='table-wrap'><table class='pro-table'><tr><th>Acciones</th><th>Lote</th><th>Proceso</th><th>Total</th><th>Generados</th><th>Enviados</th><th>Firmados</th><th>Vence</th></tr>"+(rows or '<tr><td colspan=8>Sin lotes.</td></tr>')+'</table></div>'
+
+def filtros_firma_pro():
+    return """<form class='pro-filters' method='get'><input type='hidden' name='sec' value='firmas'><input name='empresa' placeholder='Empresa'><input name='regimen' placeholder='Régimen'><input name='tipo_trabajador' placeholder='Tipo trabajador'><input name='documento' placeholder='Documento'><select name='estado_firma'><option value=''>Estado firma</option><option>GENERADO</option><option>ENVIADO</option><option>FIRMADO</option><option>OBSERVADO</option><option>RECHAZADO</option><option>VENCIDO</option></select><input type='date' name='desde'><input type='date' name='hasta'><button class='btn-green'>Buscar</button><a class='btn' href='/admin/contratacion/pro?sec=firmas'>Limpiar</a></form>"""
+
+def tabla_docs_pro(docs):
+    rows=[]
+    for d in docs:
+        word=f"<a class='btn mini-btn' href='/admin/contratacion/pro/doc/{d['id']}/word'>Word</a>" if d['archivo_word'] else ''
+        firma=f"<a class='btn mini-btn' target='_blank' href='/contratacion/pro/firma/{d['token_firma']}'>Link firma</a>" if d['token_firma'] else ''
+        rows.append(f"<tr><td>{word} {firma}</td><td><span class='status-pill'>{html.escape(d['estado_firma'] or '')}</span></td><td>{html.escape(d['dni'] or '')}</td><td>{html.escape(d['trabajador'] or '')}</td><td>{html.escape(d['empresa'] or '')}</td><td>{html.escape(d['regimen'] or '')}</td><td>{html.escape(d['tipo_documento'] or '')}</td><td>{html.escape(d['proceso'] or '')}</td><td>{html.escape(d['fecha_envio'] or '')}</td><td>{html.escape(d['fecha_vencimiento'] or '')}</td><td>{html.escape(d['fecha_firma'] or '')}</td></tr>")
+    return "<div class='table-wrap'><table class='pro-table'><tr><th>Acciones</th><th>Estado</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Régimen</th><th>Documento</th><th>Proceso</th><th>Envío</th><th>Vence</th><th>Firma</th></tr>"+(''.join(rows) or '<tr><td colspan=11>Sin documentos generados.</td></tr>')+'</table></div>'
+
+def render_contratacion_pro_page(sec='dashboard'):
+    asegurar_tablas_contratacion_flujo_pro()
+    with db() as con:
+        total=con.execute('SELECT COUNT(*) FROM contratacion_flujo_docs').fetchone()[0]
+        firmados=con.execute("SELECT COUNT(*) FROM contratacion_flujo_docs WHERE UPPER(estado_firma)='FIRMADO'").fetchone()[0]
+        pendientes=con.execute("SELECT COUNT(*) FROM contratacion_flujo_docs WHERE UPPER(estado_firma) IN ('GENERADO','ENVIADO','PENDIENTE')").fetchone()[0]
+        observados=con.execute("SELECT COUNT(*) FROM contratacion_flujo_docs WHERE UPPER(estado_firma)='OBSERVADO'").fetchone()[0]
+        rechazados=con.execute("SELECT COUNT(*) FROM contratacion_flujo_docs WHERE UPPER(estado_firma)='RECHAZADO'").fetchone()[0]
+        vencidos=con.execute("SELECT COUNT(*) FROM contratacion_flujo_docs WHERE UPPER(estado_firma)<>'FIRMADO' AND fecha_vencimiento<>'' AND date(fecha_vencimiento) < date('now')").fetchone()[0]
+        por_vencer=con.execute("SELECT COUNT(*) FROM contratacion_flujo_docs WHERE UPPER(estado_firma)<>'FIRMADO' AND fecha_vencimiento<>'' AND date(fecha_vencimiento) BETWEEN date('now') AND date('now','+7 day')").fetchone()[0]
+        plantillas=con.execute('SELECT * FROM contratacion_flujo_plantillas ORDER BY id DESC LIMIT 80').fetchall()
+        docs=con.execute('SELECT * FROM contratacion_flujo_docs ORDER BY id DESC LIMIT 200').fetchall()
+        lotes=con.execute('SELECT * FROM contratacion_flujo_lotes ORDER BY id DESC LIMIT 60').fetchall()
+        auditoria=con.execute('SELECT * FROM contratacion_flujo_auditoria ORDER BY id DESC LIMIT 80').fetchall()
+    nav=''.join([f"<a class='protab {'active' if sec==s else ''}' href='/admin/contratacion/pro?sec={s}'>{t}</a>" for s,t in [('dashboard','Dashboard'),('plantillas','Plantillas de contratos'),('documentos','Documentos a entregar'),('campos','Configuración de campos'),('generacion','Generación masiva'),('firmas','Seguimiento de firmas'),('renovaciones','Renovaciones'),('reportes','Reportes'),('historial','Historial')]])
+    cards=f"""<div class='pro-kpis'><div class='pro-kpi'><span>Total enviados</span><b>{total}</b></div><div class='pro-kpi'><span>Firmados</span><b>{firmados}</b></div><div class='pro-kpi'><span>Pendientes</span><b>{pendientes}</b></div><div class='pro-kpi'><span>Observados</span><b>{observados}</b></div><div class='pro-kpi'><span>Rechazados</span><b>{rechazados}</b></div><div class='pro-kpi'><span>Vencidos</span><b>{vencidos}</b></div><div class='pro-kpi'><span>Por vencer</span><b>{por_vencer}</b></div></div>"""
+    if sec in ['plantillas','documentos','renovaciones']:
+        proceso_default='RENOVACION' if sec=='renovaciones' else ('DOCUMENTO ENTREGA' if sec=='documentos' else 'CONTRATACION NUEVA')
+        tipo_val='Contrato de renovación' if sec=='renovaciones' else 'Contrato / Documento'
+        body=f"""<div class='pro-card'><h2>Cargar plantilla Word y detectar campos dinámicos</h2><form method='post' enctype='multipart/form-data' action='/admin/contratacion/pro/plantilla/upload' class='pro-grid-form'><input type='hidden' name='volver' value='{sec}'><label>Nombre plantilla<input name='nombre' required></label><label>Grupo trabajador<select name='grupo_trabajador'><option>OBREROS</option><option>EMPLEADOS</option></select></label><label>Régimen laboral<input name='regimen' placeholder='AGRARIO / GENERAL / PACKING'></label><label>Tipo documento<input name='tipo_documento' value='{tipo_val}'></label><label>Proceso<select name='proceso'><option {'selected' if proceso_default=='CONTRATACION NUEVA' else ''}>CONTRATACION NUEVA</option><option {'selected' if proceso_default=='RENOVACION' else ''}>RENOVACION</option><option {'selected' if proceso_default=='DOCUMENTO ENTREGA' else ''}>DOCUMENTO ENTREGA</option></select></label><label>Categoría<select name='categoria'><option>Contrato</option><option>Ficha de datos</option><option>Declaración jurada</option><option>Reglamento interno</option><option>Política interna</option><option>Compromiso</option><option>Anexo</option><option>Otros</option></select></label><label>Versión<input name='version' value='Versión 01'></label><label>Estado<select name='estado'><option>ACTIVA</option><option>INACTIVA</option></select></label><label class='span2'>Archivo Word .docx<input type='file' name='archivo' accept='.docx' required></label><label class='span2'>Descripción<textarea name='descripcion' placeholder='Detalle de uso, condiciones o alcance'></textarea></label><div class='span2 actions'><button class='btn-green'>Cargar, detectar y configurar</button></div></form></div><div class='pro-card'><h2>Historial de plantillas cargadas</h2>{tabla_plantillas_pro(plantillas)}</div>"""
+    elif sec=='campos': body=f"<div class='pro-card'><h2>Configuración de campos detectados</h2>{tabla_plantillas_pro(plantillas)}</div>"
+    elif sec=='generacion':
+        opts=''.join([f"<option value='{p['id']}'>{html.escape(p['nombre'] or '')} - {html.escape(p['proceso'] or '')}</option>" for p in plantillas])
+        body=f"""<div class='pro-card'><h2>Generación masiva de documentos</h2><p class='muted'>Cargue una base Excel; el sistema valida campos obligatorios y genera Word por trabajador.</p><form method='post' enctype='multipart/form-data' action='/admin/contratacion/pro/generar' class='pro-grid-form'><label>Plantilla<select name='plantilla_id' required>{opts}</select></label><label>Fecha vencimiento firma<input type='date' name='fecha_vencimiento'></label><label class='span2'>Base Excel trabajadores<input type='file' name='excel' accept='.xlsx' required></label><div class='span2 actions'><a class='btn' href='/admin/contratacion/pro/base_excel'>Descargar formato Excel</a><button class='btn-green'>Validar y generar documentos</button></div></form></div><div class='pro-card'><h2>Lotes generados</h2>{tabla_lotes_pro(lotes)}</div>"""
+    elif sec=='firmas': body=f"<div class='pro-card'><h2>Seguimiento de firmas</h2>{filtros_firma_pro()}{tabla_docs_pro(docs)}</div>"
+    elif sec=='reportes': body=f"<div class='pro-card'><h2>Reportes</h2><p class='muted'>Exportación Excel de seguimiento, auditoría y estados.</p><div class='actions'><a class='btn-green' href='/admin/contratacion/pro/exportar_seguimiento'>Exportar seguimiento Excel</a><a class='btn' href='/admin/contratacion/pro/base_excel'>Descargar formato renovación</a></div></div><div class='pro-card'><h2>Resumen de firmas</h2>{tabla_docs_pro(docs)}</div>"
+    elif sec=='historial':
+        rows=''.join([f"<tr><td>{a['fecha']}</td><td>{html.escape(a['usuario'] or '')}</td><td>{html.escape(a['entidad'] or '')}</td><td>{html.escape(a['accion'] or '')}</td><td>{html.escape(a['detalle'] or '')}</td><td>{html.escape(a['ip'] or '')}</td></tr>" for a in auditoria])
+        body=f"<div class='pro-card'><h2>Registro de auditoría</h2><div class='table-wrap'><table><tr><th>Fecha</th><th>Usuario</th><th>Entidad</th><th>Acción</th><th>Detalle</th><th>IP</th></tr>{rows or '<tr><td colspan=6>Sin auditoría registrada.</td></tr>'}</table></div></div>"
+    else: body=f"{cards}<div class='pro-card'><h2>Flujo automatizado de contratación</h2><div class='flow-steps'><b>1. Cargar plantilla</b><b>2. Detectar campos</b><b>3. Configurar campos</b><b>4. Cargar Excel</b><b>5. Generar masivo</b><b>6. Enviar / Firmar</b><b>7. Seguimiento</b><b>8. Reportes</b></div></div><div class='pro-card'><h2>Últimos documentos generados</h2>{tabla_docs_pro(docs)}</div>"
+    content=f"""<style>{CSS_CONTRATACION_PRO}</style><div class='pro-hero'><div><h1>Gestión de Contratación PRO</h1><p>Contratos, documentos a entregar, firmas digitales, renovaciones, reportes y auditoría.</p></div><a class='btn-green' href='/admin/contratacion?sec=dashboard'>Volver al módulo</a></div><div class='protabs'>{nav}</div>{cards if sec!='dashboard' else ''}{body}"""
+    return render_page(content, active='Gestion Contratacion')
+
+@app.route('/admin/contratacion/pro')
+@admin_required
+def admin_contratacion_pro():
+    return render_contratacion_pro_page(request.args.get('sec','dashboard'))
+
+@app.route('/admin/contratacion/pro/plantilla/upload', methods=['POST'])
+@admin_required
+def contratacion_pro_upload_plantilla():
+    asegurar_tablas_contratacion_flujo_pro(); f=request.files.get('archivo')
+    if not f or not f.filename:
+        flash('Debe cargar una plantilla Word .docx.','error'); return redirect('/admin/contratacion/pro?sec=plantillas')
+    if Path(f.filename).suffix.lower()!='.docx':
+        flash('Solo se permite Word .docx para detectar campos dinámicos automáticamente.','error'); return redirect('/admin/contratacion/pro?sec=plantillas')
+    carpeta=UPLOAD_DIR/'contratacion_pro'/'plantillas'; carpeta.mkdir(parents=True, exist_ok=True)
+    nombre_arch=now_file()+'_'+secure_filename(f.filename); path=carpeta/nombre_arch; f.save(path)
+    campos=detectar_campos_docx_pro(path)
+    with db() as con:
+        cur=con.execute('INSERT INTO contratacion_flujo_plantillas(nombre,descripcion,grupo_trabajador,regimen,tipo_documento,proceso,categoria,version,estado,archivo_nombre,ruta_archivo,campos_detectados,fecha_carga,cargado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(clean(request.form.get('nombre')),clean(request.form.get('descripcion')),clean(request.form.get('grupo_trabajador')),clean(request.form.get('regimen')),clean(request.form.get('tipo_documento')),clean(request.form.get('proceso')),clean(request.form.get('categoria')),clean(request.form.get('version')) or 'Versión 01',clean(request.form.get('estado')) or 'ACTIVA',f.filename,str(path),json.dumps(campos,ensure_ascii=False),now_txt(),session.get('admin_user','admin')))
+        pid=cur.lastrowid
+        for c in campos: con.execute('INSERT INTO contratacion_flujo_campos(plantilla_id,campo,tipo_dato,fuente_dato,obligatorio,visible_trabajador,editable_admin,fecha_config,configurado_por) VALUES(?,?,?,?,?,?,?,?,?)',(pid,c,inferir_tipo_dato_pro(c),'Excel','SI','SI','SI',now_txt(),session.get('admin_user','admin')))
+        con.commit()
+    auditoria_contratacion_pro('plantilla',pid,'CARGA_PLANTILLA',f'Detectados {len(campos)} campos')
+    flash(f'Plantilla cargada correctamente. Campos detectados: {len(campos)}.','ok')
+    return redirect(f'/admin/contratacion/pro/plantilla/{pid}/campos')
+
+@app.route('/admin/contratacion/pro/plantilla/<int:pid>/campos', methods=['GET','POST'])
+@admin_required
+def contratacion_pro_configurar_campos(pid):
+    asegurar_tablas_contratacion_flujo_pro()
+    if request.method=='POST':
+        ids=request.form.getlist('campo_id')
+        with db() as con:
+            for cid in ids:
+                con.execute('UPDATE contratacion_flujo_campos SET tipo_dato=?,fuente_dato=?,obligatorio=?,visible_trabajador=?,editable_admin=?,opciones=?,fecha_config=?,configurado_por=? WHERE id=? AND plantilla_id=?',(clean(request.form.get('tipo_dato_'+cid)),clean(request.form.get('fuente_'+cid)),clean(request.form.get('obligatorio_'+cid)),clean(request.form.get('visible_'+cid)),clean(request.form.get('editable_'+cid)),clean(request.form.get('opciones_'+cid)),now_txt(),session.get('admin_user','admin'),int(cid),pid))
+            con.commit()
+        auditoria_contratacion_pro('plantilla',pid,'CONFIGURA_CAMPOS',f'{len(ids)} campos actualizados')
+        flash('Configuración de campos actualizada.','ok'); return redirect(f'/admin/contratacion/pro/plantilla/{pid}/campos')
+    with db() as con:
+        pl=con.execute('SELECT * FROM contratacion_flujo_plantillas WHERE id=?',(pid,)).fetchone(); campos=con.execute('SELECT * FROM contratacion_flujo_campos WHERE plantilla_id=? ORDER BY id',(pid,)).fetchall()
+    if not pl: abort(404)
+    rows=[]
+    for c in campos:
+        cid=str(c['id']); opt_tipo=''.join([f"<option {'selected' if c['tipo_dato']==x else ''}>{x}</option>" for x in TIPOS_DATO_CAMPO_PRO]); opt_fuente=''.join([f"<option {'selected' if c['fuente_dato']==x else ''}>{x}</option>" for x in FUENTES_CAMPO_PRO])
+        rows.append(f"<tr><td><input type='hidden' name='campo_id' value='{cid}'><b>«{html.escape(c['campo'])}»</b></td><td><select name='tipo_dato_{cid}'>{opt_tipo}</select></td><td><select name='fuente_{cid}'>{opt_fuente}</select></td><td><select name='obligatorio_{cid}'><option {'selected' if c['obligatorio']=='SI' else ''}>SI</option><option {'selected' if c['obligatorio']=='NO' else ''}>NO</option></select></td><td><select name='visible_{cid}'><option {'selected' if c['visible_trabajador']=='SI' else ''}>SI</option><option {'selected' if c['visible_trabajador']=='NO' else ''}>NO</option></select></td><td><select name='editable_{cid}'><option {'selected' if c['editable_admin']=='SI' else ''}>SI</option><option {'selected' if c['editable_admin']=='NO' else ''}>NO</option></select></td><td><input name='opciones_{cid}' value='{html.escape(c['opciones'] or '')}'></td></tr>")
+    content=f"<style>{CSS_CONTRATACION_PRO}</style><div class='pro-hero'><div><h1>Configuración de campos</h1><p>{html.escape(pl['nombre'] or '')}</p></div><a class='btn' href='/admin/contratacion/pro?sec=campos'>Volver</a></div><div class='pro-card'><form method='post'><div class='table-wrap'><table class='pro-table field-config-table'><tr><th>Campo detectado</th><th>Tipo dato</th><th>Fuente dato</th><th>Obligatorio</th><th>Visible trabajador</th><th>Editable admin</th><th>Opciones</th></tr>{''.join(rows) or '<tr><td colspan=7>Sin campos detectados.</td></tr>'}</table></div><div class='actions' style='margin-top:16px'><button class='btn-green'>Guardar configuración</button><a class='btn' href='/admin/contratacion/pro?sec=generacion'>Ir a generación masiva</a></div></form></div>"
+    return render_page(content, active='Gestion Contratacion')
+
+@app.route('/admin/contratacion/pro/base_excel')
+@admin_required
+def contratacion_pro_base_excel():
+    path=EXCEL_LOCAL_DIR/'FORMATO_RENOVACION_CONTRATACION_PRO.xlsx'; wb=Workbook(); ws=wb.active; ws.title='BASE'; ws.append(CAMPOS_RENOVACION_EXCEL)
+    ws.append(['74324033','TRABAJADOR DEMO','AQUANQA','OPERARIO','AGRARIO','01/01/2026','30/06/2026','01/07/2026','31/12/2026','1130','demo@empresa.com','999999999','JEFE DEMO','PENDIENTE','Av. ejemplo','Trujillo','Trujillo','La Libertad','PLANTA','OBRERO'])
+    for cell in ws[1]: cell.font=Font(bold=True,color='FFFFFF'); cell.fill=PatternFill('solid',fgColor='0F766E'); cell.alignment=Alignment(horizontal='center')
+    for i in range(1,len(CAMPOS_RENOVACION_EXCEL)+1): ws.column_dimensions[chr(64+i) if i<=26 else 'A'].width=22
+    wb.save(path); return send_file(path, as_attachment=True, download_name=path.name)
+
+@app.route('/admin/contratacion/pro/generar', methods=['POST'])
+@admin_required
+def contratacion_pro_generar_masivo():
+    asegurar_tablas_contratacion_flujo_pro(); pid=int(request.form.get('plantilla_id') or 0); fecha_venc=clean(request.form.get('fecha_vencimiento')); f=request.files.get('excel')
+    if not f or not f.filename: flash('Debe cargar base Excel .xlsx.','error'); return redirect('/admin/contratacion/pro?sec=generacion')
+    with db() as con:
+        pl=con.execute('SELECT * FROM contratacion_flujo_plantillas WHERE id=?',(pid,)).fetchone(); campos=con.execute('SELECT * FROM contratacion_flujo_campos WHERE plantilla_id=?',(pid,)).fetchall()
+    if not pl or not Path(pl['ruta_archivo']).exists(): flash('La plantilla no existe o no tiene archivo Word.','error'); return redirect('/admin/contratacion/pro?sec=generacion')
+    tmp=UPLOAD_DIR/'contratacion_pro'/'bases'; tmp.mkdir(parents=True, exist_ok=True); excel_path=tmp/(now_file()+'_'+secure_filename(f.filename)); f.save(excel_path)
+    wb=load_workbook(excel_path,data_only=True); ws=wb.active; headers=[clean(c.value) for c in ws[1]]; oblig=[c['campo'] for c in campos if (c['obligatorio'] or 'SI')=='SI' and (c['fuente_dato'] or '').lower().startswith('excel')]
+    outdir=UPLOAD_DIR/'contratacion_pro'/'generados'/now_file(); outdir.mkdir(parents=True, exist_ok=True); total=generados=0; errores=[]
+    with db() as con:
+        cur=con.execute('INSERT INTO contratacion_flujo_lotes(plantilla_id,proceso,nombre_lote,total,generados,fecha_carga,fecha_vencimiento,creado_por) VALUES(?,?,?,?,?,?,?,?)',(pid,pl['proceso'],excel_path.name,0,0,now_txt(),fecha_venc,session.get('admin_user','admin'))); lote_id=cur.lastrowid
+        for idx,row in enumerate(ws.iter_rows(min_row=2,values_only=True),start=2):
+            if not any(row): continue
+            total+=1; data={headers[i]: row[i] if i < len(row) else '' for i in range(len(headers))}; dni=normalizar_dni(data.get('DNI')); trab=con.execute('SELECT * FROM trabajadores WHERE dni=?',(dni,)).fetchone() if dni else None; valores=datos_trabajador_para_campos_pro(data,trab); faltan=[c for c in oblig if not clean(valores.get(c))]
+            if not dni: faltan.append('DNI')
+            if faltan: errores.append(f'Fila {idx}: faltan {", ".join(faltan[:6])}'); continue
+            try:
+                destino=outdir/(f"{dni}_{secure_filename(pl['nombre'] or 'documento')}.docx"); reemplazar_campos_docx_pro(pl['ruta_archivo'],destino,valores); token=crear_token_firma()
+                con.execute('INSERT INTO contratacion_flujo_docs(lote_id,plantilla_id,dni,trabajador,empresa,regimen,tipo_trabajador,tipo_documento,proceso,correo,celular,estado_firma,fecha_generado,fecha_vencimiento,token_firma,archivo_word,observacion) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(lote_id,pid,dni,valores.get('Nombres y apellidos') or valores.get('NombreCompletoTrabajador'),valores.get('Empresa'),valores.get('Regimen'),valores.get('TipoTrabajador'),pl['tipo_documento'],pl['proceso'],valores.get('Correo'),valores.get('Celular'),'GENERADO',now_txt(),fecha_venc,token,str(destino),'')); generados+=1
+            except Exception as e: errores.append(f'Fila {idx}: {e}')
+        con.execute('UPDATE contratacion_flujo_lotes SET total=?,generados=? WHERE id=?',(total,generados,lote_id)); con.commit()
+    auditoria_contratacion_pro('lote',lote_id,'GENERA_MASIVO',f'Total {total}, generados {generados}, errores {len(errores)}')
+    flash(f'Generación terminada. Total: {total}. Generados: {generados}. Observados: {len(errores)}.','ok' if generados else 'error')
+    if errores[:5]: flash('Observaciones: '+' | '.join(errores[:5]),'error')
+    return redirect('/admin/contratacion/pro?sec=generacion')
+
+@app.route('/admin/contratacion/pro/lote/<int:lote_id>/enviar')
+@app.route('/admin/contratacion/pro/lote/<int:lote_id>/reenviar')
+@admin_required
+def contratacion_pro_enviar_lote(lote_id):
+    asegurar_tablas_contratacion_flujo_pro()
+    with db() as con:
+        rows=con.execute("SELECT * FROM contratacion_flujo_docs WHERE lote_id=? AND UPPER(estado_firma) IN ('GENERADO','ENVIADO','PENDIENTE')",(lote_id,)).fetchall()
+        for r in rows: con.execute("UPDATE contratacion_flujo_docs SET estado_firma='ENVIADO', fecha_envio=COALESCE(NULLIF(fecha_envio,''),?) WHERE id=?",(now_txt(),r['id']))
+        con.execute("UPDATE contratacion_flujo_lotes SET enviados=(SELECT COUNT(*) FROM contratacion_flujo_docs WHERE lote_id=? AND UPPER(estado_firma) IN ('ENVIADO','FIRMADO')) WHERE id=?",(lote_id,lote_id)); con.commit()
+    auditoria_contratacion_pro('lote',lote_id,'ENVIO_MASIVO',f'{len(rows)} documentos enviados/preparados'); flash(f'Documentos enviados/preparados para firma: {len(rows)}.','ok'); return redirect('/admin/contratacion/pro?sec=firmas')
+
+@app.route('/admin/contratacion/pro/doc/<int:doc_id>/word')
+@admin_required
+def contratacion_pro_doc_word(doc_id):
+    with db() as con: d=con.execute('SELECT * FROM contratacion_flujo_docs WHERE id=?',(doc_id,)).fetchone()
+    if not d or not d['archivo_word'] or not Path(d['archivo_word']).exists(): abort(404)
+    return send_file(d['archivo_word'],as_attachment=True,download_name=Path(d['archivo_word']).name)
+
+@app.route('/admin/contratacion/pro/plantilla/<int:pid>/preview')
+@admin_required
+def contratacion_pro_preview(pid):
+    with db() as con:
+        pl=con.execute('SELECT * FROM contratacion_flujo_plantillas WHERE id=?',(pid,)).fetchone(); campos=con.execute('SELECT * FROM contratacion_flujo_campos WHERE plantilla_id=?',(pid,)).fetchall()
+    if not pl: abort(404)
+    rows=''.join([f"<tr><td>«{html.escape(c['campo'])}»</td><td>{html.escape(c['tipo_dato'] or '')}</td><td>{html.escape(c['fuente_dato'] or '')}</td><td>{html.escape(c['obligatorio'] or '')}</td></tr>" for c in campos])
+    content=f"<style>{CSS_CONTRATACION_PRO}</style><div class='pro-hero'><div><h1>Vista previa de plantilla</h1><p>{html.escape(pl['nombre'] or '')}</p></div><a class='btn' href='/admin/contratacion/pro?sec=plantillas'>Volver</a></div><div class='pro-card'><h2>Campos detectados</h2><div class='table-wrap'><table class='pro-table'><tr><th>Campo</th><th>Tipo</th><th>Fuente</th><th>Obligatorio</th></tr>{rows}</table></div></div>"
+    return render_page(content,active='Gestion Contratacion')
+
+@app.route('/admin/contratacion/pro/exportar_seguimiento')
+@admin_required
+def contratacion_pro_exportar_seguimiento():
+    asegurar_tablas_contratacion_flujo_pro(); path=EXCEL_LOCAL_DIR/(f'SEGUIMIENTO_FIRMAS_CONTRATACION_PRO_{now_file()}.xlsx'); wb=Workbook(); ws=wb.active; ws.title='Seguimiento'; headers=['DNI','TRABAJADOR','EMPRESA','REGIMEN','TIPO TRABAJADOR','DOCUMENTO','PROCESO','ESTADO FIRMA','FECHA GENERADO','FECHA ENVIO','FECHA VENCIMIENTO','FECHA FIRMA','CORREO','CELULAR','OBSERVACION']; ws.append(headers)
+    with db() as con: rows=con.execute('SELECT * FROM contratacion_flujo_docs ORDER BY id DESC').fetchall()
+    for r in rows: ws.append([r['dni'],r['trabajador'],r['empresa'],r['regimen'],r['tipo_trabajador'],r['tipo_documento'],r['proceso'],r['estado_firma'],r['fecha_generado'],r['fecha_envio'],r['fecha_vencimiento'],r['fecha_firma'],r['correo'],r['celular'],r['observacion']])
+    for c in ws[1]: c.font=Font(bold=True,color='FFFFFF'); c.fill=PatternFill('solid',fgColor='1F2937')
+    wb.save(path); return send_file(path,as_attachment=True,download_name=path.name)
+
+@app.route('/contratacion/pro/firma/<token>', methods=['GET','POST'])
+def contratacion_pro_firma_publica(token):
+    asegurar_tablas_contratacion_flujo_pro()
+    with db() as con: d=con.execute('SELECT * FROM contratacion_flujo_docs WHERE token_firma=?',(token,)).fetchone()
+    if not d: abort(404)
+    if request.method=='POST':
+        accion=clean(request.form.get('accion')) or 'FIRMADO'; estado='FIRMADO' if accion=='FIRMADO' else ('RECHAZADO' if accion=='RECHAZADO' else 'OBSERVADO'); obs=clean(request.form.get('observacion'))
+        with db() as con:
+            con.execute('UPDATE contratacion_flujo_docs SET estado_firma=?,fecha_firma=?,observacion=?,ip_firma=?,user_agent_firma=? WHERE id=?',(estado,now_txt(),obs,request.remote_addr,request.headers.get('User-Agent','')[:250],d['id']))
+            con.execute("UPDATE contratacion_flujo_lotes SET firmados=(SELECT COUNT(*) FROM contratacion_flujo_docs WHERE lote_id=? AND UPPER(estado_firma)='FIRMADO'), rechazados=(SELECT COUNT(*) FROM contratacion_flujo_docs WHERE lote_id=? AND UPPER(estado_firma)='RECHAZADO'), observados=(SELECT COUNT(*) FROM contratacion_flujo_docs WHERE lote_id=? AND UPPER(estado_firma)='OBSERVADO') WHERE id=?",(d['lote_id'],d['lote_id'],d['lote_id'],d['lote_id'])); con.commit()
+        auditoria_contratacion_pro('documento',d['id'],'FIRMA_TRABAJADOR',estado); return "<div style='font-family:Arial;padding:30px'><h2>Documento actualizado correctamente</h2><p>Estado: <b>%s</b></p></div>" % estado
+    download=f"<a class='btn' href='/contratacion/pro/firma/{token}/word'>Ver / descargar documento</a>" if d['archivo_word'] else ''
+    return f"""<style>{CSS_CONTRATACION_PRO}</style><div class='signature-box'><h1>Firma digital de documento</h1><p><b>Trabajador:</b> {html.escape(d['trabajador'] or '')}</p><p><b>DNI:</b> {html.escape(d['dni'] or '')}</p><p><b>Documento:</b> {html.escape(d['tipo_documento'] or '')}</p><p><b>Estado:</b> {html.escape(d['estado_firma'] or '')}</p><div class='actions'>{download}</div><form method='post' style='margin-top:18px'><label>Observación opcional<textarea name='observacion' style='width:100%;min-height:90px;border:1px solid #cbd8e6;border-radius:12px;padding:10px'></textarea></label><div class='actions' style='margin-top:12px'><button class='btn-green' name='accion' value='FIRMADO'>Firmar digitalmente</button><button class='btn' name='accion' value='OBSERVADO'>Observar</button><button class='btn' name='accion' value='RECHAZADO'>Rechazar</button></div></form><p class='muted'>Se registrará fecha, hora, IP y navegador como auditoría de firma.</p></div>"""
+
+@app.route('/contratacion/pro/firma/<token>/word')
+def contratacion_pro_firma_word(token):
+    with db() as con: d=con.execute('SELECT * FROM contratacion_flujo_docs WHERE token_firma=?',(token,)).fetchone()
+    if not d or not d['archivo_word'] or not Path(d['archivo_word']).exists(): abort(404)
+    return send_file(d['archivo_word'],as_attachment=False,download_name=Path(d['archivo_word']).name)
+
+try:
+    asegurar_tablas_contratacion_flujo_pro()
+except Exception as e:
+    print('No se pudo inicializar Contratación PRO:', e)
+try:
+    FINAL_UI_PATCH_CSS += '\n.pro-access-fixed{position:fixed;right:18px;bottom:18px;z-index:9999;background:#10b981!important;color:#fff!important;border-radius:999px;padding:12px 18px;font-weight:850;text-decoration:none;box-shadow:0 14px 34px rgba(16,185,129,.35)}\n'
+    FINAL_UI_PATCH_JS += """<script id='contratacion-pro-access'>(function(){document.addEventListener('DOMContentLoaded',function(){if(location.pathname.indexOf('/admin/contratacion')===0 && location.pathname.indexOf('/admin/contratacion/pro')!==0 && !document.querySelector('.pro-access-fixed')){var a=document.createElement('a');a.href='/admin/contratacion/pro';a.className='pro-access-fixed';a.textContent='Contratación PRO';document.body.appendChild(a);}});})();</script>"""
+except Exception:
+    pass
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
     host = os.getenv('HOST', '0.0.0.0')
