@@ -1,0 +1,1 @@
+Aplicado: fechas por defecto hoy, validación de obligatorios, escaneo DNI/código de barras, selección de ticket en nuevos/reingresantes, UI suave documentaria/datos maestros, capacitación separada admin/trabajador y corrección visual de eliminar/estado.
