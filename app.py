@@ -690,6 +690,18 @@ def init_db():
             valor TEXT
         )''')
         con.execute('''
+        CREATE TABLE IF NOT EXISTS base_central_sync_config(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            destino TEXT DEFAULT 'SQL SERVER / NISIRA',
+            estado TEXT DEFAULT 'PENDIENTE',
+            servidor TEXT,
+            base_datos TEXT,
+            endpoint TEXT,
+            observacion TEXT,
+            fecha_registro TEXT,
+            registrado_por TEXT
+        )''')
+        con.execute('''
         CREATE TABLE IF NOT EXISTS login_intentos(
             dni TEXT PRIMARY KEY,
             intentos INTEGER DEFAULT 0,
@@ -3286,9 +3298,14 @@ def sidebar(active):
             pass
         def cls(sec):
             return 'menu-item sub-mini active' if active_sub == sec else 'menu-item sub-mini'
+        renovacion_secs = {'renovacion_dashboard','renovacion','plantillas_renovacion','documentaria_renovacion','firma_renovacion'}
+        con_group_cls = 'menu-group force-open' + ('' if active_sub in renovacion_secs else ' active-main')
+        ren_group_cls = 'menu-group force-open' + (' active-main' if active_sub in renovacion_secs else '')
+        con_title_cls = 'menu-title active' if active_sub not in renovacion_secs else 'menu-title'
+        ren_title_cls = 'menu-title active' if active_sub in renovacion_secs else 'menu-title'
         admin = f"""
-        <div id='grp_contratacion' data-group='contratacion' class='menu-group force-open'>
-          <button type='button' class='menu-title active' onclick="toggleGroup('grp_contratacion')"><i class='bi bi-clipboard-data'></i><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
+        <div id='grp_contratacion' data-group='contratacion' class='{con_group_cls}'>
+          <button type='button' class='{con_title_cls}' onclick="toggleGroup('grp_contratacion')"><i class='bi bi-clipboard-data'></i><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
           <div class='submenu'>
             <a class='{cls('dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=dashboard'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard</span></a>
             <a class='{cls('requerimientos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=requerimientos'><i class='bi bi-ticket-perforated'></i><span class='label'>Requerimiento</span></a>
@@ -3297,17 +3314,16 @@ def sidebar(active):
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
             <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
-            <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-diagram-3'></i><span class='label'>Integración NISIRA</span></a>
-            <div id='grp_documentaria' data-group='documentaria' class='menu-group nested force-open'>
-              <button type='button' class='menu-title' onclick="toggleGroup('grp_documentaria')"><i class='bi bi-folder2-open'></i><span class='label'>Gestión documentaria</span><span class='chev'>∨</span></button>
-              <div class='submenu'>
-                <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Datos Postulantes</span></a>
-                <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
-              </div>
-            </div>
+            <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Doc. Postulantes</span></a>
+            <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
+            <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
+            <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
+            <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
+            <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Centro de Descargas</span></a>
+            <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-database-check'></i><span class='label'>Base Central / Integración</span></a>
             <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><i class='bi bi-signpost-split'></i><span class='label'>Flujos de aprobación</span></a>
             <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
-            <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><i class='bi bi-bar-chart-line'></i><span class='label'>Gestión documentaria / Reportes</span></a>
+            <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><i class='bi bi-bar-chart-line'></i><span class='label'>Reportes</span></a>
             <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
               <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
@@ -3319,19 +3335,19 @@ def sidebar(active):
                 <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><i class='bi bi-arrow-repeat'></i><span class='label'>Actualizar Trabajador</span></a>
               </div>
             </div>
-            <div id='grp_con_documentaria' data-group='con_documentaria' class='menu-group nested force-open'>
-              <button type='button' class='menu-title' onclick="toggleGroup('grp_con_documentaria')"><i class='bi bi-folder2-open'></i><span class='label'>Gestión Documentaria</span><span class='chev'>∨</span></button>
-              <div class='submenu'>
-                <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><i class='bi bi-file-earmark-text'></i><span class='label'>Renovación Contrato</span></a>
-                <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
-                <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
-                <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantilla Documentos</span></a>
-                <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
-                <a class='{cls('nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nisira'><i class='bi bi-link-45deg'></i><span class='label'>Contratación NISIRA</span></a>
-                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Descargas</span></a>
-              </div>
-            </div>
             <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><i class='bi bi-megaphone'></i><span class='label'>Anuncios</span></a>
+          </div>
+        </div>
+        <div id='grp_renovacion_main' data-group='renovacion_main' class='{ren_group_cls}'>
+          <button type='button' class='{ren_title_cls}' onclick="toggleGroup('grp_renovacion_main')"><i class='bi bi-arrow-repeat'></i><span class='label'>Gestión Renovación</span><span class='chev'>∨</span></button>
+          <div class='submenu'>
+            <a class='{cls('renovacion_dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion_dashboard'><i class='bi bi-speedometer'></i><span class='label'>Dashboard Renovación</span></a>
+            <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><i class='bi bi-file-earmark-text'></i><span class='label'>Renovación Masiva</span></a>
+            <a class='{cls('plantillas_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas_renovacion'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantillas Renovación</span></a>
+            <a class='{cls('documentaria_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria_renovacion'><i class='bi bi-folder2-open'></i><span class='label'>Documentos Renovación</span></a>
+            <a class='{cls('firma_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma_renovacion'><i class='bi bi-pen'></i><span class='label'>Firma Renovación</span></a>
+            <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
+            <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Descargas Renovación</span></a>
           </div>
         </div>"""
         return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div></nav>"""
@@ -6266,6 +6282,13 @@ def admin_contratacion():
             set_config('nisira_modo', clean(request.form.get('modo')) or 'PRUEBA')
             flash('Configuración NISIRA guardada. Queda lista para conectar el API real.', 'ok')
             return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
+        if accion == 'guardar_base_central_config':
+            with db() as con:
+                con.execute('INSERT INTO base_central_sync_config(destino,estado,servidor,base_datos,endpoint,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?)', (
+                    clean(request.form.get('destino')) or 'SQL SERVER / NISIRA', clean(request.form.get('estado')) or 'PENDIENTE', clean(request.form.get('servidor')), clean(request.form.get('base_datos')), clean(request.form.get('endpoint')), clean(request.form.get('observacion')), now_txt(), session.get('admin_user','admin')))
+                con.commit()
+            flash('Configuración de Base Central guardada. Queda preparada para SQL Server/API en el futuro.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
         if accion == 'generar_lote_nisira':
             empresa = clean(request.form.get('empresa')) or 'AQUANQA'
             sede = clean(request.form.get('sede'))
@@ -7069,14 +7092,43 @@ html,body{overflow-x:hidden!important;}
         <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar DNI, trabajador, prenda o estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_indumentaria' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_indumentaria' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Eliminar</th><th>Entrega</th></tr>{ind_rows}</table></div>
         """)
     elif sec=='integracion_nisira':
-        lote_rows=''.join([f"<tr><td><b>{h(r['lote_codigo'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['total'])}</td><td>{h(r['estado'])}</td><td>{h(r['endpoint'])}</td><td>{h(r['fecha_registro'])}</td></tr>" for r in lotes_nisira]) or "<tr><td colspan='9'>Sin lotes generados.</td></tr>"
+        with db() as con_bc:
+            total_trab = con_bc.execute('SELECT COUNT(*) FROM trabajadores').fetchone()[0]
+            total_ingresos = con_bc.execute('SELECT COUNT(*) FROM contratacion_ingresos').fetchone()[0]
+            total_req_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_requerimientos').fetchone()[0]
+            total_docs_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_docs').fetchone()[0]
+            total_firmas_bc = con_bc.execute('SELECT COUNT(*) FROM firma_solicitudes').fetchone()[0]
+            total_med_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_medica').fetchone()[0]
+            total_ind_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_indumentaria').fetchone()[0]
+            total_lotes_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_nisira_lotes').fetchone()[0]
+            ultimos_trab = con_bc.execute('SELECT dni, trabajador, empresa, requerimiento, cargo, area, estado, estado_medico, estado_documentos, estado_indumentaria, estado_nisira, fecha_registro FROM contratacion_ingresos ORDER BY id DESC LIMIT 80').fetchall()
+            ultimos_req = con_bc.execute('SELECT ticket, empresa, area, cargo, actividad, cantidad, estado, fecha_ingreso, fecha_registro FROM contratacion_requerimientos ORDER BY id DESC LIMIT 40').fetchall()
+            ultimos_docs = con_bc.execute('SELECT dni, trabajador, empresa, etapa, tipo_doc, estado, archivo_nombre, fecha_registro FROM contratacion_docs ORDER BY id DESC LIMIT 40').fetchall()
+            sync_cfg = con_bc.execute('SELECT * FROM base_central_sync_config ORDER BY id DESC LIMIT 10').fetchall()
+            lotes_nisira_bc = con_bc.execute('SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC LIMIT 50').fetchall()
+        def td(v):
+            return h(v if v is not None else '')
+        rows_trab = ''.join([f"<tr><td>{td(r['dni'])}</td><td><b>{td(r['trabajador'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['requerimiento'])}</td><td>{td(r['cargo'])}</td><td>{td(r['area'])}</td><td>{td(r['estado'])}</td><td>{td(r['estado_medico'])}</td><td>{td(r['estado_documentos'])}</td><td>{td(r['estado_indumentaria'])}</td><td>{td(r['estado_nisira'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_trab]) or "<tr><td colspan='12'>Sin registros en postulantes todavía.</td></tr>"
+        rows_req = ''.join([f"<tr><td><b>{td(r['ticket'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['area'])}</td><td>{td(r['cargo'])}</td><td>{td(r['actividad'])}</td><td>{td(r['cantidad'])}</td><td>{td(r['estado'])}</td><td>{td(r['fecha_ingreso'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_req]) or "<tr><td colspan='9'>Sin requerimientos.</td></tr>"
+        rows_docs = ''.join([f"<tr><td>{td(r['dni'])}</td><td><b>{td(r['trabajador'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['etapa'])}</td><td>{td(r['tipo_doc'])}</td><td>{td(r['estado'])}</td><td>{td(r['archivo_nombre'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_docs]) or "<tr><td colspan='8'>Sin documentos generados.</td></tr>"
+        rows_cfg = ''.join([f"<tr><td>{td(r['destino'])}</td><td>{td(r['estado'])}</td><td>{td(r['servidor'])}</td><td>{td(r['base_datos'])}</td><td>{td(r['endpoint'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in sync_cfg]) or "<tr><td colspan='6'>Sin configuración externa todavía.</td></tr>"
+        lote_rows=''.join([f"<tr><td><b>{td(r['lote_codigo'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['sede'])}</td><td>{td(r['requerimiento'])}</td><td>{td(r['actividad'])}</td><td>{td(r['total'])}</td><td>{td(r['estado'])}</td><td>{td(r['endpoint'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in lotes_nisira_bc]) or "<tr><td colspan='9'>Sin lotes generados.</td></tr>"
         base_url=h(get_config('nisira_base_url','')); api_ref=h(get_config('nisira_api_key_ref','')); endpoint=h(get_config('nisira_endpoint_trabajadores','/api/trabajadores')); modo=get_config('nisira_modo','PRUEBA')
-        content=wrap(f"""
-        <h2 class='c-title'>Integración RH NISIRA</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Conector NISIRA</h1><p class='muted2'>Reemplaza la migración SAP/NEXT por un espacio preparado para conectar el API de NISIRA, principalmente la base de trabajadores.</p></div><span class='status-pill ok'>Modo {h(modo)}</span></div>
-        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_nisira_config'><b>Base URL NISIRA</b><input name='base_url' value='{base_url}' placeholder='https://servidor-nisira/api'><b>Endpoint trabajadores</b><input name='endpoint_trabajadores' value='{endpoint}' placeholder='/api/trabajadores'><b>Token/API Key Ref.</b><input name='api_key_ref' value='{api_ref}' placeholder='Variable de entorno o referencia segura'><b>Modo</b><select name='modo'><option {'selected' if modo=='PRUEBA' else ''}>PRUEBA</option><option {'selected' if modo=='PRODUCCION' else ''}>PRODUCCION</option></select><span></span><button class='c-btn'>💾 Guardar configuración</button></form>
-        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='generar_lote_nisira'><b>Empresa</b><input name='empresa' value='AQUANQA'><b>Sede</b><input name='sede' placeholder='Blueberries / Arato / Olmos'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Actividad</b><input name='actividad' placeholder='OB_PODA'><span></span><button class='c-btn'>🔗 Generar lote para NISIRA</button></form>
-        <div class='c-card' style='padding:18px'><h2>Mapeo inicial sugerido</h2><p class='muted2'>Se adjunta la plantilla oficial NISIRA. Mapeo inicial: Nro. Documento ↔ DNI, Apel. Paterno/Materno/Nombres ↔ trabajador, Sexo, Teléfono/Celular, Correo, Fec.Nacimiento, Banco, CTS, AFP/ONP, Dirección/Ubigeo, Cod.Planilla, Cod.Cargo, Cod.Tipo Trab., Cod.Sucursal, Grupo Trabajo, Fec.Ingreso y C.Costo Origen.</p><a class='c-btn gray' href='/admin/contratacion/plantilla_nisira'>⬇ Descargar plantilla NISIRA</a></div><div class='c-card table-wrap'><table class='c-table'><tr><th>Lote</th><th>Empresa</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Total</th><th>Estado</th><th>Endpoint</th><th>Fecha</th></tr>{lote_rows}</table></div>
-        """)
+        content=wrap(f'''
+        <h2 class='c-title'>Base Central / Integración</h2>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Base Central de Contratación</h1><p class='muted2'>Almacén interno temporal de todo el proceso: requerimientos, postulantes, ficha, evaluación médica, documentos, firma, indumentaria, fotocheck y lotes. Hoy trabaja con SQLite/archivos internos; mañana será el puente hacia SQL Server o API NISIRA.</p></div><span class='status-pill ok'>Modo interno + futuro SQL/API</span></div>
+        <div class='dash-kpis'><div class='dash-card'><small>Trabajadores base</small><b>{total_trab}</b></div><div class='dash-card'><small>Postulantes/ingresos</small><b>{total_ingresos}</b></div><div class='dash-card'><small>Requerimientos</small><b>{total_req_bc}</b></div><div class='dash-card'><small>Documentos</small><b>{total_docs_bc}</b></div><div class='dash-card'><small>Firmas</small><b>{total_firmas_bc}</b></div><div class='dash-card'><small>Médicos</small><b>{total_med_bc}</b></div><div class='dash-card'><small>Indumentaria</small><b>{total_ind_bc}</b></div><div class='dash-card'><small>Lotes integración</small><b>{total_lotes_bc}</b></div></div>
+        <div class='c-card' style='padding:18px;margin-top:16px'><h2>Acciones rápidas</h2><p class='muted2'>Descarga respaldos internos para auditoría o migración futura.</p><div class='download-grid'><a class='download-card' href='/admin/contratacion/base-central/export/general'><i class='bi bi-file-earmark-spreadsheet'></i><b>Excel general</b><small>Consolidado completo</small></a><a class='download-card' href='/admin/contratacion/base-central/export/zip'><i class='bi bi-file-zip'></i><b>Respaldo ZIP</b><small>Excel + archivos clave</small></a><a class='download-card' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><b>Centro de Descargas</b><small>Plantillas y reportes</small></a><a class='download-card' href='/admin/contratacion/plantilla_nisira'><i class='bi bi-link-45deg'></i><b>Plantilla NISIRA</b><small>Mapeo futuro</small></a></div></div>
+        <form method='post' class='c-card c-form' style='padding:20px;margin-top:16px'><input type='hidden' name='accion' value='guardar_base_central_config'><b>Destino futuro</b><select name='destino'><option>SQL SERVER</option><option>NISIRA API</option><option>SQL SERVER + NISIRA API</option><option>OTRO ERP</option></select><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>EN DISEÑO</option><option>EN PRUEBA</option><option>LISTO PARA CONEXIÓN</option></select><b>Servidor SQL / host</b><input name='servidor' placeholder='Ej. SRV-SQL-RRHH / 10.0.0.5'><b>Base de datos</b><input name='base_datos' placeholder='Ej. RRHH_Contratacion'><b>Endpoint API</b><input name='endpoint' placeholder='Ej. https://servidor-nisira/api/trabajadores'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle técnico, responsable TI, credenciales pendientes, etc.'></textarea><span></span><button class='c-btn'>💾 Guardar preparación de integración</button></form>
+        <div class='c-card table-wrap' style='margin-top:16px'><h2>Últimos postulantes almacenados</h2><input oninput="filtrarTabla(this,'tabla_base_central')" placeholder='Buscar DNI, trabajador, requerimiento, estado...'><table id='tabla_base_central' class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Requerimiento</th><th>Cargo</th><th>Área</th><th>General</th><th>Médico</th><th>Docs</th><th>Indum.</th><th>Integración</th><th>Fecha</th></tr>{rows_trab}</table></div>
+        <div class='c-card table-wrap' style='margin-top:16px'><h2>Requerimientos consolidados</h2><table class='c-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Actividad</th><th>Cantidad</th><th>Estado</th><th>Ingreso</th><th>Registro</th></tr>{rows_req}</table></div>
+        <div class='c-card table-wrap' style='margin-top:16px'><h2>Documentos generados / almacenados</h2><table class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Etapa</th><th>Documento</th><th>Estado</th><th>Archivo</th><th>Fecha</th></tr>{rows_docs}</table></div>
+        <div class='c-card table-wrap' style='margin-top:16px'><h2>Preparación SQL Server / API</h2><table class='c-table'><tr><th>Destino</th><th>Estado</th><th>Servidor</th><th>Base datos</th><th>Endpoint</th><th>Fecha</th></tr>{rows_cfg}</table></div>
+        <div class='c-card' style='padding:18px;margin-top:16px'><h2>Configuración NISIRA futura</h2><p class='muted2'>Se mantiene en el mismo módulo para no duplicar pantallas. Cuando TI entregue API/credenciales, este será el punto de conexión.</p></div>
+        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_nisira_config'><b>Base URL NISIRA</b><input name='base_url' value='{base_url}' placeholder='https://servidor-nisira/api'><b>Endpoint trabajadores</b><input name='endpoint_trabajadores' value='{endpoint}' placeholder='/api/trabajadores'><b>Token/API Key Ref.</b><input name='api_key_ref' value='{api_ref}' placeholder='Variable de entorno o referencia segura'><b>Modo</b><select name='modo'><option {'selected' if modo=='PRUEBA' else ''}>PRUEBA</option><option {'selected' if modo=='PRODUCCION' else ''}>PRODUCCION</option></select><span></span><button class='c-btn'>💾 Guardar configuración NISIRA</button></form>
+        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='generar_lote_nisira'><b>Empresa</b><input name='empresa' value='AQUANQA'><b>Sede</b><input name='sede' placeholder='General / fundo / área'><b>Requerimiento</b><input name='requerimiento' placeholder='Ticket o proceso'><b>Actividad</b><input name='actividad' placeholder='OB_PODA / COSECHA'><span></span><button class='c-btn'>🔗 Generar lote interno para integración</button></form>
+        <div class='c-card table-wrap'><h2>Lotes internos para integración futura</h2><table class='c-table'><tr><th>Lote</th><th>Empresa</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Total</th><th>Estado</th><th>Endpoint</th><th>Fecha</th></tr>{lote_rows}</table></div>
+        ''')
     elif sec in ['datos_completos','fotocheck']:
         if sec == 'datos_completos':
             tit = 'Datos Postulantes'
@@ -7371,6 +7423,65 @@ html,body{overflow-x:hidden!important;}
         """)
     elif sec=='anuncios':
         content=wrap("<h2 class='c-title'>Anuncios de la empresa</h2><div class='c-bar'><div class='c-form'><b>Fecha Registro</b><span><input placeholder='Desde'> - <input placeholder='Hasta'></span><b>Nombre</b><input></div><a class='c-btn'>+ Crear Anuncio</a></div><button class='c-btn'>⌕ Buscar</button> <button class='c-btn gray'>Limpiar</button><br><br><form class='anuncio-upload' method='post' enctype='multipart/form-data'><input type='hidden' name='accion' value='anuncio'><h2>Subir anuncio multimedia</h2><p class='muted2'>Acepta video MP4, PDF, imagen o documento para comunicar a trabajadores.</p><input name='titulo' placeholder='Título del anuncio'><br><br><input type='file' name='archivo' accept='.mp4,.pdf,.png,.jpg,.jpeg,.doc,.docx' required><br><br><button class='c-btn'>Subir anuncio</button><div class='video-box'><b>Vista previa MP4</b><video controls></video></div></form>")
+    elif sec=='renovacion_dashboard':
+        # MÓDULO PRINCIPAL: GESTIÓN RENOVACIÓN
+        # Trabaja sobre trabajadores activos y contratos por vencer. Comparte ficha, archivos,
+        # plantillas y firma con Gestión Contratación, pero mantiene tablero y flujo propio.
+        total_activos = len([t for t in trabajadores if int((t['activo'] if 'activo' in t.keys() else 1) or 0)==1])
+        con_fecha_fin = len([t for t in trabajadores if clean(t['fecha_fin_contrato'] if 'fecha_fin_contrato' in t.keys() else '')])
+        sin_fecha_fin = max(total_activos - con_fecha_fin, 0)
+        docs_ren = 0
+        firm_ren = 0
+        arch_ren = 0
+        try:
+            with db() as con:
+                docs_ren = con.execute("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%'").fetchone()[0]
+                firm_ren = con.execute("SELECT COUNT(*) FROM firma_solicitudes WHERE UPPER(COALESCE(estado,'')) LIKE '%FIRM%'").fetchone()[0]
+                arch_ren = con.execute("SELECT COUNT(*) FROM documentos WHERE UPPER(COALESCE(tipo,'')) LIKE '%RENOV%' OR UPPER(COALESCE(detalle,'')) LIKE '%RENOV%'").fetchone()[0]
+        except Exception:
+            pass
+        pendientes = sin_fecha_fin + max(docs_ren - firm_ren, 0)
+        ult_ren_rows = ''.join([f"<tr><td><input type='checkbox'></td><td><b>{h(t['dni'])}</b></td><td>{h(t['nombre'])}</td><td>{h(t['empresa'])}</td><td>{h(t['cargo'])}</td><td>{h(fecha_sin_hora(t['fecha_ingreso'] if 'fecha_ingreso' in t.keys() else ''))}</td><td>{h(fecha_sin_hora(t['fecha_fin_contrato'] if 'fecha_fin_contrato' in t.keys() else '')) or '<span class=\"status-pill bad\">Sin fecha fin</span>'}</td><td><span class='status-pill warn'>Pendiente evaluación</span></td></tr>" for t in trabajadores[:12]]) or "<tr><td colspan='8'>Sin trabajadores activos.</td></tr>"
+        content=wrap(f"""
+        <section class='dashboard-contratacion dashboard-renovacion-pro'>
+          <div class='dash-hero'>
+            <div><h1>Centro de Control - Gestión Renovación</h1><p class='muted2'>Módulo principal para contratos por vencer: selección masiva, generación de adendas/renovaciones, envío a firma, archivado y actualización de ficha.</p></div>
+            <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=renovacion'>Renovar contratos</a><a class='c-btn gray' href='/admin/contratacion?sec=plantillas_renovacion'>Plantillas renovación</a></div>
+          </div>
+          <div class='dash-kpis'>
+            <div class='dash-card'><small>Trabajadores activos</small><b>{total_activos}</b></div>
+            <div class='dash-card'><small>Con fecha fin contrato</small><b>{con_fecha_fin}</b></div>
+            <div class='dash-card'><small>Docs. renovación</small><b>{docs_ren}</b></div>
+            <div class='dash-card'><small>Pendientes críticos</small><b>{pendientes}</b></div>
+          </div>
+          <div class='dash-grid'>
+            <div class='dash-card'><h2>Flujo de renovación</h2><div class='quick-grid'><a>1. Detectar contratos por vencer</a><a>2. Seleccionar trabajadores</a><a>3. Definir nueva fecha fin</a><a>4. Generar adenda/renovación</a><a>5. Enviar a firma digital</a><a>6. Archivar en ficha</a></div></div>
+            <div class='dash-card'><h2>Bloqueos recomendados</h2><p class='muted2'>No enviar a firma si falta plantilla activa, fecha fin nueva, documento generado o previsualización validada.</p><a class='c-btn' href='/admin/contratacion?sec=firma_renovacion'>Revisar firma</a></div>
+          </div>
+          <div class='dash-card table-wrap'><h2>Trabajadores base para renovación</h2><table class='c-table'><tr><th></th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Cargo</th><th>Fecha ingreso</th><th>Fecha fin actual</th><th>Estado</th></tr>{ult_ren_rows}</table></div>
+        </section>
+        """)
+    elif sec=='plantillas_renovacion':
+        content=wrap("""
+        <h2 class='c-title'>Plantillas de Renovación</h2>
+        <div class='dash-hero'><div><h1>Plantillas para adendas y renovaciones</h1><p class='muted2'>Usa las mismas plantillas Word del sistema, pero configuradas con etapa <b>Renovación</b>. Deben detectar campos «...» y tener mapeo antes de activarse.</p></div><a class='c-btn' href='/admin/contratacion?sec=plantillas'>Ir a configuración documentaria</a></div>
+        <div class='dash-kpis'><div class='dash-card'><small>Campos obligatorios</small><b>Contrato origen</b></div><div class='dash-card'><small>Fecha nueva</small><b>Requerida</b></div><div class='dash-card'><small>Firma digital</small><b>Obligatoria</b></div></div>
+        <div class='c-card'><h2>Recomendación de configuración</h2><p class='muted2'>Crea plantillas con tipo documento: CONTRATO TRABAJADOR(RENOVACIÓN), ADENDA, CARGO ENTREGA RENOVACIÓN. Relaciónalas a trabajadores activos y bloquea documentos si faltan campos.</p></div>
+        """)
+    elif sec=='documentaria_renovacion':
+        content=wrap("""
+        <h2 class='c-title'>Documentos de Renovación</h2>
+        <div class='dash-hero'><div><h1>Expediente documental de renovación</h1><p class='muted2'>Aquí se deben revisar adendas, renovaciones, cargos y documentos generados para trabajadores activos. Todo se archiva en Ficha Trabajador y Base Central.</p></div><a class='c-btn' href='/admin/contratacion?sec=documentaria'>Ir a archivos trabajador</a></div>
+        <div class='dash-kpis'><div class='dash-card'><small>Etapa</small><b>Renovación</b></div><div class='dash-card'><small>Archivo final</small><b>PDF/Word</b></div><div class='dash-card'><small>Destino</small><b>Ficha + Base Central</b></div></div>
+        <div class='c-card'><h2>Control recomendado</h2><p class='muted2'>Filtrar por empresa, cargo, fecha fin de contrato, firmado, archivado y número de file. Al firmarse, el documento debe quedar como ARCHIVADO.</p></div>
+        """)
+    elif sec=='firma_renovacion':
+        content=wrap("""
+        <h2 class='c-title'>Firma Digital de Renovación</h2>
+        <div class='dash-hero'><div><h1>Firma de adendas y renovaciones</h1><p class='muted2'>Último paso del flujo de renovación. Solo debe habilitarse si existe documento generado, fecha fin nueva y previsualización validada.</p></div><a class='c-btn' href='/admin/contratacion?sec=firma'>Ir a bandeja de firma</a></div>
+        <div class='dash-kpis'><div class='dash-card'><small>Validación previa</small><b>Obligatoria</b></div><div class='dash-card'><small>Evidencia</small><b>Selfie/Firma</b></div><div class='dash-card'><small>Archivado</small><b>Automático</b></div></div>
+        <div class='c-card'><h2>Reglas del módulo</h2><p class='muted2'>No enviar si falta plantilla, trabajador activo, fecha fin nueva, documento generado o token de firma. Al completarse, actualizar Ficha Trabajador, Archivos Trabajador y Base Central.</p></div>
+        """)
     elif sec=='renovacion':
         content=wrap(f"<h2 class='c-title'>Renovación masiva de contratos</h2><div class='c-form'><b>Renovar por:</b><span>Meses <input type='checkbox' checked> Fecha Termino</span><b>Fecha Termino:</b><input placeholder='d/MM/yyyy'><b>Meses:</b><input type='number' value='0'></div><div class='toolbar'>🔎 Filtros &nbsp; ⚙ Acción ▾ &nbsp; ⬇ Descargar</div><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Modalidad</th><th>FI Planilla</th><th>Fecha Migración</th><th>FI Contrato</th><th>FF Contrato</th><th>Firmado</th><th>Archivado</th><th>Nro File</th></tr>{renov_rows}</table></div>")
     elif sec=='ficha':
@@ -8177,6 +8288,55 @@ def descargar_formato_maestros_empleador():
     wb.save(path)
     return send_file(path, as_attachment=True, download_name='FORMATO_DATOS_MAESTROS_EMPLEADOR.xlsx')
 
+
+
+@app.route('/admin/contratacion/base-central/export/general')
+@admin_required
+def base_central_export_general():
+    path = EXCEL_LOCAL_DIR / ('BASE_CENTRAL_CONTRATACION_' + now_file() + '.xlsx')
+    wb = Workbook()
+    with db() as con:
+        hojas = [('Requerimientos','SELECT * FROM contratacion_requerimientos ORDER BY id DESC'),('Postulantes','SELECT * FROM contratacion_ingresos ORDER BY id DESC'),('Trabajadores','SELECT * FROM trabajadores ORDER BY nombre'),('Evaluacion_Medica','SELECT * FROM contratacion_medica ORDER BY id DESC'),('Documentos','SELECT * FROM contratacion_docs ORDER BY id DESC'),('Firmas','SELECT * FROM firma_solicitudes ORDER BY id DESC'),('Indumentaria','SELECT * FROM contratacion_indumentaria ORDER BY id DESC'),('Lotes_Integracion','SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC')]
+        first=True
+        for titulo, sql in hojas:
+            ws=wb.active if first else wb.create_sheet(); first=False; ws.title=titulo[:31]
+            try:
+                rows=con.execute(sql).fetchall()
+                if rows:
+                    headers=list(rows[0].keys()); ws.append(headers)
+                    for r in rows: ws.append([fecha_sin_hora(r[h]) if 'fecha' in h.lower() else r[h] for h in headers])
+                else: ws.append(['Sin registros'])
+            except Exception as e: ws.append(['Error', str(e)])
+            for cell in ws[1]:
+                cell.font=Font(bold=True,color='FFFFFF'); cell.fill=PatternFill('solid',fgColor='0F766E'); cell.alignment=Alignment(horizontal='center')
+            ws.freeze_panes='A2'
+            for col in range(1, min(ws.max_column, 26)+1): ws.column_dimensions[chr(64+col)].width=24
+    wb.save(path)
+    return send_file(path, as_attachment=True, download_name='BASE_CENTRAL_CONTRATACION.xlsx')
+
+@app.route('/admin/contratacion/base-central/export/zip')
+@admin_required
+def base_central_export_zip():
+    excel_resp_path = EXCEL_LOCAL_DIR / ('BASE_CENTRAL_RESUMEN_' + now_file() + '.xlsx')
+    wb=Workbook(); ws=wb.active; ws.title='Resumen'
+    with db() as con:
+        resumen=[('Trabajadores',con.execute('SELECT COUNT(*) FROM trabajadores').fetchone()[0]),('Postulantes',con.execute('SELECT COUNT(*) FROM contratacion_ingresos').fetchone()[0]),('Requerimientos',con.execute('SELECT COUNT(*) FROM contratacion_requerimientos').fetchone()[0]),('Documentos',con.execute('SELECT COUNT(*) FROM contratacion_docs').fetchone()[0]),('Firmas',con.execute('SELECT COUNT(*) FROM firma_solicitudes').fetchone()[0])]
+    ws.append(['Módulo','Total'])
+    for a,b in resumen: ws.append([a,b])
+    for cell in ws[1]: cell.font=Font(bold=True,color='FFFFFF'); cell.fill=PatternFill('solid',fgColor='0F766E')
+    wb.save(excel_resp_path)
+    zip_path=EXCEL_LOCAL_DIR / ('RESPALDO_BASE_CENTRAL_' + now_file() + '.zip')
+    with zipfile.ZipFile(zip_path,'w',zipfile.ZIP_DEFLATED) as z:
+        z.write(excel_resp_path, arcname=excel_resp_path.name)
+        for f in EXCEL_LOCAL_DIR.glob('*.xlsx'):
+            try: z.write(f, arcname='excel_local/'+f.name)
+            except Exception: pass
+        count=0
+        for f in UPLOAD_DIR.rglob('*'):
+            if f.is_file() and count<300:
+                try: z.write(f, arcname='uploads/'+f.name); count+=1
+                except Exception: pass
+    return send_file(zip_path, as_attachment=True, download_name='RESPALDO_BASE_CENTRAL_CONTRATACION.zip')
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
     host = os.getenv('HOST', '0.0.0.0')
