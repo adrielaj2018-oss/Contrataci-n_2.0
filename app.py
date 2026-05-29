@@ -882,6 +882,49 @@ def init_db():
             existe = con.execute('SELECT id FROM contratacion_cargos WHERE codigo=? OR UPPER(nombre)=UPPER(?) LIMIT 1', (codigo, nombre)).fetchone()
             if not existe:
                 con.execute('''INSERT INTO contratacion_cargos(codigo,nombre,nombre_corto,resumen,funciones,activo) VALUES(?,?,?,?,?,1)''', (codigo, nombre, nombre_corto, resumen, funciones))
+
+        # PRO: Datos maestros del empleador. No incluye datos personales del trabajador
+        # como sistema pensionario o estado civil. Alimenta Requerimientos, Postulantes y contratos.
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_maestros_empleador(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT,
+            codigo TEXT,
+            nombre TEXT,
+            descripcion TEXT,
+            activo INTEGER DEFAULT 1,
+            fecha_registro TEXT,
+            registrado_por TEXT
+        )''')
+        try:
+            con.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_maestros_empleador_tipo_nombre ON contratacion_maestros_empleador(tipo, nombre)')
+        except Exception:
+            pass
+        base_maestros_emp = [
+            ('EMPRESA','AQUANQA I','AQUANQA I','Empresa empleadora'),
+            ('EMPRESA','AQUANQA II','AQUANQA II','Empresa empleadora'),
+            ('AREA','CAMPO','Campo','Área operativa'),
+            ('AREA','PACKING','Packing','Área operativa'),
+            ('AREA','RRHH','RR.HH.','Área administrativa'),
+            ('AREA','SST','SST','Seguridad y salud en el trabajo'),
+            ('ACTIVIDAD','OB_PODA','OB_PODA / COSECHA','Actividad agrícola'),
+            ('ACTIVIDAD','COSECHA','COSECHA','Actividad agrícola'),
+            ('REGIMEN_LABORAL','AGRARIO','AGRARIO','Régimen laboral'),
+            ('REGIMEN_LABORAL','GENERAL','GENERAL','Régimen laboral'),
+            ('TIPO_CONTRATO','INTERMITENTE','INTERMITENTE','Tipo de contrato'),
+            ('TIPO_CONTRATO','TEMPORAL','TEMPORAL','Tipo de contrato'),
+            ('MODALIDAD','CAMPAÑA','CAMPAÑA','Modalidad de contratación'),
+            ('MODALIDAD','PERMANENTE','PERMANENTE','Modalidad de contratación'),
+            ('MONEDA','PEN','Sol Peruano','Moneda fija'),
+            ('SIMBOLO_MONEDA','S/','S/','Símbolo moneda fijo'),
+            ('PERIODICIDAD_PAGO','MENSUAL','MENSUAL','Periodicidad de pago'),
+            ('TIPO_PAGO','DEPOSITO','DEPÓSITO EN CUENTA','Tipo de pago')
+        ]
+        for tipo_m, codigo_m, nombre_m, descripcion_m in base_maestros_emp:
+            existe_m = con.execute('SELECT id FROM contratacion_maestros_empleador WHERE tipo=? AND UPPER(nombre)=UPPER(?) LIMIT 1', (tipo_m, nombre_m)).fetchone()
+            if not existe_m:
+                con.execute('''INSERT INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo_m,codigo_m,nombre_m,descripcion_m,now_txt(),'SISTEMA'))
+
         con.execute('''
         CREATE TABLE IF NOT EXISTS contratacion_plantillas(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5391,6 +5434,70 @@ def admin_contratacion():
             except Exception as e:
                 flash('No se pudo eliminar el registro: '+str(e), 'error')
             return redirect(url_for('admin_contratacion', sec=destino))
+        if accion == 'guardar_maestro_empleador':
+            tipo = clean(request.form.get('tipo')).upper()
+            codigo = clean(request.form.get('codigo')).upper()
+            nombre = clean(request.form.get('nombre'))
+            descripcion = clean(request.form.get('descripcion'))
+            if tipo in ('SISTEMA_PENSIONARIO','ESTADO_CIVIL'):
+                flash('Este mantenedor es solo para datos del empleador. Sistema pensionario y estado civil pertenecen a datos personales del trabajador.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            if not tipo or not nombre:
+                flash('Tipo y nombre son obligatorios.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            with db() as con:
+                con.execute('''INSERT OR REPLACE INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo,codigo,nombre,descripcion,now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash('Dato maestro del empleador guardado correctamente.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'estado_maestro_empleador':
+            mid = int(request.form.get('maestro_id') or 0)
+            with db() as con:
+                r=con.execute('SELECT activo FROM contratacion_maestros_empleador WHERE id=?',(mid,)).fetchone()
+                if r:
+                    con.execute('UPDATE contratacion_maestros_empleador SET activo=? WHERE id=?', (0 if int(r['activo'] or 0)==1 else 1, mid))
+                    con.commit()
+            flash('Estado del dato maestro actualizado.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'eliminar_maestro_empleador':
+            mid = int(request.form.get('maestro_id') or 0)
+            with db() as con:
+                con.execute('DELETE FROM contratacion_maestros_empleador WHERE id=?',(mid,))
+                con.commit()
+            flash('Dato maestro eliminado.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'importar_maestros_empleador_excel':
+            f = request.files.get('archivo')
+            if not f or not f.filename:
+                flash('Selecciona el Excel de datos maestros del empleador.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            if Path(f.filename).suffix.lower() not in ('.xlsx','.xls'):
+                flash('Solo se permite Excel .xlsx o .xls.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            carpeta = UPLOAD_DIR/'contratacion'/'maestros_empleador'; carpeta.mkdir(parents=True, exist_ok=True)
+            path = carpeta/(now_file()+'_MAESTROS_EMPLEADOR_'+secure_filename(f.filename)); f.save(path)
+            ok=0; omitidos=0
+            try:
+                wb = load_workbook(path, data_only=True); ws = wb.active; idx = _headers_excel(ws)
+                with db() as con:
+                    for row in ws.iter_rows(min_row=2):
+                        tipo = clean(_celda(row, idx, 'TIPO','Tipo','Categoria','Categoría')).upper()
+                        codigo = clean(_celda(row, idx, 'CODIGO','Código','Codigo')).upper()
+                        nombre = clean(_celda(row, idx, 'NOMBRE','Nombre','DESCRIPCION','Descripción'))
+                        descripcion = clean(_celda(row, idx, 'DETALLE','Detalle','OBSERVACION','Observación','Descripcion','Descripción'))
+                        activo_raw = clean(_celda(row, idx, 'ACTIVO','Activo','ESTADO','Estado')).upper()
+                        activo = 0 if activo_raw in ('0','NO','INACTIVO','BAJA') else 1
+                        if tipo in ('SISTEMA_PENSIONARIO','ESTADO_CIVIL'):
+                            omitidos += 1; continue
+                        if not tipo or not nombre:
+                            omitidos += 1; continue
+                        con.execute('''INSERT OR REPLACE INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?)''', (tipo,codigo,nombre,descripcion,activo,now_txt(),session.get('admin_user','admin')))
+                        ok += 1
+                    con.commit()
+                flash(f'Carga masiva terminada. Registros importados: {ok}. Omitidos: {omitidos}.', 'ok')
+            except Exception as e:
+                flash('Error importando datos maestros: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
         if accion == 'eliminar_ingreso_admin':
             rid = int(request.form.get('ingreso_id') or 0)
             clave = clean(request.form.get('clave_admin'))
@@ -6160,6 +6267,7 @@ def admin_contratacion():
         observados=con.execute('SELECT * FROM trabajadores_observados ORDER BY id DESC LIMIT 500').fetchall()
         tipo_empleado=con.execute('SELECT * FROM contratacion_tipo_empleado ORDER BY descripcion LIMIT 1000').fetchall()
         cargos=con.execute('SELECT * FROM contratacion_cargos ORDER BY nombre LIMIT 2000').fetchall()
+        maestros_empleador=con.execute('SELECT * FROM contratacion_maestros_empleador ORDER BY tipo, nombre LIMIT 3000').fetchall()
         ingresos=con.execute('SELECT * FROM contratacion_ingresos ORDER BY id DESC LIMIT 500').fetchall()
         lotes_nisira=con.execute('SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC LIMIT 200').fetchall()
         controles_next=con.execute('SELECT * FROM contratacion_checklist_next ORDER BY id DESC LIMIT 300').fetchall()
@@ -6208,13 +6316,29 @@ def admin_contratacion():
     opt_trab=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['nombre'])}</option>" for r in trabajadores])
     opt_ingresos=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['trabajador'])} - {h(r['requerimiento'])}</option>" for r in trabajadores_proceso_mostrar])
     opt_req=''.join([f"<option value='{h(r['ticket'])}' {'selected' if ticket_sel==clean(r['ticket']) else ''}>{h(r['ticket'])} - {h(r['empresa'])} - {h(r['area'])} - {h(r['actividad'])}</option>" for r in requerimientos])
-    # Catálogos para autocompletar desde configuración/maestros y requerimientos existentes
-    _areas = sorted({clean(r['area']) for r in requerimientos if clean(r['area'])} | {clean(r['area']) for r in trabajadores if clean(r['area'])})
-    _cargos = sorted({clean(r['cargo']) for r in requerimientos if clean(r['cargo'])} | {clean(r['cargo']) for r in trabajadores if clean(r['cargo'])} | {clean(r['nombre']) for r in cargos if clean(r['nombre'])})
-    _actividades = sorted({clean(r['actividad']) for r in requerimientos if clean(r['actividad'])} | {clean(r['actividad']) for r in trabajadores_proceso if clean(r['actividad'])})
+    # Catálogos para autocompletar desde configuración/maestros del empleador y requerimientos existentes
+    def maestros_tipo(tipo):
+        return sorted({clean(r['nombre']) for r in maestros_empleador if clean(r['tipo']).upper()==tipo and int(r['activo'] or 0)==1 and clean(r['nombre'])})
+    _empresas = sorted(set(maestros_tipo('EMPRESA')) | {'AQUANQA I','AQUANQA II'})
+    _areas = sorted(set(maestros_tipo('AREA')) | {clean(r['area']) for r in requerimientos if clean(r['area'])} | {clean(r['area']) for r in trabajadores if clean(r['area'])})
+    _cargos = sorted(set(maestros_tipo('CARGO')) | {clean(r['cargo']) for r in requerimientos if clean(r['cargo'])} | {clean(r['cargo']) for r in trabajadores if clean(r['cargo'])} | {clean(r['nombre']) for r in cargos if clean(r['nombre'])})
+    _actividades = sorted(set(maestros_tipo('ACTIVIDAD')) | {clean(r['actividad']) for r in requerimientos if clean(r['actividad'])} | {clean(r['actividad']) for r in trabajadores_proceso if clean(r['actividad'])})
+    _regimenes = sorted(set(maestros_tipo('REGIMEN_LABORAL')) | {'AGRARIO','GENERAL'})
+    _tipos_contrato = sorted(set(maestros_tipo('TIPO_CONTRATO')) | {'INTERMITENTE','TEMPORAL','INDETERMINADO','RENOVACIÓN'})
+    _modalidades = sorted(set(maestros_tipo('MODALIDAD')) | {'CAMPAÑA','PERMANENTE','INTERMITENTE','PART TIME'})
+    _periodicidades = sorted(set(maestros_tipo('PERIODICIDAD_PAGO')) | {'MENSUAL','SEMANAL','QUINCENAL'})
+    _tipos_pago = sorted(set(maestros_tipo('TIPO_PAGO')) | {'DEPÓSITO EN CUENTA','EFECTIVO'})
+    _moneda_nombre = (maestros_tipo('MONEDA') or ['Sol Peruano'])[0]
+    _moneda_simbolo = (maestros_tipo('SIMBOLO_MONEDA') or ['S/'])[0]
+    opt_empresa_select=''.join([f"<option>{h(x)}</option>" for x in _empresas])
     opt_area_datalist=''.join([f"<option value='{h(x)}'></option>" for x in _areas])
     opt_cargo_datalist=''.join([f"<option value='{h(x)}'></option>" for x in _cargos[:700]])
     opt_actividad_datalist=''.join([f"<option value='{h(x)}'></option>" for x in _actividades])
+    opt_regimen_select=''.join([f"<option>{h(x)}</option>" for x in _regimenes])
+    opt_tipo_contrato_select=''.join([f"<option>{h(x)}</option>" for x in _tipos_contrato])
+    opt_modalidad_select=''.join([f"<option>{h(x)}</option>" for x in _modalidades])
+    opt_periodicidad_select=''.join([f"<option>{h(x)}</option>" for x in _periodicidades])
+    opt_tipo_pago_select=''.join([f"<option>{h(x)}</option>" for x in _tipos_pago])
     def _estado_pill(v):
         vv = str(v or 'PENDIENTE')
         cls = 'ok' if vv.upper() in ['APTO','APROBADO','REGISTRADO','IMPORTADO','ENTREGADO','ENVIADO','GENERADO','CAPTURADA','FINALIZADO'] else ''
@@ -6465,7 +6589,7 @@ html,body{overflow-x:hidden!important;}
         <h2 class='c-title'>Postulantes</h2>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Postulantes por requerimiento</h1><p class='muted2'>Primero seleccione el requerimiento. Luego busque o complete los postulantes registrados en ese requerimiento.</p></div><a class='c-btn' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato Excel</a></div><div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>1) Requerimiento / Ticket</b><select id='filtro_req_postulantes' onchange="location.href='/admin/contratacion?sec=nuevos&req='+encodeURIComponent(this.value)"><option value=''>Seleccione requerimiento para ver todos</option>{opt_req}</select><b>Buscar postulantes del requerimiento</b><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='DNI, trabajador, cargo, actividad...'></div>
         <div class='nr-tabs'><a class='active' href='#nuevo'>Nuevo</a><a href='#reingresante'>Reingresante</a><span>El DNI detecta si ya existe y cambia automáticamente a REINGRESANTE.</span></div>
-        <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'><option>AQUANQA I</option><option>AQUANQA II</option></select><b>Celular</b><input name='celular' id='celular_ingreso'><b>Correo</b><input name='correo' id='correo_ingreso' type='email'><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'><option>CAMPAÑA</option><option>PERMANENTE</option><option>INTERMITENTE</option><option>PART TIME</option></select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato'><b>Tipo contrato</b><select name='tipo_contrato'><option>INTERMITENTE</option><option>INDETERMINADO</option><option>TEMPORAL</option><option>RENOVACIÓN</option></select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required><option>AGRARIO</option><option>GENERAL</option><option>PRACTICANTE</option></select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneración básica</b><input name='remuneracion_basica' placeholder='Ej. 1130.00'><b>Remuneración en letras</b><input name='remuneracion_letra' placeholder='Ej. Mil ciento treinta con 00/100 soles'><b>Moneda</b><input name='nombre_moneda' value='Sol Peruano' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='S/' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'><option>MENSUAL</option><option>QUINCENAL</option><option>SEMANAL</option><option>DIARIO</option></select><b>Tipo pago</b><select name='tipo_pago'><option>DEPÓSITO EN CUENTA</option><option>EFECTIVO</option><option>CHEQUE</option></select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Requerimiento <span class='req-mark'>*</span></b><select name='requerimiento' required><option value=''>Seleccione requerimiento</option>{opt_req}</select><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏹ Detener</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Funciones / labores</b><textarea name='funciones' rows='2' placeholder='Funciones que se usarán en contrato si la plantilla lo requiere.'></textarea><b>Meses contrato</b><input name='meses_contrato' placeholder='Ej. 3 / TRES'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button class='c-btn'>💾 Guardar trabajador</button></form><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
+        <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'>{opt_empresa_select}</select><b>Celular</b><input name='celular' id='celular_ingreso'><b>Correo</b><input name='correo' id='correo_ingreso' type='email'><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato'><b>Tipo contrato</b><select name='tipo_contrato'>{opt_tipo_contrato_select}</select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required>{opt_regimen_select}</select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneración básica</b><input name='remuneracion_basica' placeholder='Ej. 1130.00'><b>Remuneración en letras</b><input name='remuneracion_letra' placeholder='Ej. Mil ciento treinta con 00/100 soles'><b>Moneda</b><input name='nombre_moneda' value='{h(_moneda_nombre)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='{h(_moneda_simbolo)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'>{opt_periodicidad_select}</select><b>Tipo pago</b><select name='tipo_pago'>{opt_tipo_pago_select}</select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Requerimiento <span class='req-mark'>*</span></b><select name='requerimiento' required><option value=''>Seleccione requerimiento</option>{opt_req}</select><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏹ Detener</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Funciones / labores</b><textarea name='funciones' rows='2' placeholder='Funciones que se usarán en contrato si la plantilla lo requiere.'></textarea><b>Meses contrato</b><input name='meses_contrato' placeholder='Ej. 3 / TRES'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button class='c-btn'>💾 Guardar trabajador</button></form><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
         <script>
         const trabajadoresBase = {{}};
         {';'.join([f"trabajadoresBase['{h(t['dni'])}']={{nombre:'{h(t['nombre'])}',empresa:'{h(t['empresa'])}',cargo:'{h(t['cargo'] or '')}',area:'{h(t['area'] or '')}',correo:'{h(t['correo'] or '')}'}}" for t in trabajadores[:700]])};
@@ -6715,7 +6839,32 @@ html,body{overflow-x:hidden!important;}
         </script>
         """.replace('__ROWS__', cargo_rows)
         content=wrap(html_cargo)
-    elif sec in ['maestros','observados','tipos_etapa','tipo_empleado','cargo']:
+    elif sec=='maestros':
+        maestro_rows=''
+        for m in maestros_empleador:
+            estado = 'ACTIVO' if int(m['activo'] or 0)==1 else 'INACTIVO'
+            maestro_rows += f"""<tr><td>{h(m['tipo'])}</td><td>{h(m['codigo'])}</td><td><b>{h(m['nombre'])}</b></td><td>{h(m['descripcion'])}</td><td><span class='status-pill {'ok' if estado=='ACTIVO' else ''}'>{estado}</span></td><td>{h(m['fecha_registro'])}</td><td><form method='post' style='display:inline'><input type='hidden' name='accion' value='estado_maestro_empleador'><input type='hidden' name='maestro_id' value='{m['id']}'><button class='icon-btn' type='submit'>Activar/Inactivar</button></form> <form method='post' style='display:inline' onsubmit="return confirm('¿Eliminar dato maestro?')"><input type='hidden' name='accion' value='eliminar_maestro_empleador'><input type='hidden' name='maestro_id' value='{m['id']}'><button class='delete-mini' type='submit'>Eliminar</button></form></td></tr>"""
+        content=wrap(f"""
+        <h2 class='c-title'>Datos maestros del empleador</h2>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Configuración laboral del empleador</h1><p class='muted2'>Administra datos que alimentan Requerimientos, Postulantes y contratos: empresa, áreas, cargos, actividades, régimen laboral, tipo de contrato, modalidad, moneda y datos de pago. No incluye sistema pensionario ni estado civil porque son datos personales del trabajador.</p></div><a class='c-btn' href='/admin/contratacion/maestros/formato'>⬇ Formato Excel</a></div>
+        <div class='c-card c-form' style='padding:20px;margin-bottom:18px'>
+          <form method='post' class='c-form' style='grid-column:1/-1'>
+            <input type='hidden' name='accion' value='guardar_maestro_empleador'>
+            <b>Tipo</b><select name='tipo' required><option>EMPRESA</option><option>AREA</option><option>CARGO</option><option>ACTIVIDAD</option><option>REGIMEN_LABORAL</option><option>TIPO_CONTRATO</option><option>MODALIDAD</option><option>MONEDA</option><option>SIMBOLO_MONEDA</option><option>PERIODICIDAD_PAGO</option><option>TIPO_PAGO</option></select>
+            <b>Código</b><input name='codigo' placeholder='Ej. AQI / RRHH / OB_PODA'>
+            <b>Nombre</b><input name='nombre' required placeholder='Nombre que aparecerá en desplegables'>
+            <b>Descripción</b><input name='descripcion' placeholder='Detalle / observación'>
+            <span></span><button class='c-btn'>Guardar dato maestro</button>
+          </form>
+        </div>
+        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:20px;margin-bottom:18px'>
+          <input type='hidden' name='accion' value='importar_maestros_empleador_excel'>
+          <b>Carga masiva Excel</b><input type='file' name='archivo' accept='.xlsx,.xls' required>
+          <span class='muted2'>Columnas: TIPO, CODIGO, NOMBRE, DETALLE, ACTIVO. Se omiten SISTEMA_PENSIONARIO y ESTADO_CIVIL.</span><button class='c-btn gray'>⬆ Importar configuración</button>
+        </form>
+        <div class='c-card table-wrap'><table class='c-table'><tr><th>Tipo</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Registro</th><th>Acción</th></tr>{maestro_rows or '<tr><td colspan=7>Sin datos maestros configurados.</td></tr>'}</table></div>
+        """)
+    elif sec in ['observados','tipos_etapa','tipo_empleado','cargo']:
         content=wrap(f"""
         <h2 class='c-title'>Listas de trabajadores observados</h2>
         <div class='c-bar'>
@@ -7433,6 +7582,44 @@ try:
     FINAL_UI_PATCH_CSS += FINAL_POSTULANTES_PRO_CSS
 except Exception:
     pass
+
+@app.route('/admin/contratacion/maestros/formato')
+@login_required_admin
+def descargar_formato_maestros_empleador():
+    wb = Workbook(); ws = wb.active; ws.title = 'DATOS_MAESTROS_EMPLEADOR'
+    headers = ['TIPO','CODIGO','NOMBRE','DETALLE','ACTIVO']
+    ws.append(headers)
+    ejemplos = [
+        ['EMPRESA','AQI','AQUANQA I','Empresa empleadora','SI'],
+        ['EMPRESA','AQII','AQUANQA II','Empresa empleadora','SI'],
+        ['AREA','RRHH','RR.HH.','Área de Recursos Humanos','SI'],
+        ['AREA','CAMPO','Campo','Área operativa','SI'],
+        ['CARGO','AUX-RRHH','Auxiliar de RRHH','Cargo laboral','SI'],
+        ['CARGO','OBR-CAMPO','Obrero de Campo','Cargo laboral','SI'],
+        ['ACTIVIDAD','OB_PODA','OB_PODA / COSECHA','Actividad del requerimiento','SI'],
+        ['REGIMEN_LABORAL','AGRARIO','AGRARIO','Régimen Ley Agraria','SI'],
+        ['REGIMEN_LABORAL','GENERAL','GENERAL','Régimen general privado','SI'],
+        ['TIPO_CONTRATO','INTERMITENTE','INTERMITENTE','Contrato sujeto a modalidad','SI'],
+        ['MODALIDAD','CAMPANIA','CAMPAÑA','Modalidad operativa','SI'],
+        ['MONEDA','PEN','Sol Peruano','Moneda fija','SI'],
+        ['SIMBOLO_MONEDA','PEN','S/','Símbolo fijo','SI'],
+        ['PERIODICIDAD_PAGO','MENSUAL','MENSUAL','Periodicidad de pago','SI'],
+        ['TIPO_PAGO','DEPOSITO','DEPÓSITO EN CUENTA','Tipo de pago','SI'],
+    ]
+    for r in ejemplos: ws.append(r)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='0F766E')
+        cell.alignment = Alignment(horizontal='center')
+    for col in range(1,6):
+        ws.column_dimensions[chr(64+col)].width = 28
+    ws.freeze_panes='A2'
+    dv = DataValidation(type='list', formula1='"EMPRESA,AREA,CARGO,ACTIVIDAD,REGIMEN_LABORAL,TIPO_CONTRATO,MODALIDAD,MONEDA,SIMBOLO_MONEDA,PERIODICIDAD_PAGO,TIPO_PAGO"', allow_blank=False)
+    ws.add_data_validation(dv); dv.add('A2:A500')
+    path = EXCEL_LOCAL_DIR / ('FORMATO_DATOS_MAESTROS_EMPLEADOR_'+now_file()+'.xlsx')
+    wb.save(path)
+    return send_file(path, as_attachment=True, download_name='FORMATO_DATOS_MAESTROS_EMPLEADOR.xlsx')
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
     host = os.getenv('HOST', '0.0.0.0')
