@@ -925,6 +925,44 @@ def init_db():
             if not existe_m:
                 con.execute('''INSERT INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo_m,codigo_m,nombre_m,descripcion_m,now_txt(),'SISTEMA'))
 
+        # PRO: relación automática Empresa → Área → Cargo → Actividad → Régimen → Tipo contrato.
+        # Esta tabla gobierna los desplegables de Requerimiento y Postulantes para evitar configurar campo por campo.
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_relaciones_laborales(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empresa TEXT,
+            area TEXT,
+            cargo TEXT,
+            actividad TEXT,
+            regimen_laboral TEXT,
+            tipo_contrato TEXT,
+            modalidad TEXT,
+            centro_costo TEXT,
+            funciones TEXT,
+            activo INTEGER DEFAULT 1,
+            fecha_registro TEXT,
+            registrado_por TEXT
+        )''')
+        try:
+            con.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_laboral_base ON contratacion_relaciones_laborales(empresa, area, cargo, actividad, regimen_laboral, tipo_contrato)')
+        except Exception:
+            pass
+        base_relaciones = [
+            ('AQUANQA I','Campo','Obrero de Campo','OB_PODA / COSECHA','AGRARIO','INTERMITENTE','CAMPAÑA','CAMPO-OB','Labores agrícolas de campo'),
+            ('AQUANQA I','Packing','Operario Packing','PACKING','AGRARIO','INTERMITENTE','CAMPAÑA','PACK-OB','Labores operativas de packing'),
+            ('AQUANQA I','RR.HH.','Auxiliar de RRHH','RRHH','GENERAL','TEMPORAL','PERMANENTE','ADM-RRHH','Apoyo administrativo de recursos humanos'),
+            ('AQUANQA II','Campo','Obrero de Campo','COSECHA','AGRARIO','INTERMITENTE','CAMPAÑA','CAMPO-OB','Labores agrícolas de campo'),
+        ]
+        for emp_r, area_r, cargo_r, act_r, reg_r, tc_r, mod_r, cc_r, fun_r in base_relaciones:
+            existe_r = con.execute('''SELECT id FROM contratacion_relaciones_laborales
+                                      WHERE UPPER(empresa)=UPPER(?) AND UPPER(area)=UPPER(?) AND UPPER(cargo)=UPPER(?)
+                                        AND UPPER(actividad)=UPPER(?) AND UPPER(regimen_laboral)=UPPER(?) AND UPPER(tipo_contrato)=UPPER(?) LIMIT 1''',
+                                   (emp_r, area_r, cargo_r, act_r, reg_r, tc_r)).fetchone()
+            if not existe_r:
+                con.execute('''INSERT INTO contratacion_relaciones_laborales
+                    (empresa,area,cargo,actividad,regimen_laboral,tipo_contrato,modalidad,centro_costo,funciones,activo,fecha_registro,registrado_por)
+                    VALUES(?,?,?,?,?,?,?,?,?,1,?,?)''', (emp_r,area_r,cargo_r,act_r,reg_r,tc_r,mod_r,cc_r,fun_r,now_txt(),'SISTEMA'))
+
         con.execute('''
         CREATE TABLE IF NOT EXISTS contratacion_plantillas(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5503,6 +5541,85 @@ def admin_contratacion():
             except Exception as e:
                 flash('Error importando datos maestros: '+str(e), 'error')
             return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'guardar_relacion_laboral':
+            empresa = clean(request.form.get('empresa'))
+            area = clean(request.form.get('area'))
+            cargo = clean(request.form.get('cargo'))
+            actividad = clean(request.form.get('actividad'))
+            regimen = clean(request.form.get('regimen_laboral')).upper()
+            tipo_contrato = clean(request.form.get('tipo_contrato')).upper()
+            modalidad = clean(request.form.get('modalidad')).upper()
+            centro_costo = clean(request.form.get('centro_costo')).upper()
+            funciones = clean(request.form.get('funciones'))
+            if not empresa or not area or not cargo or not actividad or not regimen or not tipo_contrato:
+                flash('Empresa, área, cargo, actividad, régimen laboral y tipo contrato son obligatorios para crear una relación laboral automática.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            with db() as con:
+                con.execute('''INSERT OR REPLACE INTO contratacion_relaciones_laborales
+                    (empresa,area,cargo,actividad,regimen_laboral,tipo_contrato,modalidad,centro_costo,funciones,activo,fecha_registro,registrado_por)
+                    VALUES(?,?,?,?,?,?,?,?,?,1,?,?)''',
+                    (empresa,area,cargo,actividad,regimen,tipo_contrato,modalidad,centro_costo,funciones,now_txt(),session.get('admin_user','admin')))
+                # Auto-crea los catálogos base cuando aparezca algo nuevo.
+                pares=[('EMPRESA',empresa,empresa),('AREA',area,area),('CARGO',cargo,cargo),('ACTIVIDAD',actividad,actividad),('REGIMEN_LABORAL',regimen,regimen),('TIPO_CONTRATO',tipo_contrato,tipo_contrato),('MODALIDAD',modalidad,modalidad)]
+                for tipo_m,codigo_m,nombre_m in pares:
+                    if nombre_m:
+                        con.execute('''INSERT OR IGNORE INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo_m,codigo_m,nombre_m,'Creado automáticamente desde relación laboral',now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash('Relación laboral creada y enlazada automáticamente a Requerimiento/Postulantes.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'estado_relacion_laboral':
+            rid=int(request.form.get('relacion_id') or 0)
+            with db() as con:
+                r=con.execute('SELECT activo FROM contratacion_relaciones_laborales WHERE id=?',(rid,)).fetchone()
+                if r:
+                    con.execute('UPDATE contratacion_relaciones_laborales SET activo=? WHERE id=?',(0 if int(r['activo'] or 0)==1 else 1,rid)); con.commit()
+            flash('Estado de la relación laboral actualizado.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'eliminar_relacion_laboral':
+            rid=int(request.form.get('relacion_id') or 0)
+            with db() as con:
+                con.execute('DELETE FROM contratacion_relaciones_laborales WHERE id=?',(rid,)); con.commit()
+            flash('Relación laboral eliminada.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'importar_relaciones_laborales_excel':
+            f=request.files.get('archivo')
+            if not f or not f.filename:
+                flash('Selecciona el Excel de relaciones laborales.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            carpeta=UPLOAD_DIR/'contratacion'/'relaciones_laborales'; carpeta.mkdir(parents=True, exist_ok=True)
+            path=carpeta/(now_file()+'_RELACIONES_LABORALES_'+secure_filename(f.filename)); f.save(path)
+            ok=0; omitidos=0
+            try:
+                wb=load_workbook(path, data_only=True)
+                ws=wb['RELACIONES_LABORALES'] if 'RELACIONES_LABORALES' in wb.sheetnames else wb.active
+                idx=_headers_excel(ws)
+                with db() as con:
+                    for row in ws.iter_rows(min_row=2):
+                        emp=clean(_celda(row,idx,'EMPRESA','Empresa'))
+                        area=clean(_celda(row,idx,'AREA','Área','Area'))
+                        cargo=clean(_celda(row,idx,'CARGO','Cargo','PUESTO','Puesto'))
+                        act=clean(_celda(row,idx,'ACTIVIDAD','Actividad'))
+                        reg=clean(_celda(row,idx,'REGIMEN_LABORAL','REGIMEN','Régimen')).upper()
+                        tc=clean(_celda(row,idx,'TIPO_CONTRATO','Tipo Contrato')).upper()
+                        mod=clean(_celda(row,idx,'MODALIDAD','Modalidad')).upper()
+                        cc=clean(_celda(row,idx,'CENTRO_COSTO','Centro Costo')).upper()
+                        fun=clean(_celda(row,idx,'FUNCIONES','Funciones'))
+                        activo_raw=clean(_celda(row,idx,'ACTIVO','Estado')).upper()
+                        activo=0 if activo_raw in ('0','NO','INACTIVO','BAJA') else 1
+                        if not (emp and area and cargo and act and reg and tc):
+                            omitidos+=1; continue
+                        con.execute('''INSERT OR REPLACE INTO contratacion_relaciones_laborales
+                            (empresa,area,cargo,actividad,regimen_laboral,tipo_contrato,modalidad,centro_costo,funciones,activo,fecha_registro,registrado_por)
+                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', (emp,area,cargo,act,reg,tc,mod,cc,fun,activo,now_txt(),session.get('admin_user','admin')))
+                        for tipo_m,codigo_m,nombre_m in [('EMPRESA',emp,emp),('AREA',area,area),('CARGO',cargo,cargo),('ACTIVIDAD',act,act),('REGIMEN_LABORAL',reg,reg),('TIPO_CONTRATO',tc,tc),('MODALIDAD',mod,mod)]:
+                            if nombre_m:
+                                con.execute('''INSERT OR IGNORE INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo_m,codigo_m,nombre_m,'Creado automáticamente por carga masiva de relaciones',now_txt(),session.get('admin_user','admin')))
+                        ok+=1
+                    con.commit()
+                flash(f'Relaciones importadas: {ok}. Omitidas: {omitidos}.', 'ok')
+            except Exception as e:
+                flash('Error importando relaciones laborales: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
         if accion == 'eliminar_ingreso_admin':
             rid = int(request.form.get('ingreso_id') or 0)
             clave = clean(request.form.get('clave_admin'))
@@ -6273,6 +6390,10 @@ def admin_contratacion():
         tipo_empleado=con.execute('SELECT * FROM contratacion_tipo_empleado ORDER BY descripcion LIMIT 1000').fetchall()
         cargos=con.execute('SELECT * FROM contratacion_cargos ORDER BY nombre LIMIT 2000').fetchall()
         maestros_empleador=con.execute('SELECT * FROM contratacion_maestros_empleador ORDER BY tipo, nombre LIMIT 3000').fetchall()
+        try:
+            relaciones_laborales=con.execute('SELECT * FROM contratacion_relaciones_laborales ORDER BY empresa, area, cargo, actividad LIMIT 3000').fetchall()
+        except Exception:
+            relaciones_laborales=[]
         ingresos=con.execute('SELECT * FROM contratacion_ingresos ORDER BY id DESC LIMIT 500').fetchall()
         lotes_nisira=con.execute('SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC LIMIT 200').fetchall()
         controles_next=con.execute('SELECT * FROM contratacion_checklist_next ORDER BY id DESC LIMIT 300').fetchall()
@@ -6324,13 +6445,14 @@ def admin_contratacion():
     # Catálogos para autocompletar desde configuración/maestros del empleador y requerimientos existentes
     def maestros_tipo(tipo):
         return sorted({clean(r['nombre']) for r in maestros_empleador if clean(r['tipo']).upper()==tipo and int(r['activo'] or 0)==1 and clean(r['nombre'])})
-    _empresas = sorted(set(maestros_tipo('EMPRESA')) | {'AQUANQA I','AQUANQA II'})
-    _areas = sorted(set(maestros_tipo('AREA')) | {clean(r['area']) for r in requerimientos if clean(r['area'])} | {clean(r['area']) for r in trabajadores if clean(r['area'])})
-    _cargos = sorted(set(maestros_tipo('CARGO')) | {clean(r['cargo']) for r in requerimientos if clean(r['cargo'])} | {clean(r['cargo']) for r in trabajadores if clean(r['cargo'])} | {clean(r['nombre']) for r in cargos if clean(r['nombre'])})
-    _actividades = sorted(set(maestros_tipo('ACTIVIDAD')) | {clean(r['actividad']) for r in requerimientos if clean(r['actividad'])} | {clean(r['actividad']) for r in trabajadores_proceso if clean(r['actividad'])})
-    _regimenes = sorted(set(maestros_tipo('REGIMEN_LABORAL')) | {'AGRARIO','GENERAL'})
-    _tipos_contrato = sorted(set(maestros_tipo('TIPO_CONTRATO')) | {'INTERMITENTE','TEMPORAL','INDETERMINADO','RENOVACIÓN'})
-    _modalidades = sorted(set(maestros_tipo('MODALIDAD')) | {'CAMPAÑA','PERMANENTE','INTERMITENTE','PART TIME'})
+    rel_activas = [r for r in relaciones_laborales if int(r['activo'] or 0)==1] if 'relaciones_laborales' in locals() else []
+    _empresas = sorted(set(maestros_tipo('EMPRESA')) | {clean(r['empresa']) for r in rel_activas if clean(r['empresa'])} | {'AQUANQA I','AQUANQA II'})
+    _areas = sorted(set(maestros_tipo('AREA')) | {clean(r['area']) for r in rel_activas if clean(r['area'])} | {clean(r['area']) for r in requerimientos if clean(r['area'])} | {clean(r['area']) for r in trabajadores if clean(r['area'])})
+    _cargos = sorted(set(maestros_tipo('CARGO')) | {clean(r['cargo']) for r in rel_activas if clean(r['cargo'])} | {clean(r['cargo']) for r in requerimientos if clean(r['cargo'])} | {clean(r['cargo']) for r in trabajadores if clean(r['cargo'])} | {clean(r['nombre']) for r in cargos if clean(r['nombre'])})
+    _actividades = sorted(set(maestros_tipo('ACTIVIDAD')) | {clean(r['actividad']) for r in rel_activas if clean(r['actividad'])} | {clean(r['actividad']) for r in requerimientos if clean(r['actividad'])} | {clean(r['actividad']) for r in trabajadores_proceso if clean(r['actividad'])})
+    _regimenes = sorted(set(maestros_tipo('REGIMEN_LABORAL')) | {clean(r['regimen_laboral']) for r in rel_activas if clean(r['regimen_laboral'])} | {'AGRARIO','GENERAL'})
+    _tipos_contrato = sorted(set(maestros_tipo('TIPO_CONTRATO')) | {clean(r['tipo_contrato']) for r in rel_activas if clean(r['tipo_contrato'])} | {'INTERMITENTE','TEMPORAL','INDETERMINADO','RENOVACIÓN'})
+    _modalidades = sorted(set(maestros_tipo('MODALIDAD')) | {clean(r['modalidad']) for r in rel_activas if clean(r['modalidad'])} | {'CAMPAÑA','PERMANENTE','INTERMITENTE','PART TIME'})
     _periodicidades = sorted(set(maestros_tipo('PERIODICIDAD_PAGO')) | {'MENSUAL','SEMANAL','QUINCENAL'})
     _tipos_pago = sorted(set(maestros_tipo('TIPO_PAGO')) | {'DEPÓSITO EN CUENTA','EFECTIVO'})
     _moneda_nombre = (maestros_tipo('MONEDA') or ['Sol Peruano'])[0]
@@ -6849,10 +6971,43 @@ html,body{overflow-x:hidden!important;}
         for m in maestros_empleador:
             estado = 'ACTIVO' if int(m['activo'] or 0)==1 else 'INACTIVO'
             maestro_rows += f"""<tr><td>{h(m['tipo'])}</td><td>{h(m['codigo'])}</td><td><b>{h(m['nombre'])}</b></td><td>{h(m['descripcion'])}</td><td><span class='status-pill {'ok' if estado=='ACTIVO' else ''}'>{estado}</span></td><td>{h(m['fecha_registro'])}</td><td><form method='post' style='display:inline'><input type='hidden' name='accion' value='estado_maestro_empleador'><input type='hidden' name='maestro_id' value='{m['id']}'><button class='icon-btn' type='submit'>Activar/Inactivar</button></form> <form method='post' style='display:inline' onsubmit="return confirm('¿Eliminar dato maestro?')"><input type='hidden' name='accion' value='eliminar_maestro_empleador'><input type='hidden' name='maestro_id' value='{m['id']}'><button class='delete-mini' type='submit'>Eliminar</button></form></td></tr>"""
+        rel_rows=''
+        for r in relaciones_laborales:
+            estado = 'ACTIVO' if int(r['activo'] or 0)==1 else 'INACTIVO'
+            rel_rows += f"""<tr><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td><b>{h(r['cargo'])}</b></td><td>{h(r['actividad'])}</td><td>{h(r['regimen_laboral'])}</td><td>{h(r['tipo_contrato'])}</td><td>{h(r['modalidad'])}</td><td>{h(r['centro_costo'])}</td><td><span class='status-pill {'ok' if estado=='ACTIVO' else ''}'>{estado}</span></td><td><form method='post' style='display:inline'><input type='hidden' name='accion' value='estado_relacion_laboral'><input type='hidden' name='relacion_id' value='{r['id']}'><button class='icon-btn' type='submit'>Activar/Inactivar</button></form> <form method='post' style='display:inline' onsubmit="return confirm('¿Eliminar relación laboral?')"><input type='hidden' name='accion' value='eliminar_relacion_laboral'><input type='hidden' name='relacion_id' value='{r['id']}'><button class='delete-mini' type='submit'>Eliminar</button></form></td></tr>"""
+        opt_emp=''.join([f"<option value='{h(x)}'></option>" for x in _empresas])
+        opt_area=''.join([f"<option value='{h(x)}'></option>" for x in _areas])
+        opt_cargo=''.join([f"<option value='{h(x)}'></option>" for x in _cargos[:700]])
+        opt_act=''.join([f"<option value='{h(x)}'></option>" for x in _actividades])
         content=wrap(f"""
         <h2 class='c-title'>Datos maestros del empleador</h2>
-        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Configuración laboral del empleador</h1><p class='muted2'>Administra datos que alimentan Requerimientos, Postulantes y contratos: empresa, áreas, cargos, actividades, régimen laboral, tipo de contrato, modalidad, moneda y datos de pago. No incluye sistema pensionario ni estado civil porque son datos personales del trabajador.</p></div><a class='c-btn' href='/admin/contratacion/maestros/formato'>⬇ Formato Excel</a></div>
-        <div class='c-card c-form' style='padding:20px;margin-bottom:18px'>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Configuración laboral automática</h1><p class='muted2'>Este módulo gobierna los desplegables de Requerimiento, Postulantes y Contratos. La configuración principal es la relación Empresa → Área → Cargo → Actividad → Régimen → Tipo contrato. Si aparece algo nuevo, puedes crearlo aquí o cargarlo masivamente por Excel.</p></div><a class='c-btn' href='/admin/contratacion/maestros/formato'>⬇ Formato Excel</a></div>
+        <div class='c-card' style='padding:18px;margin-bottom:18px;background:#ecfdf5;border-color:#bbf7d0'>
+          <h2 style='margin:0 0 8px;color:#064e3b'>1) Relación laboral automática</h2>
+          <p class='muted2'>Usa esto como configuración principal. Al crear una relación, también se crean automáticamente los catálogos base si no existen.</p>
+          <form method='post' class='c-form' style='grid-template-columns:170px 1fr 170px 1fr'>
+            <input type='hidden' name='accion' value='guardar_relacion_laboral'>
+            <b>Empresa *</b><input list='dl_emp' name='empresa' required placeholder='Ej. AQUANQA I'><datalist id='dl_emp'>{opt_emp}</datalist>
+            <b>Área *</b><input list='dl_area' name='area' required placeholder='Ej. Campo / Packing / RR.HH.'><datalist id='dl_area'>{opt_area}</datalist>
+            <b>Cargo *</b><input list='dl_cargo' name='cargo' required placeholder='Ej. Obrero de Campo / Auxiliar RRHH'><datalist id='dl_cargo'>{opt_cargo}</datalist>
+            <b>Actividad *</b><input list='dl_act' name='actividad' required placeholder='Ej. OB_PODA / COSECHA'><datalist id='dl_act'>{opt_act}</datalist>
+            <b>Régimen laboral *</b><select name='regimen_laboral' required>{opt_regimen_select}</select>
+            <b>Tipo contrato *</b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select>
+            <b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select>
+            <b>Centro costo</b><input name='centro_costo' placeholder='Ej. CAMPO-OB / PACK-OB'>
+            <b>Funciones</b><textarea name='funciones' placeholder='Funciones base que puede usar el contrato o ficha del cargo'></textarea>
+            <span></span><button class='c-btn'>+ Crear relación automática</button>
+          </form>
+        </div>
+        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:18px;margin-bottom:18px;background:#f8fafc'>
+          <input type='hidden' name='accion' value='importar_relaciones_laborales_excel'>
+          <b>Carga masiva de relaciones</b><input type='file' name='archivo' accept='.xlsx,.xls' required>
+          <span class='muted2'>Hoja RELACIONES_LABORALES. Columnas: EMPRESA, AREA, CARGO, ACTIVIDAD, REGIMEN_LABORAL, TIPO_CONTRATO, MODALIDAD, CENTRO_COSTO, FUNCIONES, ACTIVO.</span><button class='c-btn gray'>⬆ Importar relaciones</button>
+        </form>
+        <div class='c-card table-wrap' style='margin-bottom:22px'><h2>Relaciones laborales configuradas</h2><table class='c-table'><tr><th>Empresa</th><th>Área</th><th>Cargo</th><th>Actividad</th><th>Régimen</th><th>Tipo contrato</th><th>Modalidad</th><th>Centro costo</th><th>Estado</th><th>Acción</th></tr>{rel_rows or '<tr><td colspan=10>Sin relaciones laborales configuradas.</td></tr>'}</table></div>
+        <div class='c-card' style='padding:18px;margin-bottom:18px'>
+          <h2 style='margin:0 0 8px;color:#0f2b46'>2) Crear dato maestro suelto</h2>
+          <p class='muted2'>Úsalo solo cuando quieras agregar una opción nueva que todavía no tendrá relación completa. No incluye sistema pensionario ni estado civil.</p>
           <form method='post' class='c-form' style='grid-column:1/-1'>
             <input type='hidden' name='accion' value='guardar_maestro_empleador'>
             <b>Tipo</b><select name='tipo' required><option>EMPRESA</option><option>AREA</option><option>CARGO</option><option>ACTIVIDAD</option><option>REGIMEN_LABORAL</option><option>TIPO_CONTRATO</option><option>MODALIDAD</option><option>MONEDA</option><option>SIMBOLO_MONEDA</option><option>PERIODICIDAD_PAGO</option><option>TIPO_PAGO</option></select>
@@ -6862,12 +7017,12 @@ html,body{overflow-x:hidden!important;}
             <span></span><button class='c-btn'>Guardar dato maestro</button>
           </form>
         </div>
-        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:20px;margin-bottom:18px'>
+        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:18px;margin-bottom:18px'>
           <input type='hidden' name='accion' value='importar_maestros_empleador_excel'>
-          <b>Carga masiva Excel</b><input type='file' name='archivo' accept='.xlsx,.xls' required>
-          <span class='muted2'>Columnas: TIPO, CODIGO, NOMBRE, DETALLE, ACTIVO. Se omiten SISTEMA_PENSIONARIO y ESTADO_CIVIL.</span><button class='c-btn gray'>⬆ Importar configuración</button>
+          <b>Carga masiva de catálogos sueltos</b><input type='file' name='archivo' accept='.xlsx,.xls' required>
+          <span class='muted2'>Hoja DATOS_MAESTROS_EMPLEADOR. Columnas: TIPO, CODIGO, NOMBRE, DETALLE, ACTIVO.</span><button class='c-btn gray'>⬆ Importar catálogos</button>
         </form>
-        <div class='c-card table-wrap'><table class='c-table'><tr><th>Tipo</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Registro</th><th>Acción</th></tr>{maestro_rows or '<tr><td colspan=7>Sin datos maestros configurados.</td></tr>'}</table></div>
+        <div class='c-card table-wrap'><h2>Catálogos base</h2><table class='c-table'><tr><th>Tipo</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Registro</th><th>Acción</th></tr>{maestro_rows or '<tr><td colspan=7>Sin datos maestros configurados.</td></tr>'}</table></div>
         """)
     elif sec in ['observados','tipos_etapa','tipo_empleado','cargo']:
         content=wrap(f"""
@@ -7621,6 +7776,22 @@ def descargar_formato_maestros_empleador():
     ws.freeze_panes='A2'
     dv = DataValidation(type='list', formula1='"EMPRESA,AREA,CARGO,ACTIVIDAD,REGIMEN_LABORAL,TIPO_CONTRATO,MODALIDAD,MONEDA,SIMBOLO_MONEDA,PERIODICIDAD_PAGO,TIPO_PAGO"', allow_blank=False)
     ws.add_data_validation(dv); dv.add('A2:A500')
+    ws2 = wb.create_sheet('RELACIONES_LABORALES')
+    headers2 = ['EMPRESA','AREA','CARGO','ACTIVIDAD','REGIMEN_LABORAL','TIPO_CONTRATO','MODALIDAD','CENTRO_COSTO','FUNCIONES','ACTIVO']
+    ws2.append(headers2)
+    ejemplos2 = [
+        ['AQUANQA I','Campo','Obrero de Campo','OB_PODA / COSECHA','AGRARIO','INTERMITENTE','CAMPAÑA','CAMPO-OB','Labores agrícolas de campo','SI'],
+        ['AQUANQA I','Packing','Operario Packing','PACKING','AGRARIO','INTERMITENTE','CAMPAÑA','PACK-OB','Labores operativas de packing','SI'],
+        ['AQUANQA I','RR.HH.','Auxiliar de RRHH','RRHH','GENERAL','TEMPORAL','PERMANENTE','ADM-RRHH','Apoyo administrativo de RRHH','SI'],
+    ]
+    for r in ejemplos2: ws2.append(r)
+    for cell in ws2[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='0F766E')
+        cell.alignment = Alignment(horizontal='center')
+    for col in range(1,11):
+        ws2.column_dimensions[chr(64+col)].width = 26
+    ws2.freeze_panes='A2'
     path = EXCEL_LOCAL_DIR / ('FORMATO_DATOS_MAESTROS_EMPLEADOR_'+now_file()+'.xlsx')
     wb.save(path)
     return send_file(path, as_attachment=True, download_name='FORMATO_DATOS_MAESTROS_EMPLEADOR.xlsx')
