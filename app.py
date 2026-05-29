@@ -1280,6 +1280,38 @@ def row_get(row, key, default=''):
         return default
 
 
+
+
+def row_to_dict(row):
+    if not row:
+        return {}
+    try:
+        return {k: row[k] for k in row.keys()}
+    except Exception:
+        try: return dict(row)
+        except Exception: return {}
+
+
+def datos_unificados_contratacion(dni, requerimiento=''):
+    dni = normalizar_dni(dni)
+    if not dni:
+        return {}
+    with db() as con:
+        trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+        ing = None
+        if requerimiento:
+            ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni, requerimiento)).fetchone()
+        if not ing:
+            ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (dni,)).fetchone()
+    base = row_to_dict(trab); post = row_to_dict(ing); merged = dict(base)
+    mapping = {'trabajador':'nombre','correo':'correo','celular':'celular','empresa':'empresa','cargo':'cargo','area':'area','fecha_ingreso':'fecha_ingreso','direccion':'direccion','departamento':'departamento','provincia':'provincia','distrito':'distrito','modalidad':'modalidad','jefe':'jefe_nombre','cuenta_bancaria':'cuenta_bancaria','talla_indumentaria':'indumentaria','contacto_emergencia':'contacto_emergencia','estado_civil':'estado_civil','sistema_pensionario':'sistema_pensionario','ultima_empresa':'ultima_empresa','discapacidad':'discapacidad','cantidad_hijos':'cantidad_hijos','actividad':'actividad','sede':'sede','requerimiento':'requerimiento','tipo_ingreso':'tipo_ingreso'}
+    for pk, tk in mapping.items():
+        val = post.get(pk)
+        if not es_valor_incompleto(val):
+            merged[tk] = val
+    merged['dni'] = dni
+    return merged
+
 def separar_nombres_apellidos(nombre):
     txt = clean(nombre)
     if ',' in txt:
@@ -1302,40 +1334,37 @@ def formato_fecha_texto(fecha, mayus=False):
 
 
 def valores_esquema_desde_trabajador(trabajador=None):
-    """Llena los campos de esquema desde la base de trabajadores cuando exista información."""
-    t = trabajador
-    nombre = clean(row_get(t, 'nombre'))
+    t = trabajador or {}
+    nombre = clean(row_get(t, 'nombre') or row_get(t, 'trabajador'))
     ap_pat, ap_mat, nombres = separar_nombres_apellidos(nombre)
-    fecha_ing = row_get(t, 'fecha_ingreso')
-    fecha_nac = row_get(t, 'fecha_nacimiento')
-    empresa = row_get(t, 'empresa')
-    cargo = row_get(t, 'cargo')
-    area = row_get(t, 'area')
-    correo = row_get(t, 'correo')
-    planilla = row_get(t, 'planilla')
-    dni = row_get(t, 'dni')
+    fecha_ing = row_get(t, 'fecha_ingreso'); fecha_fin = row_get(t, 'fecha_fin_contrato'); fecha_nac = row_get(t, 'fecha_nacimiento')
+    empresa = row_get(t, 'empresa'); cargo = row_get(t, 'cargo') or row_get(t, 'puesto'); area = row_get(t, 'area')
+    correo = row_get(t, 'correo') or row_get(t, 'email'); planilla = row_get(t, 'planilla'); dni = row_get(t, 'dni')
+    direccion = row_get(t, 'direccion') or row_get(t, 'direccion_actual'); departamento=row_get(t,'departamento'); provincia=row_get(t,'provincia'); distrito=row_get(t,'distrito')
+    remuneracion = row_get(t, 'remuneracion_basica') or row_get(t, 'basico'); celular = row_get(t, 'celular') or row_get(t, 'telefono')
+    estado_civil=row_get(t,'estado_civil'); sistema_pensionario=row_get(t,'sistema_pensionario'); actividad=row_get(t,'actividad'); sede=row_get(t,'sede')
+    tipo_contrato = row_get(t, 'tipo_contrato') or row_get(t, 'modalidad')
     base = {
-        'Dni': dni, 'NombreCompletoTrabajador': nombre, 'Email': correo, 'Cargo': cargo,
-        'Puesto': cargo, 'Ocupacion': cargo, 'Area': area, 'Gerencia': area, 'Planilla': planilla,
-        'FechaIniContrato': fecha_sin_hora(fecha_ing), 'FechaInicioContratoOrigen': fecha_sin_hora(fecha_ing),
-        'FechaIniContratoBarra': fecha_sin_hora(fecha_ing), 'FechaIniContratoGuion': fecha_sin_hora(fecha_ing).replace('/','-'),
-        'FechaIniContratoISO': fecha_iso_segura(fecha_ing), 'FechaIniContratoTextoMayuscula': formato_fecha_texto(fecha_ing, True),
-        'FechaIniContratoTextoMinuscula': formato_fecha_texto(fecha_ing, False), 'FechaNacimientoISO': fecha_iso_segura(fecha_nac),
-        'FechaNacimientoGuion': fecha_sin_hora(fecha_nac).replace('/','-'), 'FechaNacimientoBarra': fecha_sin_hora(fecha_nac),
-        'FechaNacimientoTextoMayuscula': formato_fecha_texto(fecha_nac, True),
-        'FechaNacimientoTextoMinuscula': formato_fecha_texto(fecha_nac, False), 'ApellidoPaternoTrabajador': ap_pat,
-        'ApellidoMaternoTrabajador': ap_mat, 'NombreTrabajador': nombres, 'Estado': 'Activo',
-        'Condicion': 'ACTIVO' if row_get(t, 'activo', 1) else 'INACTIVO', 'CentroCosto': empresa,
-        'NombreMoneda': 'Sol Peruano', 'SimboloMoneda': 'S/', 'NombreTipoDocumentoIdentidad': 'DOC. NACIONAL DE IDENTIDAD',
-        'NombreCortoTipoDocumentoIdentidad': 'DNI',
+        'Dni': dni, 'NombreCompletoTrabajador': nombre, 'Email': correo, 'Cargo': cargo, 'Puesto': cargo, 'Ocupacion': cargo,
+        'Area': area, 'Gerencia': area, 'Planilla': planilla, 'TipoContrato': tipo_contrato, 'Actividad': actividad, 'Zona': sede or actividad, 'Sede': sede,
+        'DireccionActual': direccion, 'DireccionDNI': direccion, 'Departamento': departamento, 'Provincia': provincia, 'Distrito': distrito, 'NroTelefonoMovil': celular,
+        'FechaIniContrato': fecha_sin_hora(fecha_ing), 'FechaInicioContrato': fecha_sin_hora(fecha_ing), 'FechaInicioContratoOrigen': fecha_sin_hora(fecha_ing),
+        'FechaIniContratoBarra': fecha_sin_hora(fecha_ing), 'FechaIniContratoGuion': fecha_sin_hora(fecha_ing).replace('/','-'), 'FechaIniContratoISO': fecha_iso_segura(fecha_ing),
+        'FechaIniContratoTextoMayuscula': formato_fecha_texto(fecha_ing, True), 'FechaIniContratoTextoMinuscula': formato_fecha_texto(fecha_ing, False),
+        'FechaFinContrato': fecha_sin_hora(fecha_fin), 'FechaFinContratoOrigen': fecha_sin_hora(fecha_fin), 'FechaFinContratoBarra': fecha_sin_hora(fecha_fin),
+        'FechaFinContratoGuion': fecha_sin_hora(fecha_fin).replace('/','-'), 'FechaFinContratoISO': fecha_iso_segura(fecha_fin), 'FechaFinContratoTextoMayuscula': formato_fecha_texto(fecha_fin, True), 'FechaFinContratoTextoMinuscula': formato_fecha_texto(fecha_fin, False),
+        'FechaNacimientoISO': fecha_iso_segura(fecha_nac), 'FechaNacimientoGuion': fecha_sin_hora(fecha_nac).replace('/','-'), 'FechaNacimientoBarra': fecha_sin_hora(fecha_nac),
+        'FechaNacimientoTextoMayuscula': formato_fecha_texto(fecha_nac, True), 'FechaNacimientoTextoMinuscula': formato_fecha_texto(fecha_nac, False),
+        'ApellidoPaternoTrabajador': ap_pat, 'ApellidoMaternoTrabajador': ap_mat, 'NombreTrabajador': nombres, 'Estado': 'Activo', 'Condicion': 'ACTIVO' if row_get(t, 'activo', 1) else 'INACTIVO',
+        'CentroCosto': empresa, 'NombreMoneda': 'Sol Peruano', 'SimboloMoneda': 'S/', 'NombreTipoDocumentoIdentidad': 'DOC. NACIONAL DE IDENTIDAD', 'NombreCortoTipoDocumentoIdentidad': 'DNI',
+        'RemunBasica': remuneracion, 'RemuneracionBasica': remuneracion, 'RemunBasicaAgraria': remuneracion, 'EstadoCivil': estado_civil, 'SistemaPensionario': sistema_pensionario, 'Nacionalidad': row_get(t, 'nacionalidad') or 'PERUANA'
     }
     salida=[]
     for campo, ejemplo in CAMPOS_ESQUEMA_TRABAJADOR_CONTRATO_LABORAL:
-        # PRO: no usar ejemplos como datos reales. Si no existe información, queda vacío y se bloquea el envío.
         salida.append((campo, clean(base.get(campo))))
+    for campo, valor in base.items():
+        if not any(c == campo for c, v in salida): salida.append((campo, clean(valor)))
     return salida
-
-
 
 
 def mapa_campos_trabajador(trabajador=None):
@@ -1389,11 +1418,11 @@ def validar_datos_plantilla(pid, dni=''):
     with db() as con:
         pl = con.execute('SELECT * FROM contratacion_plantillas WHERE id=?', (pid,)).fetchone()
         campos = con.execute('SELECT * FROM contratacion_plantilla_campos WHERE plantilla_id=? AND activo=1 ORDER BY id', (pid,)).fetchall() if pl else []
-        trabajador = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone() if dni else None
+        trabajador = datos_unificados_contratacion(dni) if dni else None
     if not pl:
         return {'ok': False, 'error':'Plantilla no encontrada', 'faltantes':['Plantilla'], 'valores':{}, 'trabajador':None, 'plantilla':None, 'campos_usados':[]}
-    if not trabajador:
-        return {'ok': False, 'error':'Trabajador no encontrado', 'faltantes':['Trabajador/DNI'], 'valores':{}, 'trabajador':None, 'plantilla':pl, 'campos_usados':[]}
+    if not trabajador or es_valor_incompleto(trabajador.get('nombre')):
+        return {'ok': False, 'error':'Trabajador no encontrado o sin ficha completa', 'faltantes':['Trabajador/DNI'], 'valores':{}, 'trabajador':None, 'plantilla':pl, 'campos_usados':[]}
     valores = mapa_campos_trabajador(trabajador)
     usados = campos_usados_en_plantilla(pl, campos)
     # Compatibilidad con nombres antiguos/similares.
@@ -3786,46 +3815,31 @@ def construir_plantilla_gestion_vacacional_xlsx(path):
     wb.save(path); return path
 
 def construir_plantilla_gestion_contratacion_xlsx(path):
-    """Plantilla Excel PRO alineada a los campos reales usados por las plantillas Word de contratación."""
+    """Plantilla Excel PRO para contratación. Encabezados amarillos = columnas formuladas."""
     wb = Workbook(); ws = wb.active; ws.title = 'BASE_CONTRATACION'
-    headers = [
-        'EMPRESA','DNI','NombreCompletoTrabajador','ApellidoPaternoTrabajador','ApellidoMaternoTrabajador','NombreTrabajador',
-        'Cargo','Puesto','Area','Gerencia','Planilla','TipoTrabajador','TipoContrato','RegimenLaboral','Actividad','Zona','Sede',
-        'FechaIniContrato','FechaFinContrato','FechaNacimientoBarra','FechaFirma','FechaInicioContratoOrigen','FechaFinContratoOrigen',
-        'DireccionActual','DireccionDNI','Departamento','Provincia','Distrito','Email','NroTelefonoMovil','EstadoCivil','SistemaPensionario',
-        'Nacionalidad','Sexo','NombreMoneda','SimboloMoneda','RemunBasica','RemunBasicaAgraria','RemuneracionLetra','MesesContrato','NumeroMesesContrato','DuracionContratoTexto',
-        'ModalidadFirma','EstadoFirma','RequiereReconocimientoFacial','RequiereFirmaDigital','Observacion'
-    ]
+    headers = ['EMPRESA','DNI','NombreCompletoTrabajador','ApellidoPaternoTrabajador','ApellidoMaternoTrabajador','NombreTrabajador','Cargo','Puesto','Area','Gerencia','Planilla','TipoTrabajador','TipoContrato','RegimenLaboral','Actividad','Zona','Sede','FechaIniContrato','FechaFinContrato','FechaNacimientoBarra','FechaFirma','FechaInicioContratoOrigen','FechaFinContratoOrigen','DireccionActual','DireccionDNI','Departamento','Provincia','Distrito','Email','NroTelefonoMovil','EstadoCivil','SistemaPensionario','Nacionalidad','Sexo','NombreMoneda','SimboloMoneda','RemunBasica','RemunBasicaAgraria','RemuneracionLetra','MesesContrato','NumeroMesesContrato','DuracionContratoTexto','ModalidadFirma','EstadoFirma','RequiereReconocimientoFacial','RequiereFirmaDigital','Observacion']
     ws.append(headers)
-    ws.append(['AQUANQA','48165133','ABANTO ANDRADE, FLOR YUBETH','ABANTO','ANDRADE','FLOR YUBETH','OPERARIO','OPERARIO','CAMPO','OPERACIONES','OBREROS RÉGIMEN AGRÍCOLA','OBRERO','INTERMITENTE OBRERO','AGRARIO','COSECHA','CAMPO','RAZURI','01/06/2026','31/12/2026','15/05/1980','01/06/2026','01/06/2026','31/12/2026','AV. EJEMPLO 123','AV. EJEMPLO 123','LA LIBERTAD','TRUJILLO','RAZURI','correo@empresa.com','999999999','SOLTERO/A','ONP','PERUANA','FEMENINO','Sol Peruano','S/','1200','1200','MIL DOSCIENTOS Y 00/100 SOLES','SIETE','7','7 meses','FACIAL + FIRMA DIGITAL','PENDIENTE','SI','SI','Ejemplo, borrar antes de cargar'])
+    ws.append(['AQUANQA I','48165133','ABANTO ANDRADE, FLOR YUBETH','','','','OPERARIO','','CAMPO','','OBREROS RÉGIMEN AGRÍCOLA','OBRERO','INTERMITENTE OBRERO','AGRARIO','COSECHA','CAMPO','GENERAL','01/06/2026','31/12/2026','15/05/1980','','','','AV. EJEMPLO 123','','LA LIBERTAD','TRUJILLO','RAZURI','correo@empresa.com','999999999','SOLTERO/A','ONP','PERUANA','FEMENINO','','','1200','','','', '', '', 'FACIAL + FIRMA DIGITAL','PENDIENTE','SI','SI','Ejemplo, borrar antes de cargar'])
     aplicar_formato_plantilla(ws, headers, '065F46')
-    agregar_validacion_lista(ws,'A',['AQUANQA','AQUANCA II'])
-    agregar_validacion_lista(ws,'L',['OBRERO','EMPLEADO','PRACTICANTE'])
-    agregar_validacion_lista(ws,'M',['INTERMITENTE OBRERO','INTERMITENTE EMPLEADO','INDETERMINADO','TEMPORAL','RENOVACIÓN'])
-    agregar_validacion_lista(ws,'N',['AGRARIO','GENERAL','PRACTICANTE'])
-    agregar_validacion_lista(ws,'P',['CAMPO','PACKING','PLANTA','OFICINA'])
-    agregar_validacion_lista(ws,'AF',['ONP','AFP INTEGRA','AFP PRIMA','AFP PROFUTURO','AFP HABITAT'])
-    agregar_validacion_lista(ws,'AQ',['FACIAL + FIRMA DIGITAL','RECONOCIMIENTO FACIAL','FIRMA DIGITAL','CARGA MANUAL RRHH'])
-    agregar_validacion_lista(ws,'AR',['PENDIENTE','VALIDADO','ENVIADO','FIRMADO','OBSERVADO','ANULADO'])
-    agregar_validacion_lista(ws,'AS',['SI','NO']); agregar_validacion_lista(ws,'AT',['SI','NO'])
-    # Hoja de control de campos Word detectados en tus plantillas reales.
-    campos=wb.create_sheet('CAMPOS_WORD_REQUERIDOS')
-    campos.append(['CAMPO WORD','OBLIGATORIO PARA ENVÍO','USADO EN DOCUMENTOS','COMENTARIO'])
-    campos_usados = ['NombreCompletoTrabajador','Dni','Cargo','FechaIniContratoBarra','FechaFinContratoBarra','FechaIniContratoTextoMinuscula','FechaNacimientoBarra','DireccionActual','Distrito','Provincia','Departamento','Email','NroTelefonoMovil','RemunBasica','RemuneracionLetra','TipoContrato','Planilla','Area','Puesto']
-    for campo in campos_usados:
-        campos.append([campo,'SI','Contratos / cargos / compromiso / beneficios','Si queda vacío, el sistema bloquea el envío y lo marca amarillo en Word.'])
-    campos.column_dimensions['A'].width=34; campos.column_dimensions['B'].width=24; campos.column_dimensions['C'].width=42; campos.column_dimensions['D'].width=72
+    colmap={h:i+1 for i,h in enumerate(headers)}; yellow=PatternFill('solid', fgColor='FFF2CC'); req_fill=PatternFill('solid', fgColor='D9EAD3')
+    formuladas={'ApellidoPaternoTrabajador':'=IFERROR(LEFT(TRIM(C2),FIND(" ",TRIM(C2)&" ")-1),"")','ApellidoMaternoTrabajador':'=IFERROR(MID(TRIM(C2),FIND(" ",TRIM(C2)&" ")+1,FIND(",",TRIM(C2)&",")-FIND(" ",TRIM(C2)&" ")-1),"")','NombreTrabajador':'=IFERROR(TRIM(MID(C2,FIND(",",C2)+1,200)),"")','Puesto':'=G2','Gerencia':'=I2','FechaFirma':'=R2','FechaInicioContratoOrigen':'=R2','FechaFinContratoOrigen':'=S2','DireccionDNI':'=X2','NombreMoneda':'="Sol Peruano"','SimboloMoneda':'="S/"','RemunBasicaAgraria':'=AK2','NumeroMesesContrato':'=IF(AND(ISNUMBER(DATEVALUE(R2)),ISNUMBER(DATEVALUE(S2))),DATEDIF(DATEVALUE(R2),DATEVALUE(S2),"m")+1,"")','MesesContrato':'=AO2','DuracionContratoTexto':'=IF(AO2="","",AO2&" meses")'}
+    for hname,f in formuladas.items():
+        c=colmap.get(hname); ws.cell(1,c).fill=yellow
+        for r in range(2,501):
+            formula=re.sub(r'([A-Z]+)2\b', lambda m:m.group(1)+str(r), f)
+            formula=formula.replace('C2',f'C{r}').replace('G2',f'G{r}').replace('I2',f'I{r}').replace('R2',f'R{r}').replace('S2',f'S{r}').replace('X2',f'X{r}').replace('AK2',f'AK{r}').replace('AO2',f'AO{r}')
+            ws.cell(r,c).value=formula
+    for hname in ['EMPRESA','DNI','NombreCompletoTrabajador','Cargo','Area','FechaIniContrato','FechaFinContrato','FechaNacimientoBarra','DireccionActual','Departamento','Provincia','Distrito','Email','NroTelefonoMovil']:
+        ws.cell(1,colmap[hname]).fill=req_fill
+    agregar_validacion_lista(ws,'A',['AQUANQA I','AQUANQA II']); agregar_validacion_lista(ws,'L',['OBRERO','EMPLEADO','PRACTICANTE']); agregar_validacion_lista(ws,'M',['INTERMITENTE OBRERO','INTERMITENTE EMPLEADO','INDETERMINADO','TEMPORAL','RENOVACIÓN']); agregar_validacion_lista(ws,'N',['AGRARIO','GENERAL','PRACTICANTE']); agregar_validacion_lista(ws,'P',['CAMPO','PACKING','PLANTA','OFICINA']); agregar_validacion_lista(ws,'AF',['ONP','AFP INTEGRA','AFP PRIMA','AFP PROFUTURO','AFP HABITAT']); agregar_validacion_lista(ws,'AQ',['FACIAL + FIRMA DIGITAL','RECONOCIMIENTO FACIAL','FIRMA DIGITAL','CARGA MANUAL RRHH']); agregar_validacion_lista(ws,'AR',['PENDIENTE','VALIDADO','ENVIADO','FIRMADO','OBSERVADO','ANULADO']); agregar_validacion_lista(ws,'AS',['SI','NO']); agregar_validacion_lista(ws,'AT',['SI','NO'])
+    ws.freeze_panes='A2'
+    campos=wb.create_sheet('CAMPOS_WORD_REQUERIDOS'); campos.append(['CAMPO WORD','OBLIGATORIO PARA ENVÍO','USADO EN DOCUMENTOS','COMENTARIO'])
+    for campo in ['NombreCompletoTrabajador','Dni','Cargo','FechaIniContratoBarra','FechaFinContratoBarra','FechaIniContratoTextoMinuscula','FechaNacimientoBarra','DireccionActual','Distrito','Provincia','Departamento','Email','NroTelefonoMovil','RemunBasica','RemuneracionLetra','TipoContrato','Planilla','Area','Puesto']:
+        campos.append([campo,'SI','Contratos / documentos','Si queda vacío, bloquea envío y se marca amarillo.'])
     aplicar_formato_plantilla(campos, ['CAMPO WORD','OBLIGATORIO PARA ENVÍO','USADO EN DOCUMENTOS','COMENTARIO'], '065F46')
     ins=wb.create_sheet('INSTRUCCIONES')
-    instrucciones=[
-        ['USO'],['1. Completa BASE_CONTRATACION antes de generar o enviar documentos.'],
-        ['2. Los campos obligatorios se validan contra las plantillas Word cargadas.'],
-        ['3. Si falta un dato, el sistema bloquea el envío y permite exportar el Word observado con el campo amarillo.'],
-        ['4. Descarga el Excel de faltantes desde Plantillas Documentos para corregir la base.'],
-        ['5. No uses datos de ejemplo en producción. Borra la fila modelo.']
-    ]
-    for r in instrucciones: ins.append(r)
-    ins.column_dimensions['A'].width=120
+    for r in [['USO'],['1. Primero carga BASE_CONTRATACION como base histórica.'],['2. Luego crea requerimiento y registra postulantes. Si el DNI existe, jala datos como REINGRESANTE.'],['3. Encabezados amarillos son formulados.'],['4. Antes de firma, valida campos reales del Word y bloquea si falta información.']]: ins.append(r)
+    ins.column_dimensions['A'].width=125
     wb.save(path); return path
 
 
@@ -5652,12 +5666,17 @@ def admin_contratacion():
                         tipo_contrato = clean(_celda(row, idx, 'TIPO CONTRATO','TipoContrato','Tipo Contrato'))
                         remuneracion = clean(_celda(row, idx, 'REMUNERACION BASICA','RemuneracionBasica','RemunBasica','Basico','Básico'))
                         fecha_fin = fecha_sin_hora(_celda(row, idx, 'FECHA FIN CONTRATO','FechaFinContrato','Fecha Fin Contrato'))
+                        fecha_nac = fecha_sin_hora(_celda(row, idx, 'FECHA NACIMIENTO','FechaNacimientoBarra','Fecha Nacimiento','FechaNacimiento'))
+                        estado_civil = clean(_celda(row, idx, 'ESTADO CIVIL','EstadoCivil','Estado Civil'))
+                        sistema_pensionario = clean(_celda(row, idx, 'SISTEMA PENSIONARIO','SistemaPensionario','Sistema Pensionario'))
+                        planilla = clean(_celda(row, idx, 'PLANILLA','Planilla'))
                         existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
                         tipo = 'REINGRESANTE' if existe else 'NUEVO'
                         if existe:
                             con.execute('''UPDATE trabajadores SET nombre=?,empresa=?,cargo=?,area=?,correo=?,celular=?,activo=1,fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso),direccion=COALESCE(NULLIF(?,''),direccion),distrito=COALESCE(NULLIF(?,''),distrito),provincia=COALESCE(NULLIF(?,''),provincia),departamento=COALESCE(NULLIF(?,''),departamento),tipo_contrato=COALESCE(NULLIF(?,''),tipo_contrato),remuneracion_basica=COALESCE(NULLIF(?,''),remuneracion_basica),fecha_fin_contrato=COALESCE(NULLIF(?,''),fecha_fin_contrato) WHERE dni=?''', (nombre,empresa,cargo,area,correo,celular,fecha,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion,fecha_fin,dni))
                         else:
                             con.execute('''INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,usuario_portal,clave_portal,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion_basica,fecha_fin_contrato) VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha,celular,dni,dni,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion,fecha_fin))
+                        con.execute('''UPDATE trabajadores SET fecha_nacimiento=COALESCE(NULLIF(?,''),fecha_nacimiento), estado_civil=COALESCE(NULLIF(?,''),estado_civil), sistema_pensionario=COALESCE(NULLIF(?,''),sistema_pensionario), planilla=COALESCE(NULLIF(?,''),planilla) WHERE dni=?''', (fecha_nac, estado_civil, sistema_pensionario, planilla, dni))
                         con.execute('''INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,fecha_registro,registrado_por,direccion,departamento,provincia,distrito) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni,nombre,empresa,'GENERAL',req,act,tipo,'BASE EXCEL CONTRATOS',fecha,cargo,area,correo,celular,now_txt(),session.get('admin_user','admin'),direccion,departamento,provincia,distrito))
                         ok += 1
                     con.commit()
@@ -6385,7 +6404,7 @@ html,body{overflow-x:hidden!important;}
         const trabajadoresBase = {{}};
         {';'.join([f"trabajadoresBase['{h(t['dni'])}']={{nombre:'{h(t['nombre'])}',empresa:'{h(t['empresa'])}',cargo:'{h(t['cargo'] or '')}',area:'{h(t['area'] or '')}',correo:'{h(t['correo'] or '')}'}}" for t in trabajadores[:700]])};
         function scanDniIngreso(e){{if(e.key==='Enter'){{e.preventDefault();var v=(e.target.value||'').replace(/\D/g,'').slice(-8);var dni=document.getElementById('dni_ingreso');if(dni){{dni.value=v;detectarReingreso();dni.focus();}}}}}}
-        function detectarReingreso(){{const dni=document.getElementById('dni_ingreso').value.replace(/\D/g,''); const t=trabajadoresBase[dni]; const tipo=document.getElementById('tipo_ingreso'); const origen=document.getElementById('origen_validacion'); if(t){{tipo.value='REINGRESANTE'; origen.value='BASE HISTORICA INTERNA'; if(!document.getElementById('trabajador_ingreso').value) document.getElementById('trabajador_ingreso').value=t.nombre; ['empresa','cargo','area','correo','celular'].forEach(k=>{{const el=document.getElementById(k+'_ingreso'); if(el && !el.value) el.value=t[k]||'';}});}} else {{tipo.value='NUEVO'; origen.value='NUEVO / CONSULTA NISIRA PENDIENTE';}}}}
+        async function detectarReingreso(){{const dni=document.getElementById('dni_ingreso').value.replace(/\D/g,''); const tipo=document.getElementById('tipo_ingreso'); const origen=document.getElementById('origen_validacion'); if(dni.length!==8) return; let t=trabajadoresBase[dni]||null; try{{const r=await fetch('/api/contratacion/trabajador/'+dni); const j=await r.json(); if(j.ok) t=j.trabajador;}}catch(e){{}} if(t){{tipo.value='REINGRESANTE'; origen.value='BASE HISTORICA EXCEL / POSTULANTES'; const map={{trabajador_ingreso:(t.nombre||t.trabajador), empresa_ingreso:t.empresa, cargo_ingreso:t.cargo, area_ingreso:t.area, correo_ingreso:t.correo, celular_ingreso:t.celular}}; Object.keys(map).forEach(id=>{{const el=document.getElementById(id); if(el && !el.value) el.value=map[id]||'';}}); ['direccion','departamento','provincia','distrito','estado_civil','sistema_pensionario','ultima_empresa','discapacidad','cantidad_hijos','cuenta_bancaria','talla_indumentaria','contacto_emergencia'].forEach(k=>{{const el=document.querySelector('[name="'+k+'"]'); if(el && !el.value && t[k]) el.value=t[k];}});}} else {{tipo.value='NUEVO'; origen.value='NUEVO / COMPLETAR FICHA';}}}}
         let streamIngreso=null; async function activarCamaraIngreso(){{try{{streamIngreso=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'user'}},audio:false}});document.getElementById('camVideo').srcObject=streamIngreso;}}catch(e){{alert('No se pudo activar cámara. Use HTTPS/Render o adjunte foto.')}}}}
         function capturarFotoIngreso(){{const v=document.getElementById('camVideo'),c=document.getElementById('camCanvas'),img=document.getElementById('camPreview'); if(!v||!v.videoWidth){{alert('Active la cámara primero.');return;}} c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0); const data=c.toDataURL('image/jpeg',0.90); document.getElementById('foto_base64').value=data; img.src=data; img.style.display='block';}}
         function apagarCamaraIngreso(){{if(streamIngreso){{streamIngreso.getTracks().forEach(t=>t.stop());streamIngreso=null;}}}}
@@ -7226,6 +7245,14 @@ def contratacion_doc_log(doc_id):
     return render_page(content, active='Gestion Contratacion:ficha')
 
 # API compatibles
+
+@app.route('/api/contratacion/trabajador/<dni>')
+@admin_required
+def api_contratacion_trabajador(dni):
+    data = datos_unificados_contratacion(dni)
+    ok = bool(data and not es_valor_incompleto(data.get('nombre')))
+    return jsonify({'ok': ok, 'tipo': 'REINGRESANTE' if ok else 'NUEVO', 'trabajador': data})
+
 @app.route('/api/health')
 def api_health(): return jsonify({'ok': True, 'mensaje': 'Portal PRIZE activo - optimizado Render Free'})
 @app.route('/api/boleta/<dni>')
