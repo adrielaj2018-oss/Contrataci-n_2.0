@@ -3198,7 +3198,6 @@ def sidebar(active):
             <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span></a>
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
-            <a class='{cls('cursos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cursos'><i class='bi bi-journal-text'></i><span class='label'>Cursos / Capacitación</span></a>
             <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
             <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-diagram-3'></i><span class='label'>Integración NISIRA</span></a>
             <div id='grp_documentaria' data-group='documentaria' class='menu-group nested force-open'>
@@ -5454,6 +5453,9 @@ def descargar_plantilla_nisira_trabajadores():
 def admin_contratacion():
     """Gestión Contratos estilo Adapta: flujos, cargas, reportes, maestros, anuncios y documentaria."""
     sec = request.args.get('sec','dashboard')
+    # Módulo Cursos/Capacitación eliminado: todo queda dentro de Inducción.
+    if sec in ('cursos','capacitacion'):
+        sec = 'induccion'
     if request.method=='POST':
         accion = request.form.get('accion','doc')
         # Acciones PRO: eliminar registros operativos desde las tablas de cada módulo.
@@ -5859,12 +5861,21 @@ def admin_contratacion():
             if huella_file and huella_file.filename and dni:
                 hname=now_file()+'_huella_'+secure_filename(huella_file.filename)
                 hpath=carpeta_bio/hname; huella_file.save(hpath); huella_ruta=str(hpath)
-            oblig = [(dni,'DNI'),(nombre,'Trabajador'),(empresa,'Empresa'),(cargo,'Puesto/Cargo'),(area,'Área'),(fecha_ingreso,'Fecha ingreso'),(fecha_nacimiento,'Fecha nacimiento'),(direccion,'Dirección'),(distrito,'Distrito'),(provincia,'Provincia'),(departamento,'Departamento'),(nacionalidad,'Nacionalidad'),(sistema_pensionario,'Sistema pensionario'),(estado_civil,'Estado civil')]
+            oblig = [(dni,'DNI'),(nombre,'Trabajador'),(empresa,'Empresa'),(cargo,'Puesto/Cargo'),(area,'Área'),(actividad,'Actividad'),(regimen_laboral,'Régimen laboral'),(tipo_contrato,'Tipo contrato'),(fecha_ingreso,'Fecha ingreso / inicio contrato'),(fecha_fin_contrato,'Fecha fin contrato'),(fecha_nacimiento,'Fecha nacimiento'),(direccion,'Dirección'),(distrito,'Distrito'),(provincia,'Provincia'),(departamento,'Departamento'),(remuneracion_basica,'Remuneración básica'),(nacionalidad,'Nacionalidad')]
             faltan = [nom for val,nom in oblig if not val]
             if faltan:
                 flash('Campos obligatorios pendientes: ' + ', '.join(faltan), 'error')
                 return redirect(url_for('admin_contratacion', sec='nuevos'))
             with db() as con:
+                # Bloquea duplicado real por requerimiento y controla cupos solicitados.
+                ing_existe_pre = con.execute('SELECT id FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni,requerimiento)).fetchone() if requerimiento else None
+                if not ing_existe_pre and requerimiento:
+                    req_row = con.execute('SELECT cantidad FROM contratacion_requerimientos WHERE ticket=? LIMIT 1', (requerimiento,)).fetchone()
+                    if req_row and int(req_row['cantidad'] or 0) > 0:
+                        registrados = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (requerimiento,)).fetchone()[0]
+                        if registrados >= int(req_row['cantidad'] or 0):
+                            flash(f'Cupo completo para el requerimiento {requerimiento}. Solicitados: {req_row["cantidad"]}, registrados: {registrados}.', 'error')
+                            return redirect(url_for('admin_contratacion', sec='nuevos'))
                 existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
                 if existe:
                     con.execute("""UPDATE trabajadores SET nombre=?, empresa=?, cargo=?, area=?, correo=?, celular=?, activo=1, fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso), observacion=?, foto_ruta=COALESCE(NULLIF(?,''),foto_ruta), fecha_nacimiento=COALESCE(NULLIF(?,''),fecha_nacimiento), fecha_fin_contrato=COALESCE(NULLIF(?,''),fecha_fin_contrato), tipo_contrato=COALESCE(NULLIF(?,''),tipo_contrato), remuneracion_basica=COALESCE(NULLIF(?,''),remuneracion_basica) WHERE dni=?""", (nombre,empresa,cargo,area,correo,celular,fecha_ingreso,obs,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica,dni))
@@ -5912,6 +5923,14 @@ def admin_contratacion():
                             con.execute('UPDATE trabajadores SET nombre=?,empresa=?,cargo=?,area=?,correo=?,celular=?,activo=1,fecha_ingreso=COALESCE(NULLIF(?,""),fecha_ingreso) WHERE dni=?', (nombre,empresa,cargo,area,correo,celular,fecha,dni))
                         else:
                             con.execute('INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,usuario_portal,clave_portal) VALUES(?,?,?,?,?,?,1,?,?,?,?,?)', (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha,celular,dni,dni))
+                        if req and con.execute('SELECT 1 FROM contratacion_ingresos WHERE dni=? AND requerimiento=? LIMIT 1', (dni,req)).fetchone():
+                            continue
+                        if req:
+                            req_row = con.execute('SELECT cantidad FROM contratacion_requerimientos WHERE ticket=? LIMIT 1', (req,)).fetchone()
+                            if req_row and int(req_row['cantidad'] or 0) > 0:
+                                registrados = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (req,)).fetchone()[0]
+                                if registrados >= int(req_row['cantidad'] or 0):
+                                    continue
                         con.execute('INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (dni,nombre,empresa,sede,req,act,tipo,'IMPORTADO',fecha,cargo,area,correo,celular,now_txt(),session.get('admin_user','admin')))
                         ok += 1
                     con.commit()
@@ -6345,6 +6364,21 @@ def admin_contratacion():
                     if 'INCOMPLETO' in clean(doc['estado']).upper() or 'OBSERVADO_DATOS_INCOMPLETOS' in clean(doc['ruta_archivo']).upper():
                         con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado',now_txt(),f"No se envió {doc['tipo_doc']} porque tiene datos incompletos."))
                         continue
+                    ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (doc['dni'],)).fetchone()
+                    if ing:
+                        faltan = [c for c in ['fecha_nacimiento','direccion','distrito','provincia','departamento','remuneracion_basica','cargo','area','fecha_ingreso','fecha_fin_contrato'] if c in ing.keys() and not clean(ing[c])]
+                        if faltan:
+                            flash('No se puede enviar a firma. Faltan datos: ' + ', '.join(faltan), 'error')
+                            return redirect(url_for('admin_contratacion', sec='firma'))
+                        if clean(ing['estado_medico']).upper() not in ('APTO','APTO CON RESTRICCIONES'):
+                            flash('No se puede enviar a firma. Evaluación médica pendiente/no apta.', 'error')
+                            return redirect(url_for('admin_contratacion', sec='firma'))
+                    ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (doc['dni'],)).fetchone()
+                    if ing:
+                        faltan = [c for c in ['fecha_nacimiento','direccion','distrito','provincia','departamento','remuneracion_basica','cargo','area','fecha_ingreso','fecha_fin_contrato'] if c in ing.keys() and not clean(ing[c])]
+                        if faltan or clean(ing['estado_medico']).upper() not in ('APTO','APTO CON RESTRICCIONES'):
+                            con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado por validación final',now_txt(),'Faltan datos o evaluación médica no apta.'))
+                            continue
                     token=crear_token_firma()
                     con.execute('INSERT INTO firma_solicitudes(documento_id,dni,trabajador,metodo,estado,evidencia_ref,fecha_envio,observacion,firma_token,validacion_estado) VALUES(?,?,?,?,?,?,?,?,?,?)',(doc['id'],doc['dni'],doc['trabajador'],metodo,'Pendiente de captura facial','',now_txt(),obs,token,'PENDIENTE'))
                     con.execute("UPDATE contratacion_docs SET estado='ENVIADO A FIRMA' WHERE id=?",(doc['id'],))
@@ -6600,7 +6634,7 @@ html,body{overflow-x:hidden!important;}
 .bio-box b,.bio-box .label{position:static!important;transform:none!important;margin:0!important;}
 .bio-actions{display:flex!important;gap:12px!important;flex-wrap:wrap!important;}
 
-/* Inducción y cursos: distribución limpia */
+/* Inducción: distribución limpia */
 .learning-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(360px,430px)!important;gap:26px!important;align-items:start!important;overflow:hidden!important;}
 .learning-grid.solo-induccion{grid-template-columns:1fr!important;}
 .learning-grid.solo-induccion .eval-side{display:none!important;}
@@ -6652,23 +6686,33 @@ html,body{overflow-x:hidden!important;}
         total_cap = len(capacitaciones)
         total_ind = len(indumentarias)
         total_nisira = len(lotes_nisira)
-        aptos = len([r for r in medicas if (r['estado'] or '').upper()=='APTO'])
-        avance = min(100, round(((total_med+total_cap+total_ind) / max(total_ing*3,1))*100, 1)) if total_ing else 0
+        aptos = len([r for r in medicas if (r['estado'] or '').upper() in ('APTO','APTO CON RESTRICCIONES')])
+        campos_minimos = ['dni','trabajador','empresa','cargo','area','fecha_ingreso','fecha_nacimiento','direccion','distrito','provincia','departamento','remuneracion_basica']
+        incompletos = 0
+        for _r in ingresos:
+            try:
+                if any(not clean(_r[c]) for c in campos_minimos if c in _r.keys()):
+                    incompletos += 1
+            except Exception:
+                pass
+        completos = max(total_ing - incompletos, 0)
+        pendientes_firma = len([r for r in firma_sols if 'PENDIENTE' in clean(r['estado']).upper()]) if 'firma_sols' in locals() else 0
+        avance = min(100, round(((aptos+total_ind+completos) / max(total_ing*3,1))*100, 1)) if total_ing else 0
         ult_rows=''.join([f"<tr><td>—</td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos[:10]]) or "<tr><td colspan='7'>Sin ingresos registrados.</td></tr>"
         content=wrap(f"""
         <section class='dashboard-contratacion'>
           <div class='dash-hero'>
-            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, cursos, indumentaria, fotocheck, NISIRA y Gestión Documental.</p></div>
+            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, indumentaria, fotocheck, NISIRA y Gestión Documental.</p></div>
             <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=requerimientos'>Nuevo ticket</a><a class='c-btn gray' href='/admin/contratacion?sec=nuevos'>Registrar trabajador</a></div>
           </div>
-          <div class='dash-kpis'><div class='dash-card'><small>Tickets</small><b>{total_req}</b></div><div class='dash-card'><small>Postulantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Lotes NISIRA</small><b>{total_nisira}</b></div></div>
-          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, capacitación e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=cursos'>Cursos</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
+          <div class='dash-kpis'><div class='dash-card'><small>Tickets</small><b>{total_req}</b></div><div class='dash-card'><small>Postulantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Fichas completas</small><b>{completos}</b></div><div class='dash-card'><small>Incompletos</small><b style='color:#dc2626'>{incompletos}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Pendientes firma</small><b>{pendientes_firma}</b></div></div>
+          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, inducción e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
           <div class='dash-card table-wrap'><h2>Últimos registros del embudo</h2><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Ingreso</th><th>Sede</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
         </section>
         """)
     elif sec=='requerimientos':
         req_options=''.join([f"<option value='{h(r['ticket'])}'>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['actividad'])}</option>" for r in requerimientos])
-        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='8'>Sin requerimientos registrados.</td></tr>"
+        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><span class='status-pill'>{len([x for x in ingresos if x['requerimiento']==r['ticket']])}/{h(r['cantidad'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='8'>Sin requerimientos registrados.</td></tr>"
         trabajadores_scan_js = json.dumps({normalizar_dni(r['dni']): {'nombre': (r['nombre'] or ''), 'empresa': (r['empresa'] or ''), 'cargo': (r['cargo'] or ''), 'area': (r['area'] or ''), 'correo': (r['correo'] or '')} for r in trabajadores}, ensure_ascii=False)
         content=wrap(f'''
         <h2 class='c-title'>Requerimiento de personal</h2>
@@ -6740,9 +6784,9 @@ html,body{overflow-x:hidden!important;}
         {bandeja_operativa('tabla_embudo_medica')}
         <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, clínica, aptitud, observación'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_medica' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_medica' class='c-table'><tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Clínica</th><th>Programada</th><th>Resultado</th><th>Estado</th><th>Observación</th></tr>{med_rows}</table></div>
         """)
-    elif sec in ('capacitacion','induccion','cursos'):
+    elif sec in ('induccion',):
         es_ind = (sec=='induccion')
-        titulo_mod = 'Inducción laboral' if es_ind else 'Cursos y capacitación'
+        titulo_mod = 'Inducción laboral'
         desc_mod = 'Carga temas de inducción por etapa y asigna videos obligatorios al trabajador.' if es_ind else 'Administra cursos, videos, evaluaciones, exámenes y estados por trabajador.'
         opciones_curso = "<option>Bienvenida corporativa</option><option>SST inducción</option><option>Reglamento interno</option><option>Uso de EPP</option><option>Buenas prácticas agrícolas</option><option>Código de conducta</option>" if es_ind else "<option>Curso SST</option><option>Buenas prácticas agrícolas</option><option>Manipulación de alimentos</option><option>Bioseguridad</option><option>Calidad</option><option>Uso de herramientas</option><option>Curso personalizado</option>"
         cap_rows=''.join([f"<tr><td><input type='checkbox' name='cap_ids' value='{r['id']}'></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['curso'])}</td><td>{h(r['archivo_video_nombre'] or r['video_url'])}</td><td>{h(r['nota'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar capacitación?&quot;)'><input type='hidden' name='accion' value='eliminar_capacitacion'><input type='hidden' name='capacitacion_id' value='{r['id']}'><button class='delete-mini'>Eliminar</button></form></td><td>{h(r['observacion'])}</td></tr>" for r in capacitaciones])
@@ -7137,7 +7181,7 @@ html,body{overflow-x:hidden!important;}
         periodos_html = ''.join([f"<span class='mini-chip'>{h(p['periodo_inicio'])}/{h(p['periodo_fin'])} · saldo {h(p['saldo'])}</span>" for p in vac_periodos]) or '<span class="mini-chip">Sin periodos cargados</span>'
 
         content=wrap(f"""
-        <h2 class='c-title'>Ficha Trabajador</h2>
+        <h2 class='c-title'>Expediente Único del Trabajador</h2>
         <form method='get' action='/admin/contratacion' class='ficha-search'>
           <input type='hidden' name='sec' value='ficha'>
           <input name='dni' value='{h(dni_sel)}' list='trabajadores_ficha_list' placeholder='Buscar por DNI'>
