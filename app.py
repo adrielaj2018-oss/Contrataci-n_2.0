@@ -1451,6 +1451,15 @@ def sincronizar_campos_desde_word(plantilla_id, ruta_archivo):
         con.commit()
     return n
 
+
+def sincronizar_campos_desde_word_seguro(plantilla_id, ruta_archivo):
+    """Versión segura para carga de plantillas: registra campos si puede, pero no genera Internal Server Error."""
+    try:
+        return sincronizar_campos_desde_word(plantilla_id, ruta_archivo)
+    except Exception as e:
+        print('Error detectando campos de Word:', e)
+        return 0
+
 def reemplazar_texto_docx(doc, valores):
     """Reemplaza campos {{CampoOrigen}} y «CampoOrigen» en párrafos y tablas de un Word."""
     def repl(txt):
@@ -1531,12 +1540,17 @@ def generar_docx_desde_plantilla(pid, dni=''):
 
 
 def docx_to_preview_html(path, valores=None):
-    """Vista previa simple de Word en HTML: párrafos y tablas con campos reemplazados."""
+    """Vista previa simple de Word en HTML: párrafos y tablas con campos reemplazados.
+    PRO: nunca debe tumbar Flask si el Word está corrupto, protegido o Render no tiene dependencia.
+    """
     if Document is None:
         return '<div class="preview-empty"><b>No se puede previsualizar Word porque falta python-docx.</b><br>Solución: el ZIP ya incluye <code>python-docx==1.1.2</code> en requirements.txt. En Render usa <b>Clear build cache & deploy</b>; en local ejecuta <code>pip install -r requirements.txt</code>.</div>'
-    doc = Document(str(path))
-    if valores:
-        reemplazar_texto_docx(doc, valores)
+    try:
+        doc = Document(str(path))
+        if valores:
+            reemplazar_texto_docx(doc, valores)
+    except Exception as e:
+        return f'<div class="preview-empty"><b>Plantilla Word cargada correctamente, pero no se pudo generar la vista previa.</b><br>Archivo: {html.escape(Path(path).name)}<br>Detalle técnico: {html.escape(str(e))}<br><br><a class="c-btn gray" href="javascript:history.back()">Volver</a></div>'
     parts = ["<div class='word-preview'>"]
     for p in doc.paragraphs:
         txt = html.escape(p.text or '').replace('\n','<br>')
@@ -5714,6 +5728,10 @@ def admin_contratacion():
             carpeta = UPLOAD_DIR/'contratacion'/'plantillas'; carpeta.mkdir(parents=True, exist_ok=True)
             if f and f.filename:
                 archivo_nombre = secure_filename(f.filename)
+                ext_arch = Path(archivo_nombre).suffix.lower()
+                if ext_arch not in {'.docx', '.doc', '.pdf'}:
+                    flash('Formato no permitido. Carga una plantilla Word .docx/.doc o PDF.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='plantillas'))
                 path = carpeta/(now_file()+'_'+archivo_nombre)
                 f.save(path); ruta = str(path)
             with db() as con:
@@ -5723,14 +5741,14 @@ def admin_contratacion():
                         ruta=row['ruta_archivo']; archivo_nombre=row['archivo_nombre']
                     activo = 1 if ruta else 0
                     con.execute('''UPDATE contratacion_plantillas SET nombre_plantilla=?,descripcion=?,tipo_documento=?,esquema=?,condicion=?,version=?,activo=?,archivo_nombre=?,ruta_archivo=?,fecha_actualizacion=? WHERE id=?''', (nombre,descripcion,tipo_doc,esquema,condicion,version,activo,archivo_nombre,ruta,now_txt(),pid))
-                    detectados = sincronizar_campos_desde_word(pid, ruta) if ruta else 0
+                    detectados = sincronizar_campos_desde_word_seguro(pid, ruta) if ruta else 0
                     flash(('Plantilla actualizada correctamente. Campos Word detectados: ' + str(detectados)) if detectados else 'Plantilla actualizada correctamente.', 'ok')
                     redir = url_for('contratacion_plantilla_detalle', pid=pid, tab='contenido')
                 else:
                     activo = 1 if ruta else 0
                     cur=con.execute('''INSERT INTO contratacion_plantillas(nombre_plantilla,descripcion,tipo_documento,esquema,condicion,version,activo,archivo_nombre,ruta_archivo,fecha_creacion,fecha_actualizacion,creado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', (nombre,descripcion,tipo_doc,esquema,condicion,version,activo,archivo_nombre,ruta,now_txt(),now_txt(),marca_carga(session.get('admin_user','admin'))))
                     nuevo_id=cur.lastrowid
-                    detectados = sincronizar_campos_desde_word(nuevo_id, ruta) if ruta else 0
+                    detectados = sincronizar_campos_desde_word_seguro(nuevo_id, ruta) if ruta else 0
                     for nom,origen,td in CONTRATACION_CAMPOS_CORRESPONDENCIA:
                         con.execute('INSERT INTO contratacion_plantilla_campos(plantilla_id,nombre_campo,campo_origen,tipo_dato) VALUES(?,?,?,?)',(nuevo_id,nom,origen,td))
                     if condicion == 'CONDICIONES':
@@ -6567,6 +6585,28 @@ html,body{overflow-x:hidden!important;}
           </div>
         </div>
         <div class='c-card table-wrap' style='margin:18px 0'><h2>Base Excel cargada / trabajadores para contratos</h2><table class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Requerimiento</th><th>Cargo</th><th>Ingreso</th><th>Estado</th></tr>{base_excel_rows}</table></div>
+        <style>
+        /* === FIX PRO Plantilla Documentos 29-05 === */
+        #crearPlantilla.modal-prize{{background:rgba(15,23,42,.36)!important;backdrop-filter:blur(3px)!important;padding:22px!important;overflow:auto!important}}
+        #crearPlantilla .modal-box{{max-width:980px!important;width:min(980px,calc(100vw - 48px))!important;margin:8px auto!important;background:#f8fafc!important;color:#0f172a!important;border:1px solid #dbe7ef!important;border-radius:22px!important;box-shadow:0 28px 70px rgba(15,23,42,.24)!important;overflow:hidden!important}}
+        #crearPlantilla .modal-head{{background:linear-gradient(135deg,#ecfdf5,#f8fafc)!important;border-bottom:1px solid #dbe7ef!important;padding:14px 20px!important}}
+        #crearPlantilla .modal-head h2{{font-size:22px!important;color:#0f172a!important;margin:0!important;font-weight:850!important}}
+        #crearPlantilla .modal-close{{color:#0f172a!important;background:#e2e8f0!important;border-radius:12px!important;width:36px!important;height:36px!important;display:grid!important;place-items:center!important;text-decoration:none!important}}
+        #crearPlantilla .modal-body{{background:#f8fafc!important;padding:18px 22px!important}}
+        #crearPlantilla .modal-form{{display:grid!important;grid-template-columns:190px minmax(0,1fr)!important;gap:10px 16px!important;align-items:center!important}}
+        #crearPlantilla .modal-form label{{color:#0f766e!important;font-size:15px!important;line-height:1.2!important;font-weight:800!important;text-align:right!important;text-shadow:none!important}}
+        #crearPlantilla .modal-form label.req{{color:#059669!important}}
+        #crearPlantilla input,#crearPlantilla select,#crearPlantilla textarea{{width:100%!important;min-height:42px!important;background:#fff!important;color:#0f172a!important;border:1.5px solid #cbd5e1!important;border-radius:13px!important;padding:10px 13px!important;font-size:15px!important;font-weight:650!important;box-shadow:none!important}}
+        #crearPlantilla textarea{{min-height:72px!important;resize:vertical!important}}
+        #crearPlantilla input:focus,#crearPlantilla select:focus,#crearPlantilla textarea:focus{{outline:none!important;border-color:#10b981!important;box-shadow:0 0 0 4px rgba(16,185,129,.16)!important}}
+        #crearPlantilla .modal-help{{grid-column:2!important;margin-top:-7px!important;color:#16a34a!important;font-size:13px!important;font-weight:700!important}}
+        #crearPlantilla .file-row{{background:#fff!important;border:1.5px dashed #94a3b8!important;border-radius:13px!important;padding:8px 10px!important;color:#0f172a!important}}
+        #crearPlantilla .file-row input{{border:0!important;padding:0!important;min-height:32px!important}}
+        #crearPlantilla .modal-actions{{grid-column:1/-1!important;display:flex!important;justify-content:flex-end!important;gap:12px!important;margin-top:8px!important;padding-top:14px!important;border-top:1px solid #e2e8f0!important}}
+        #crearPlantilla .c-btn{{min-height:42px!important;padding:10px 22px!important;border-radius:13px!important;font-size:14px!important}}
+        #crearPlantilla .c-btn.gray{{background:#e2e8f0!important;color:#0f172a!important}}
+        @media(max-width:760px){{#crearPlantilla .modal-box{{width:calc(100vw - 24px)!important}}#crearPlantilla .modal-form{{grid-template-columns:1fr!important}}#crearPlantilla .modal-form label{{text-align:left!important}}#crearPlantilla .modal-help{{grid-column:1!important}}#crearPlantilla .modal-actions{{justify-content:stretch!important;flex-direction:column!important}}}}
+        </style>
         <div class='c-card filter-card' style='padding:18px'>
           <form method='get' action='/admin/contratacion' class='plantilla-filter'>
             <input type='hidden' name='sec' value='plantillas'>
