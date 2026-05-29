@@ -1331,15 +1331,92 @@ def valores_esquema_desde_trabajador(trabajador=None):
     }
     salida=[]
     for campo, ejemplo in CAMPOS_ESQUEMA_TRABAJADOR_CONTRATO_LABORAL:
-        salida.append((campo, clean(base.get(campo)) or clean(ejemplo)))
+        # PRO: no usar ejemplos como datos reales. Si no existe información, queda vacío y se bloquea el envío.
+        salida.append((campo, clean(base.get(campo))))
     return salida
 
 
 
 
 def mapa_campos_trabajador(trabajador=None):
-    """Diccionario CampoOrigen -> valor real del trabajador para combinar correspondencia."""
+    """Diccionario CampoOrigen -> valor real del trabajador para combinar correspondencia.
+    PRO: no usa datos de ejemplo. Si un campo no existe en BD queda vacío para validar antes de enviar.
+    """
     return {campo: valor for campo, valor in valores_esquema_desde_trabajador(trabajador)}
+
+
+def es_valor_incompleto(v):
+    txt = clean(v).strip()
+    if not txt:
+        return True
+    basura = {'0001-01-01','01/01/0001','01-01-0001','NONE','NULL','N/A','NA','SIN DATO','SIN DATOS','PENDIENTE'}
+    return txt.upper() in basura
+
+
+def campos_usados_en_plantilla(pl=None, campos_registrados=None):
+    """Devuelve los campos Word realmente usados por la plantilla.
+    Prioriza lo detectado dentro del .docx; si no puede leerlo, usa los campos activos registrados.
+    """
+    usados = []
+    try:
+        ruta = Path(pl['ruta_archivo']) if pl and pl['ruta_archivo'] else None
+        if ruta and ruta.exists() and ruta.suffix.lower() == '.docx':
+            usados = extraer_campos_word_docx(ruta)
+    except Exception:
+        usados = []
+    if not usados and campos_registrados:
+        for c in campos_registrados:
+            try:
+                if int(c['activo'] or 0) and clean(c['requerido'] or 'SI').upper() == 'SI':
+                    usados.append(clean(c['campo_origen'] or c['nombre_campo']))
+            except Exception:
+                usados.append(clean(c['campo_origen'] or c['nombre_campo']))
+    # Campos técnicos/no críticos que no deben bloquear el envío si no están en BD.
+    no_bloquea = {'Comentario','SituacionEspecial','Cuspp','Indeterminado'}
+    salida=[]
+    for x in usados:
+        x=clean(x)
+        if x and x not in salida and x not in no_bloquea:
+            salida.append(x)
+    return salida
+
+
+def validar_datos_plantilla(pid, dni=''):
+    """Valida si el trabajador tiene todos los datos que pide el Word.
+    Retorna dict con ok, faltantes, valores, trabajador, plantilla.
+    """
+    dni = normalizar_dni(dni)
+    with db() as con:
+        pl = con.execute('SELECT * FROM contratacion_plantillas WHERE id=?', (pid,)).fetchone()
+        campos = con.execute('SELECT * FROM contratacion_plantilla_campos WHERE plantilla_id=? AND activo=1 ORDER BY id', (pid,)).fetchall() if pl else []
+        trabajador = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone() if dni else None
+    if not pl:
+        return {'ok': False, 'error':'Plantilla no encontrada', 'faltantes':['Plantilla'], 'valores':{}, 'trabajador':None, 'plantilla':None, 'campos_usados':[]}
+    if not trabajador:
+        return {'ok': False, 'error':'Trabajador no encontrado', 'faltantes':['Trabajador/DNI'], 'valores':{}, 'trabajador':None, 'plantilla':pl, 'campos_usados':[]}
+    valores = mapa_campos_trabajador(trabajador)
+    usados = campos_usados_en_plantilla(pl, campos)
+    # Compatibilidad con nombres antiguos/similares.
+    equivalencias = {
+        'FechaInicioContrato':'FechaIniContrato', 'FechaFinContratoOrigen':'FechaFinContrato',
+        'RemuneracionBasica':'RemunBasica', 'Remuneración Básica':'RemunBasica',
+        'Telefono':'NroTelefonoMovil', 'Celular':'NroTelefonoMovil',
+    }
+    faltantes=[]
+    for campo in usados:
+        key = equivalencias.get(campo, campo)
+        valor = valores.get(key, valores.get(campo, ''))
+        if es_valor_incompleto(valor):
+            faltantes.append(campo)
+    return {'ok': len(faltantes)==0, 'error':'', 'faltantes':faltantes, 'valores':valores, 'trabajador':trabajador, 'plantilla':pl, 'campos_usados':usados}
+
+
+def resumen_validacion_html(resultado):
+    faltantes = resultado.get('faltantes') or []
+    if not faltantes:
+        return "<span class='cond-ok'>✅ Datos completos. Documento habilitado para generar/enviar.</span>"
+    lis = ''.join(f"<li><code>{html.escape(x)}</code></li>" for x in faltantes)
+    return f"<div class='missing-box'><b>⚠ Faltan datos obligatorios. No se debe enviar el documento.</b><ul>{lis}</ul><small>Completa la ficha del trabajador/base Excel y vuelve a previsualizar.</small></div>"
 
 
 def evaluar_condicion_valor(actual, operador, esperado):
@@ -1492,19 +1569,85 @@ def reemplazar_texto_docx(doc, valores):
     return doc
 
 
+def reemplazar_texto_docx_validado(doc, valores, faltantes=None):
+    """Reemplaza campos y marca en amarillo los campos faltantes dentro del Word exportado."""
+    try:
+        from docx.enum.text import WD_COLOR_INDEX
+    except Exception:
+        WD_COLOR_INDEX = None
+    faltantes = set(faltantes or [])
+    patron = re.compile(r'(«\s*([^»\n\r]+?)\s*»|\{\{\s*([^}\n\r]+?)\s*\}\})')
+    equivalencias = {'FechaInicioContrato':'FechaIniContrato', 'RemuneracionBasica':'RemunBasica'}
+
+    def partes(txt):
+        pos = 0
+        for m in patron.finditer(txt or ''):
+            if m.start() > pos:
+                yield ('texto', txt[pos:m.start()], None)
+            campo = clean(m.group(2) or m.group(3)).replace(' ', '')
+            key = equivalencias.get(campo, campo)
+            val = clean(valores.get(key, valores.get(campo, '')))
+            if campo in faltantes or key in faltantes or es_valor_incompleto(val):
+                yield ('faltante', f'«{campo}»', campo)
+            else:
+                yield ('valor', val, campo)
+            pos = m.end()
+        if pos < len(txt or ''):
+            yield ('texto', txt[pos:], None)
+
+    def proc_paragraph(p):
+        full = ''.join(run.text for run in p.runs)
+        if not patron.search(full or ''):
+            return
+        for run in p.runs:
+            run.text = ''
+        first = True
+        for tipo, texto, campo in partes(full):
+            r = p.runs[0] if first and p.runs else p.add_run()
+            first = False
+            r.text = texto
+            if tipo == 'faltante':
+                r.bold = True
+                if WD_COLOR_INDEX:
+                    r.font.highlight_color = WD_COLOR_INDEX.YELLOW
+    for p in doc.paragraphs:
+        proc_paragraph(p)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    proc_paragraph(p)
+    return doc
+
+
+def reemplazar_campos_html(texto, valores, faltantes=None):
+    faltantes=set(faltantes or [])
+    equivalencias={'FechaInicioContrato':'FechaIniContrato','RemuneracionBasica':'RemunBasica'}
+    def repl(m):
+        campo=clean(m.group(1) or m.group(2)).replace(' ','')
+        key=equivalencias.get(campo,campo)
+        val=clean(valores.get(key, valores.get(campo,'')))
+        if campo in faltantes or key in faltantes or es_valor_incompleto(val):
+            return f"<mark class='miss-field'>«{html.escape(campo)}»</mark>"
+        return html.escape(val)
+    return re.sub(r'«\s*([^»\n\r]+?)\s*»|\{\{\s*([^}\n\r]+?)\s*\}\}', repl, texto or '')
+
+
 def generar_docx_desde_plantilla(pid, dni=''):
-    """Genera un DOCX final combinado con datos del trabajador y valida condiciones."""
+    """Genera un DOCX combinado. Si faltan datos, exporta el Word con campos faltantes marcados en amarillo."""
     if Document is None:
         raise RuntimeError('python-docx no está instalado.')
     dni = normalizar_dni(dni)
-    with db() as con:
-        pl = con.execute('SELECT * FROM contratacion_plantillas WHERE id=?', (pid,)).fetchone()
-        campos = con.execute('SELECT * FROM contratacion_plantilla_campos WHERE plantilla_id=? AND activo=1 ORDER BY id', (pid,)).fetchall()
-        condiciones = con.execute('SELECT * FROM contratacion_plantilla_condiciones WHERE plantilla_id=? ORDER BY id', (pid,)).fetchall()
-        trabajador = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone() if dni else con.execute('SELECT * FROM trabajadores ORDER BY nombre LIMIT 1').fetchone()
+    resultado = validar_datos_plantilla(pid, dni)
+    pl = resultado.get('plantilla')
+    trabajador = resultado.get('trabajador')
     if not pl:
         raise FileNotFoundError('Plantilla no encontrada.')
-    valores = mapa_campos_trabajador(trabajador)
+    valores = resultado.get('valores') or {}
+    faltantes = resultado.get('faltantes') or []
+    with db() as con:
+        campos = con.execute('SELECT * FROM contratacion_plantilla_campos WHERE plantilla_id=? AND activo=1 ORDER BY id', (pid,)).fetchall()
+        condiciones = con.execute('SELECT * FROM contratacion_plantilla_condiciones WHERE plantilla_id=? ORDER BY id', (pid,)).fetchall()
     # Asegura que todos los campos registrados existan, aunque no haya dato en trabajador.
     for c in campos:
         key = c['campo_origen'] or c['nombre_campo']
@@ -1513,7 +1656,7 @@ def generar_docx_desde_plantilla(pid, dni=''):
             valor_default = c['valor_default'] if 'valor_default' in c.keys() else ''
         except Exception:
             tipo_campo, valor_default = '', ''
-        if tipo_campo in ('MANUAL','DESPLEGABLE') and valor_default:
+        if tipo_campo in ('MANUAL','DESPLEGABLE') and valor_default and key not in faltantes:
             valores[key] = valor_default
         else:
             valores.setdefault(key, '')
@@ -1530,39 +1673,49 @@ def generar_docx_desde_plantilla(pid, dni=''):
         doc.add_paragraph('Cargo: {{Cargo}}')
         doc.add_paragraph('Planilla: {{Planilla}}')
         doc.add_paragraph('Tipo Contrato: {{TipoContrato}}')
-    reemplazar_texto_docx(doc, valores)
+    reemplazar_texto_docx_validado(doc, valores, faltantes)
+    if faltantes:
+        doc.add_page_break()
+        doc.add_heading('OBSERVACIÓN DE DATOS INCOMPLETOS', level=1)
+        doc.add_paragraph('Este documento NO debe enviarse a firma hasta completar la información marcada en amarillo.')
+        for x in faltantes:
+            doc.add_paragraph(f'Falta completar: {x}', style=None)
     safe_name = re.sub(r'[^A-Za-z0-9_ -]+', '', pl['nombre_plantilla'] or 'plantilla').strip() or 'plantilla'
     out_dir = UPLOAD_DIR / 'contratacion' / 'generados'
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"{safe_name}_{dni or 'SIN_DNI'}_{now_file()}.docx"
+    estado = 'OBSERVADO_DATOS_INCOMPLETOS' if faltantes else 'VALIDADO'
+    out = out_dir / f"{safe_name}_{dni or 'SIN_DNI'}_{estado}_{now_file()}.docx"
     doc.save(out)
-    return out, pl, trabajador, cumple, detalle
+    return out, pl, trabajador, (cumple and not faltantes), detalle, faltantes
 
 
-def docx_to_preview_html(path, valores=None):
-    """Vista previa simple de Word en HTML: párrafos y tablas con campos reemplazados.
-    PRO: nunca debe tumbar Flask si el Word está corrupto, protegido o Render no tiene dependencia.
-    """
+def docx_to_preview_html(path, valores=None, faltantes=None):
+    """Vista previa simple de Word en HTML. Marca en amarillo los campos faltantes."""
     if Document is None:
-        return '<div class="preview-empty"><b>No se puede previsualizar Word porque falta python-docx.</b><br>Solución: el ZIP ya incluye <code>python-docx==1.1.2</code> en requirements.txt. En Render usa <b>Clear build cache & deploy</b>; en local ejecuta <code>pip install -r requirements.txt</code>.</div>'
+        return '<div class="preview-empty"><b>No se puede previsualizar Word porque falta python-docx.</b><br>En Render usa <b>Clear build cache & deploy</b>; en local ejecuta <code>pip install -r requirements.txt</code>.</div>'
     try:
         doc = Document(str(path))
-        if valores:
-            reemplazar_texto_docx(doc, valores)
     except Exception as e:
         return f'<div class="preview-empty"><b>Plantilla Word cargada correctamente, pero no se pudo generar la vista previa.</b><br>Archivo: {html.escape(Path(path).name)}<br>Detalle técnico: {html.escape(str(e))}<br><br><a class="c-btn gray" href="javascript:history.back()">Volver</a></div>'
+    valores = valores or {}
+    faltantes = faltantes or []
     parts = ["<div class='word-preview'>"]
     for p in doc.paragraphs:
-        txt = html.escape(p.text or '').replace('\n','<br>')
+        txt = reemplazar_campos_html(p.text or '', valores, faltantes).replace('\n','<br>')
         if txt.strip():
             parts.append(f"<p>{txt}</p>")
     for table in doc.tables:
         parts.append("<table class='word-table'>")
         for row in table.rows:
-            parts.append('<tr>' + ''.join(f"<td>{html.escape(cell.text or '').replace(chr(10), '<br>')}</td>" for cell in row.cells) + '</tr>')
+            cells=[]
+            for cell in row.cells:
+                cell_txt = reemplazar_campos_html(cell.text or '', valores, faltantes).replace(chr(10), '<br>')
+                cells.append(f"<td>{cell_txt}</td>")
+            parts.append('<tr>' + ''.join(cells) + '</tr>')
         parts.append('</table>')
     parts.append('</div>')
     return ''.join(parts)
+
 
 def generar_clave_trabajador(dni, fecha_nac=''):
     """Clave del trabajador: fecha de nacimiento sin / ni guiones (ddmmaaaa)."""
@@ -2922,7 +3075,6 @@ def sidebar(active):
                 <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
                 <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantilla Documentos</span></a>
                 <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
-                <a class='menu-item sub-mini' onclick='saveSideScroll()' href='/admin/plantilla_gestion/contratacion'><i class='bi bi-files'></i><span class='label'>Plantilla Contratación</span></a>
                 <a class='{cls('nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nisira'><i class='bi bi-link-45deg'></i><span class='label'>Contratación NISIRA</span></a>
                 <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Descargas</span></a>
               </div>
@@ -3574,7 +3726,7 @@ def admin_trabajadores():
     content = f"""
     <div class='topbar'><div><h1>Trabajadores</h1><div class='subtitle'>Carga manual o masiva por Excel.</div><div class='local-note'>Respaldo local automático: REGISTROS_EXCEL_LOCAL / 01_TRABAJADORES_LOCAL.xlsx</div></div></div><section class='grid'>
     <div class='card span-12'><h2>Nuevo trabajador</h2><form method='post' class='form-grid'><div class='field'><label>DNI</label><input name='dni' required></div><div class='field'><label>Trabajador</label><input name='nombre' required></div><div class='field'><label>Correo</label><input name='correo' type='email' required></div><div class='field'><label>Cargo</label><input name='cargo'></div><div class='field'><label>Área</label><input name='area'></div><div class='field'><label>Empresa</label><select name='empresa'><option>AQUANQA</option><option>AQUANCA II</option></select></div><div class='field'><label>Jefe inmediato DNI</label><input name='jefe_dni' placeholder='DNI del jefe'></div><div class='field'><label>Jefe nombre</label><input name='jefe_nombre' placeholder='Opcional'></div><div class='field'><label>Planilla</label><input name='planilla'></div><div class='field'><label>Fecha nacimiento</label><input name='fecha_nacimiento' placeholder='dd/mm/aaaa'></div><div class='field'><label>Fecha de ingreso</label><input name='fecha_ingreso' placeholder='dd/mm/aaaa'></div><button class='btn-green'>Guardar + crear usuario</button></form></div>
-    <div class='card span-12'><h2>Carga Excel</h2><p class='muted'>Plantilla oficial maestra para Gestión Documental, Vacacional y Contratos. Acepta columnas amplias: datos laborales, jefe inmediato, emergencia, contrato, ubicación, CONADIS e indumentaria. Crea usuario masivo con DNI y clave automática.</p><form method='post' enctype='multipart/form-data' class='form-grid'><div class='field'><label>Excel plantilla masiva</label><input type='file' name='excel' accept='.xlsx' required></div><button class='btn-blue'>Importar Excel</button><a class='btn-green' href='/admin/plantilla_trabajadores'>Plantilla Trabajadores</a> <a class='btn-blue' href='/admin/plantilla_gestion/documental'>Plantilla Documental</a> <a class='btn-blue' href='/admin/plantilla_gestion/vacacional'>Plantilla Vacacional</a> <a class='btn-blue' href='/admin/plantilla_gestion/contratacion'>Plantilla Contratación</a></form></div>
+    <div class='card span-12'><h2>Carga Excel</h2><p class='muted'>Plantilla oficial maestra para Gestión Documental, Vacacional y Contratos. Acepta columnas amplias: datos laborales, jefe inmediato, emergencia, contrato, ubicación, CONADIS e indumentaria. Crea usuario masivo con DNI y clave automática.</p><form method='post' enctype='multipart/form-data' class='form-grid'><div class='field'><label>Excel plantilla masiva</label><input type='file' name='excel' accept='.xlsx' required></div><button class='btn-blue'>Importar Excel</button><a class='btn-green' href='/admin/plantilla_trabajadores'>Plantilla Trabajadores</a> <a class='btn-blue' href='/admin/plantilla_gestion/documental'>Plantilla Documental</a> <a class='btn-blue' href='/admin/plantilla_gestion/vacacional'>Plantilla Vacacional</a></form></div>
     <div class='card span-12'><h2>Listado</h2><div class='table-wrap'><table><tr><th>DNI</th><th>Nombre</th><th>Correo</th><th>Cargo</th><th>Empresa</th><th>Jefe DNI</th><th>Planilla</th></tr>{table}</table></div></div></section>"""
     return render_page(content, active='Trabajadores')
 
@@ -3634,24 +3786,48 @@ def construir_plantilla_gestion_vacacional_xlsx(path):
     wb.save(path); return path
 
 def construir_plantilla_gestion_contratacion_xlsx(path):
-    wb = Workbook(); ws = wb.active; ws.title = 'GESTION_CONTRATACION'
-    headers = ['EMPRESA','DNI','TRABAJADOR','AREA','CARGO','PLANILLA','TIPO TRABAJADOR','TIPO CONTRATO','FECHA INICIO CONTRATO','FECHA FIN CONTRATO','REMUNERACION BASICA','MONEDA','SEDE','ZONA','DIRECCION','DEPARTAMENTO','PROVINCIA','DISTRITO','MODALIDAD FIRMA','ESTADO FIRMA','PROVEEDOR FIRMA','REQUIERE RECONOCIMIENTO FACIAL','REQUIERE FIRMA DIGITAL','OBSERVACION']
+    """Plantilla Excel PRO alineada a los campos reales usados por las plantillas Word de contratación."""
+    wb = Workbook(); ws = wb.active; ws.title = 'BASE_CONTRATACION'
+    headers = [
+        'EMPRESA','DNI','NombreCompletoTrabajador','ApellidoPaternoTrabajador','ApellidoMaternoTrabajador','NombreTrabajador',
+        'Cargo','Puesto','Area','Gerencia','Planilla','TipoTrabajador','TipoContrato','RegimenLaboral','Actividad','Zona','Sede',
+        'FechaIniContrato','FechaFinContrato','FechaNacimientoBarra','FechaFirma','FechaInicioContratoOrigen','FechaFinContratoOrigen',
+        'DireccionActual','DireccionDNI','Departamento','Provincia','Distrito','Email','NroTelefonoMovil','EstadoCivil','SistemaPensionario',
+        'Nacionalidad','Sexo','NombreMoneda','SimboloMoneda','RemunBasica','RemunBasicaAgraria','RemuneracionLetra','MesesContrato','NumeroMesesContrato','DuracionContratoTexto',
+        'ModalidadFirma','EstadoFirma','RequiereReconocimientoFacial','RequiereFirmaDigital','Observacion'
+    ]
     ws.append(headers)
-    ws.append(['AQUANQA','74324033','APELLIDOS Y NOMBRES','RRHH','ANALISTA','MENSUAL','EMPLEADO','INTERMITENTE','01/05/2024','31/12/2026','1200','SOLES','TRUJILLO','OFICINA','AV. EJEMPLO 123','LA LIBERTAD','TRUJILLO','TRUJILLO','FACIAL + FIRMA DIGITAL','PENDIENTE','INTERNO','SI','SI','Ejemplo, borrar antes de cargar'])
-    aplicar_formato_plantilla(ws, headers, '4C1D95')
-    agregar_validacion_lista(ws,'A',['AQUANQA','AQUANCA II']); agregar_validacion_lista(ws,'H',['INDETERMINADO','INTERMITENTE','TEMPORAL','SUPLENCIA','PRACTICANTE','OTROS'])
-    agregar_validacion_lista(ws,'S',['RECONOCIMIENTO FACIAL','FIRMA DIGITAL','FACIAL + FIRMA DIGITAL','CARGA MANUAL RRHH'])
-    agregar_validacion_lista(ws,'T',['PENDIENTE','ENVIADO','VALIDADO FACIAL','FIRMADO DIGITAL','OBSERVADO','ANULADO'])
-    agregar_validacion_lista(ws,'V',['SI','NO']); agregar_validacion_lista(ws,'W',['SI','NO'])
-    campos=wb.create_sheet('CAMPOS_WORD')
-    campos.append(['CAMPO PARA WORD','EJEMPLO DE USO'])
-    for campo,_ in CAMPOS_ESQUEMA_TRABAJADOR_CONTRATO_LABORAL:
-        campos.append([campo, '{{'+campo+'}}'])
-    campos.column_dimensions['A'].width=34; campos.column_dimensions['B'].width=38
-    aplicar_formato_plantilla(campos, ['CAMPO PARA WORD','EJEMPLO DE USO'], '4C1D95')
-    ins=wb.create_sheet('INSTRUCCIONES'); ins.append(['Plantilla para contratación: sirve para contratos, renovaciones, estados de firma y campos de correspondencia Word.'])
+    ws.append(['AQUANQA','48165133','ABANTO ANDRADE, FLOR YUBETH','ABANTO','ANDRADE','FLOR YUBETH','OPERARIO','OPERARIO','CAMPO','OPERACIONES','OBREROS RÉGIMEN AGRÍCOLA','OBRERO','INTERMITENTE OBRERO','AGRARIO','COSECHA','CAMPO','RAZURI','01/06/2026','31/12/2026','15/05/1980','01/06/2026','01/06/2026','31/12/2026','AV. EJEMPLO 123','AV. EJEMPLO 123','LA LIBERTAD','TRUJILLO','RAZURI','correo@empresa.com','999999999','SOLTERO/A','ONP','PERUANA','FEMENINO','Sol Peruano','S/','1200','1200','MIL DOSCIENTOS Y 00/100 SOLES','SIETE','7','7 meses','FACIAL + FIRMA DIGITAL','PENDIENTE','SI','SI','Ejemplo, borrar antes de cargar'])
+    aplicar_formato_plantilla(ws, headers, '065F46')
+    agregar_validacion_lista(ws,'A',['AQUANQA','AQUANCA II'])
+    agregar_validacion_lista(ws,'L',['OBRERO','EMPLEADO','PRACTICANTE'])
+    agregar_validacion_lista(ws,'M',['INTERMITENTE OBRERO','INTERMITENTE EMPLEADO','INDETERMINADO','TEMPORAL','RENOVACIÓN'])
+    agregar_validacion_lista(ws,'N',['AGRARIO','GENERAL','PRACTICANTE'])
+    agregar_validacion_lista(ws,'P',['CAMPO','PACKING','PLANTA','OFICINA'])
+    agregar_validacion_lista(ws,'AF',['ONP','AFP INTEGRA','AFP PRIMA','AFP PROFUTURO','AFP HABITAT'])
+    agregar_validacion_lista(ws,'AQ',['FACIAL + FIRMA DIGITAL','RECONOCIMIENTO FACIAL','FIRMA DIGITAL','CARGA MANUAL RRHH'])
+    agregar_validacion_lista(ws,'AR',['PENDIENTE','VALIDADO','ENVIADO','FIRMADO','OBSERVADO','ANULADO'])
+    agregar_validacion_lista(ws,'AS',['SI','NO']); agregar_validacion_lista(ws,'AT',['SI','NO'])
+    # Hoja de control de campos Word detectados en tus plantillas reales.
+    campos=wb.create_sheet('CAMPOS_WORD_REQUERIDOS')
+    campos.append(['CAMPO WORD','OBLIGATORIO PARA ENVÍO','USADO EN DOCUMENTOS','COMENTARIO'])
+    campos_usados = ['NombreCompletoTrabajador','Dni','Cargo','FechaIniContratoBarra','FechaFinContratoBarra','FechaIniContratoTextoMinuscula','FechaNacimientoBarra','DireccionActual','Distrito','Provincia','Departamento','Email','NroTelefonoMovil','RemunBasica','RemuneracionLetra','TipoContrato','Planilla','Area','Puesto']
+    for campo in campos_usados:
+        campos.append([campo,'SI','Contratos / cargos / compromiso / beneficios','Si queda vacío, el sistema bloquea el envío y lo marca amarillo en Word.'])
+    campos.column_dimensions['A'].width=34; campos.column_dimensions['B'].width=24; campos.column_dimensions['C'].width=42; campos.column_dimensions['D'].width=72
+    aplicar_formato_plantilla(campos, ['CAMPO WORD','OBLIGATORIO PARA ENVÍO','USADO EN DOCUMENTOS','COMENTARIO'], '065F46')
+    ins=wb.create_sheet('INSTRUCCIONES')
+    instrucciones=[
+        ['USO'],['1. Completa BASE_CONTRATACION antes de generar o enviar documentos.'],
+        ['2. Los campos obligatorios se validan contra las plantillas Word cargadas.'],
+        ['3. Si falta un dato, el sistema bloquea el envío y permite exportar el Word observado con el campo amarillo.'],
+        ['4. Descarga el Excel de faltantes desde Plantillas Documentos para corregir la base.'],
+        ['5. No uses datos de ejemplo en producción. Borra la fila modelo.']
+    ]
+    for r in instrucciones: ins.append(r)
     ins.column_dimensions['A'].width=120
     wb.save(path); return path
+
 
 @app.route('/admin/plantilla_gestion/<gestion>')
 @admin_required
@@ -4298,13 +4474,15 @@ def contratacion_plantilla_detalle(pid):
         trabajador_preview = None
         with db() as con:
             trabajador_preview = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni_preview,)).fetchone() if dni_preview else con.execute('SELECT * FROM trabajadores ORDER BY nombre LIMIT 1').fetchone()
-        valores_preview = mapa_campos_trabajador(trabajador_preview)
+        validacion_preview = validar_datos_plantilla(pid, dni_preview or row_get(trabajador_preview, 'dni'))
+        valores_preview = validacion_preview.get('valores') or mapa_campos_trabajador(trabajador_preview)
+        faltantes_preview = validacion_preview.get('faltantes') or []
         cumple_cond, detalle_cond = plantilla_cumple_condiciones(pl, condiciones, trabajador_preview)
         ruta_preview = Path(pl['ruta_archivo']) if pl['ruta_archivo'] else None
         if ruta_preview and ruta_preview.exists() and str(pl['archivo_nombre']).lower().endswith('.pdf'):
             preview=f"<iframe class='pdf-frame' src='{url_for('contratacion_plantilla_archivo',pid=pid)}'></iframe>"
         elif ruta_preview and ruta_preview.exists() and ruta_preview.suffix.lower()=='.docx':
-            preview=docx_to_preview_html(ruta_preview, valores_preview)
+            preview=docx_to_preview_html(ruta_preview, valores_preview, faltantes_preview)
         elif ruta_preview and ruta_preview.exists() and ruta_preview.suffix.lower()=='.doc':
             preview=f"<div class='preview-empty'><b>Archivo Word .doc cargado:</b> {html.escape(pl['archivo_nombre'] or '')}<br><br><a class='c-btn gray' href='{url_for('contratacion_plantilla_archivo',pid=pid)}'>⬇ Descargar / abrir archivo</a><p>Para vista previa dentro del sistema se recomienda guardar la plantilla como .docx.</p></div>"
         elif ruta_preview and ruta_preview.exists():
@@ -4314,7 +4492,11 @@ def contratacion_plantilla_detalle(pid):
         dni_val = html.escape(dni_preview or row_get(trabajador_preview, 'dni') or '')
         gen_url = url_for('contratacion_plantilla_generar', pid=pid, dni=dni_val) if dni_val else url_for('contratacion_plantilla_generar', pid=pid)
         estado_cond = '✅ Cumple condiciones' if cumple_cond else '⚠ No cumple condiciones'
-        body=f"""<form class='preview-tools' method='get' action='{url_for('contratacion_plantilla_detalle',pid=pid)}'><input type='hidden' name='tab' value='contenido'><input name='dni_preview' maxlength='8' value='{dni_val}' placeholder='DNI del trabajador para previsualizar'><button class='c-btn green'>Previsualizar conectado</button><a class='c-btn gray' href='{gen_url}'>⬇ Generar Word combinado</a></form><div class='tpl-toolbar'><b>{estado_cond}</b> &nbsp; {detalle_cond}</div>{preview}"""
+        val_msg = resumen_validacion_html(validacion_preview)
+        reporte_url = url_for('contratacion_validacion_datos_excel', pid=pid, dni=dni_val) if dni_val else url_for('contratacion_validacion_datos_excel', pid=pid)
+        gen_btn_cls = 'c-btn gray' if not faltantes_preview else 'c-btn warnbtn'
+        gen_label = '⬇ Exportar Word observado' if faltantes_preview else '⬇ Generar Word combinado'
+        body=f"""<form class='preview-tools' method='get' action='{url_for('contratacion_plantilla_detalle',pid=pid)}'><input type='hidden' name='tab' value='contenido'><input name='dni_preview' maxlength='8' value='{dni_val}' placeholder='DNI del trabajador para previsualizar'><button class='c-btn green'>Previsualizar conectado</button><a class='{gen_btn_cls}' href='{gen_url}'>{gen_label}</a><a class='c-btn gray' href='{reporte_url}'>⬇ Excel faltantes</a></form><div class='tpl-toolbar'><b>{estado_cond}</b> &nbsp; {detalle_cond}</div><div class='tpl-toolbar'>{val_msg}</div>{preview}"""
     file_btn = f"<a class='c-btn gray' href='{url_for('contratacion_plantilla_archivo',pid=pid)}'>⬇ Descargar Archivo</a>"
     content=f"""
     <style>
@@ -4675,17 +4857,65 @@ def contratacion_campos_esquema_excel(pid):
 
 
 
+@app.route('/admin/contratacion/plantilla/<int:pid>/validacion_datos.xlsx')
+@admin_required
+def contratacion_validacion_datos_excel(pid):
+    """Excel de control: trabajadores con campos incompletos para la plantilla Word."""
+    dni = normalizar_dni(request.args.get('dni'))
+    with db() as con:
+        pl = con.execute('SELECT * FROM contratacion_plantillas WHERE id=?', (pid,)).fetchone()
+        trabajadores = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchall() if dni else con.execute("SELECT * FROM trabajadores WHERE COALESCE(activo,1)=1 ORDER BY nombre LIMIT 5000").fetchall()
+    if not pl:
+        abort(404)
+    wb = Workbook(); ws = wb.active; ws.title = 'VALIDACION_DATOS'
+    headers = ['DNI','TRABAJADOR','EMPRESA','PLANTILLA','ESTADO','CANTIDAD FALTANTES','CAMPOS FALTANTES','ACCION REQUERIDA']
+    ws.append(headers)
+    completos = incompletos = 0
+    for tr in trabajadores:
+        res = validar_datos_plantilla(pid, tr['dni'])
+        falt = res.get('faltantes') or []
+        if falt: incompletos += 1
+        else: completos += 1
+        ws.append([tr['dni'], tr['nombre'], tr['empresa'], pl['nombre_plantilla'], 'INCOMPLETO' if falt else 'COMPLETO', len(falt), ', '.join(falt), 'Completar ficha/base Excel antes de enviar' if falt else 'Puede enviarse'])
+    ws.insert_rows(1, 3)
+    ws['A1'] = 'REPORTE DE VALIDACIÓN DE DATOS PARA ENVÍO DE DOCUMENTOS'
+    ws['A2'] = f"Plantilla: {pl['nombre_plantilla'] or ''}"
+    ws['A3'] = f"Completos: {completos} | Incompletos: {incompletos} | Fecha: {now_txt()}"
+    for row in ws.iter_rows(min_row=1, max_row=3, min_col=1, max_col=8):
+        for cell in row:
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.fill = PatternFill('solid', fgColor='0F5132')
+    header_row = 4
+    for cell in ws[header_row]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='1F2937')
+        cell.alignment = Alignment(horizontal='center')
+    for row in range(5, ws.max_row+1):
+        estado = ws.cell(row,5).value
+        if estado == 'INCOMPLETO':
+            for col in range(1,9): ws.cell(row,col).fill = PatternFill('solid', fgColor='FFF2CC')
+    widths = [14,36,18,38,16,18,55,38]
+    for idx,w in enumerate(widths,1):
+        ws.column_dimensions[chr(64+idx)].width = w
+    ws.freeze_panes = 'A5'
+    out = PERSIST_DIR / f"VALIDACION_DATOS_PLANTILLA_{pid}_{now_file()}.xlsx"
+    wb.save(out)
+    return send_file(out, as_attachment=True, download_name=f"VALIDACION_DATOS_{pid}.xlsx")
+
+
 @app.route('/admin/contratacion/plantilla/<int:pid>/generar')
 @admin_required
 def contratacion_plantilla_generar(pid):
     """Genera y descarga el Word final con campos {{CampoOrigen}} reemplazados por datos del trabajador."""
     dni = normalizar_dni(request.args.get('dni'))
     try:
-        out, pl, trabajador, cumple, detalle = generar_docx_desde_plantilla(pid, dni)
+        out, pl, trabajador, cumple, detalle, faltantes = generar_docx_desde_plantilla(pid, dni)
     except Exception as e:
         flash(f'No se pudo generar el Word combinado: {e}', 'error')
         return redirect(url_for('contratacion_plantilla_detalle', pid=pid, tab='contenido'))
-    if not cumple:
+    if faltantes:
+        flash('Documento generado en modo OBSERVADO: faltan campos. Se marcaron en amarillo dentro del Word. No se habilita envío hasta completar datos.', 'error')
+    elif not cumple:
         flash('El trabajador no cumple las condiciones configuradas. Se descarga en modo revisión para que puedas validar.', 'error')
     nombre_trab = re.sub(r'[^A-Za-z0-9_ -]+', '', row_get(trabajador, 'nombre', 'TRABAJADOR')).strip() or 'TRABAJADOR'
     safe_pl = re.sub(r'[^A-Za-z0-9_ -]+', '', pl['nombre_plantilla'] or 'plantilla').strip() or 'plantilla'
@@ -5773,13 +6003,22 @@ def admin_contratacion():
                     plx = con.execute('SELECT * FROM contratacion_plantillas WHERE id=? AND activo=1', (int(pid_raw),)).fetchone()
                     if not plx:
                         continue
-                    nombre_doc = plx['archivo_nombre'] or (plx['nombre_plantilla'] + '.docx')
+                    valid = validar_datos_plantilla(int(pid_raw), dni)
+                    if valid.get('faltantes'):
+                        con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)', (dni, 'Documento bloqueado por datos incompletos', now_txt(), f"{plx['nombre_plantilla']}: faltan {', '.join(valid.get('faltantes') or [])}"))
+                        continue
+                    try:
+                        out_docx, _pl, _trab, _ok, _detalle, _falt = generar_docx_desde_plantilla(int(pid_raw), dni)
+                    except Exception as e:
+                        con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)', (dni, 'Documento bloqueado por error de generación', now_txt(), str(e)))
+                        continue
+                    nombre_doc = Path(out_docx).name
                     con.execute('INSERT INTO contratacion_docs(dni,trabajador,empresa,etapa,tipo_doc,estado,archivo_nombre,ruta_archivo,fecha_registro,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?,?)',
-                                (dni, trab['nombre'], trab['empresa'], 'Generado desde plantilla', plx['tipo_documento'] or plx['nombre_plantilla'], 'GENERADO - PENDIENTE FIRMA', nombre_doc, plx['ruta_archivo'], now_txt(), marca_carga(session.get('admin_user','admin'))))
-                    con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)', (dni, 'Documento generado desde plantilla', now_txt(), f"{plx['nombre_plantilla']} listo para firma facial/digital."))
+                                (dni, trab['nombre'], trab['empresa'], 'Generado desde plantilla validada', plx['tipo_documento'] or plx['nombre_plantilla'], 'GENERADO VALIDADO - PENDIENTE FIRMA', nombre_doc, str(out_docx), now_txt(), marca_carga(session.get('admin_user','admin'))))
+                    con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)', (dni, 'Documento generado validado', now_txt(), f"{plx['nombre_plantilla']} listo para firma facial/digital."))
                     creados += 1
                 con.commit()
-            flash(f'Documentos generados desde plantillas: {creados}. Ahora ya aparecen abajo para marcarlos y enviarlos a firma masiva.', 'ok' if creados else 'error')
+            flash(f'Documentos validados y generados: {creados}. Los incompletos fueron bloqueados; descarga el Excel de faltantes desde la plantilla.', 'ok' if creados else 'error')
             return redirect(url_for('admin_contratacion', sec='firma'))
 
         if accion == 'firma_masiva':
@@ -5796,6 +6035,9 @@ def admin_contratacion():
                 for doc_id in ids:
                     doc=con.execute('SELECT * FROM contratacion_docs WHERE id=?',(doc_id,)).fetchone()
                     if not doc: continue
+                    if 'INCOMPLETO' in clean(doc['estado']).upper() or 'OBSERVADO_DATOS_INCOMPLETOS' in clean(doc['ruta_archivo']).upper():
+                        con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado',now_txt(),f"No se envió {doc['tipo_doc']} porque tiene datos incompletos."))
+                        continue
                     token=crear_token_firma()
                     con.execute('INSERT INTO firma_solicitudes(documento_id,dni,trabajador,metodo,estado,evidencia_ref,fecha_envio,observacion,firma_token,validacion_estado) VALUES(?,?,?,?,?,?,?,?,?,?)',(doc['id'],doc['dni'],doc['trabajador'],metodo,'Pendiente de captura facial','',now_txt(),obs,token,'PENDIENTE'))
                     con.execute("UPDATE contratacion_docs SET estado='ENVIADO A FIRMA' WHERE id=?",(doc['id'],))
@@ -5811,6 +6053,9 @@ def admin_contratacion():
             with db() as con:
                 doc = con.execute('SELECT * FROM contratacion_docs WHERE id=?',(doc_id,)).fetchone()
                 if doc:
+                    if 'INCOMPLETO' in clean(doc['estado']).upper() or 'OBSERVADO_DATOS_INCOMPLETOS' in clean(doc['ruta_archivo']).upper():
+                        flash('No se puede enviar: el documento tiene datos incompletos. Previsualiza/exporta el Word observado y completa la base antes de enviar.', 'error')
+                        return redirect(url_for('admin_contratacion', sec='firma'))
                     token = crear_token_firma()
                     con.execute('INSERT INTO firma_solicitudes(documento_id,dni,trabajador,metodo,estado,evidencia_ref,fecha_envio,observacion,firma_token,validacion_estado) VALUES(?,?,?,?,?,?,?,?,?,?)',(doc['id'],doc['dni'],doc['trabajador'],metodo,'Pendiente de captura facial','',now_txt(),obs,token,'PENDIENTE'))
                     con.execute("UPDATE contratacion_docs SET estado='ENVIADO A FIRMA' WHERE id=?",(doc['id'],))
@@ -6133,7 +6378,7 @@ html,body{overflow-x:hidden!important;}
         ingreso_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar registro?')\"><input type='hidden' name='accion' value='eliminar_ingreso'><input type='hidden' name='ingreso_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td>{h(r['area'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos_mostrar]) or "<tr><td colspan='13'>Sin registros de ingresos.</td></tr>"
         content=wrap(f"""
         <h2 class='c-title'>Postulantes</h2>
-        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Postulantes por requerimiento</h1><p class='muted2'>Primero seleccione el requerimiento. Luego busque o complete los postulantes registrados en ese requerimiento.</p></div><a class='c-btn' href='/admin/plantilla_gestion/contratacion'>⬇ Plantilla contratación</a></div><div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>1) Requerimiento / Ticket</b><select id='filtro_req_postulantes' onchange="location.href='/admin/contratacion?sec=nuevos&req='+encodeURIComponent(this.value)"><option value=''>Seleccione requerimiento para ver todos</option>{opt_req}</select><b>Buscar postulantes del requerimiento</b><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='DNI, trabajador, cargo, actividad...'></div>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Postulantes por requerimiento</h1><p class='muted2'>Primero seleccione el requerimiento. Luego busque o complete los postulantes registrados en ese requerimiento.</p></div><a class='c-btn' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato Excel</a></div><div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>1) Requerimiento / Ticket</b><select id='filtro_req_postulantes' onchange="location.href='/admin/contratacion?sec=nuevos&req='+encodeURIComponent(this.value)"><option value=''>Seleccione requerimiento para ver todos</option>{opt_req}</select><b>Buscar postulantes del requerimiento</b><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='DNI, trabajador, cargo, actividad...'></div>
         <div class='nr-tabs'><a class='active' href='#nuevo'>Nuevo</a><a href='#reingresante'>Reingresante</a><span>El DNI detecta si ya existe y cambia automáticamente a REINGRESANTE.</span></div>
         <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><span></span><b>Escáner DNI / barras</b><input id='scanner_dni' maxlength='20' placeholder='Escanee o digite DNI y Enter' onkeydown='scanDniIngreso(event)'><b>DNI</b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()' placeholder='8 dígitos'><b>Trabajador</b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Tipo ingreso</b><select name='tipo_ingreso' id='tipo_ingreso'><option>NUEVO</option><option>REINGRESANTE</option></select><b>Empresa</b><select name='empresa' id='empresa_ingreso'><option>AQUANQA I</option><option>AQUANQA II</option></select><b>Celular</b><input name='celular' id='celular_ingreso'><b>Correo</b><input name='correo' id='correo_ingreso' type='email'><b>Dirección</b><input name='direccion' placeholder='Dirección actual'><b>Distrito</b><input name='distrito' placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia</b><input name='provincia' placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento</b><input name='departamento' placeholder='Ej. La Libertad / Lambayeque'><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Puesto / Cargo</b><input name='cargo' id='cargo_ingreso'><input type='hidden' name='sede' value='GENERAL'><b>Área</b><input name='area' id='area_ingreso'><b>Actividad</b><input name='actividad' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'><option>CAMPAÑA</option><option>PERMANENTE</option><option>INTERMITENTE</option><option>PART TIME</option></select><b>Fecha ingreso</b><input type='date' name='fecha_ingreso' value='{hoy_iso()}'><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Requerimiento</b><select name='requerimiento' required><option value=''>Seleccione requerimiento</option>{opt_req}</select><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏹ Detener</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button class='c-btn'>💾 Guardar trabajador</button></form><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
         <script>
@@ -6579,7 +6824,7 @@ html,body{overflow-x:hidden!important;}
               <input type='hidden' name='accion' value='importar_base_contratos_excel'>
               <input type='file' name='archivo' accept='.xlsx,.xls' required>
               <button class='c-btn'>⬆ Cargar Base Excel</button>
-              <a class='c-btn gray' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato</a>
+              <a class='c-btn gray' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato Excel</a>
             </form>
             <small class='muted2'>Columnas sugeridas: DNI, TRABAJADOR, EMPRESA, REQUERIMIENTO, CARGO, AREA, FECHA INGRESO, DIRECCION, DISTRITO, PROVINCIA, DEPARTAMENTO, BASICO.</small>
           </div>
