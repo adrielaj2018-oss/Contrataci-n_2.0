@@ -1077,6 +1077,14 @@ def init_db():
             actividad TEXT, cantidad INTEGER DEFAULT 0, fecha_solicitud TEXT, fecha_ingreso TEXT, prioridad TEXT,
             estado TEXT DEFAULT 'SOLICITADO', responsable TEXT, observacion TEXT, fecha_registro TEXT, registrado_por TEXT
         )''')
+        for col, ddl in [
+            ('regimen_laboral', 'ALTER TABLE contratacion_requerimientos ADD COLUMN regimen_laboral TEXT'),
+            ('tipo_contrato', 'ALTER TABLE contratacion_requerimientos ADD COLUMN tipo_contrato TEXT'),
+            ('cupos_registrados', 'ALTER TABLE contratacion_requerimientos ADD COLUMN cupos_registrados INTEGER DEFAULT 0'),
+            ('cupos_completos', 'ALTER TABLE contratacion_requerimientos ADD COLUMN cupos_completos INTEGER DEFAULT 0'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
         con.execute('''
         CREATE TABLE IF NOT EXISTS contratacion_medica(
             id INTEGER PRIMARY KEY AUTOINCREMENT, dni TEXT, trabajador TEXT, requerimiento TEXT, estado TEXT DEFAULT 'PENDIENTE',
@@ -1423,6 +1431,90 @@ def datos_unificados_contratacion(dni, requerimiento=''):
             merged[tk] = val
     merged['dni'] = dni
     return merged
+
+
+# =============================
+# FLUJO PRO CONTRATACION 2026
+# Requerimiento -> Postulantes -> Documentos -> Firma digital
+# =============================
+CAMPOS_FICHA_OBLIGATORIOS_PRO = [
+    ('trabajador','Trabajador'),('dni','DNI'),('empresa','Empresa'),('area','Área'),('cargo','Cargo'),
+    ('actividad','Actividad'),('fecha_ingreso','Fecha ingreso'),('fecha_nacimiento','Fecha nacimiento'),
+    ('direccion','Dirección'),('distrito','Distrito'),('provincia','Provincia'),('departamento','Departamento'),
+    ('remuneracion_basica','Remuneración básica'),('tipo_contrato','Tipo contrato'),('regimen_laboral','Régimen laboral')
+]
+
+def estado_norm(v):
+    return clean(v).upper().replace('Á','A').replace('É','E').replace('Í','I').replace('Ó','O').replace('Ú','U')
+
+def campos_faltantes_postulante(row):
+    r = row_to_dict(row)
+    faltan = []
+    for campo, etiqueta in CAMPOS_FICHA_OBLIGATORIOS_PRO:
+        if es_valor_incompleto(r.get(campo)):
+            faltan.append(etiqueta)
+    return faltan
+
+def estado_ficha_postulante(row):
+    faltan = campos_faltantes_postulante(row)
+    if faltan:
+        return 'FICHA INCOMPLETA'
+    return 'LISTO PARA DOCUMENTOS'
+
+def documentos_por_postulante(dni, requerimiento=''):
+    with db() as con:
+        docs = con.execute('SELECT * FROM contratacion_docs WHERE dni=? ORDER BY id DESC', (normalizar_dni(dni),)).fetchall()
+        firmas = con.execute('SELECT * FROM firma_solicitudes WHERE dni=? ORDER BY id DESC', (normalizar_dni(dni),)).fetchall()
+    generados = len(docs)
+    enviados = sum(1 for x in docs if 'FIRMA' in estado_norm(row_get(x,'estado')))
+    firmados = sum(1 for x in firmas if 'FIRMAD' in estado_norm(row_get(x,'estado')))
+    return generados, enviados, firmados
+
+def aptitud_medica_actual(dni, requerimiento=''):
+    with db() as con:
+        if requerimiento:
+            r = con.execute('SELECT * FROM contratacion_medica WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (normalizar_dni(dni), requerimiento)).fetchone()
+        else:
+            r = None
+        if not r:
+            r = con.execute('SELECT * FROM contratacion_medica WHERE dni=? ORDER BY id DESC LIMIT 1', (normalizar_dni(dni),)).fetchone()
+    return estado_norm(row_get(r, 'estado', 'PENDIENTE'))
+
+def puede_pasar_a_firma(dni, requerimiento=''):
+    data = datos_unificados_contratacion(dni, requerimiento)
+    faltan = []
+    for campo, etiqueta in CAMPOS_FICHA_OBLIGATORIOS_PRO:
+        if es_valor_incompleto(data.get(campo)):
+            faltan.append(etiqueta)
+    medico = aptitud_medica_actual(dni, requerimiento)
+    if medico != 'APTO':
+        faltan.append('Evaluación médica APTO')
+    return (not faltan), faltan
+
+def sincronizar_estado_requerimiento_por_cupo(con, ticket):
+    if not ticket:
+        return
+    req = con.execute('SELECT * FROM contratacion_requerimientos WHERE ticket=? ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
+    if not req:
+        return
+    try:
+        cantidad = int(row_get(req, 'cantidad', 0) or 0)
+    except Exception:
+        cantidad = 0
+    registrados = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (ticket,)).fetchone()[0]
+    completos = con.execute("SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=? AND estado IN ('REGISTRADO','LISTO PARA DOCUMENTOS')", (ticket,)).fetchone()[0]
+    if cantidad > 0 and registrados >= cantidad:
+        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', observacion=COALESCE(observacion,'') || ' | Cupo cerrado automáticamente.' WHERE ticket=?", (ticket,))
+    elif registrados > 0:
+        con.execute("UPDATE contratacion_requerimientos SET estado='EN REGISTRO' WHERE ticket=? AND estado NOT IN ('CERRADO','CUPO CERRADO')", (ticket,))
+
+def semaforo_clase_estado(valor):
+    v = estado_norm(valor)
+    if any(x in v for x in ['APTO','LISTO','FIRMADO','COMPLETO','APROBADO','ENTREGADO']):
+        return 'ok'
+    if any(x in v for x in ['NO APTO','OBSERVADO','INCOMPLETO','PENDIENTE','BLOQUEADO']):
+        return 'warn'
+    return 'info'
 
 def separar_nombres_apellidos(nombre):
     txt = clean(nombre)
@@ -3045,8 +3137,10 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
 @media(max-width:720px){.nice-form,.pro-form,.compact-form,.c-form,.ingreso-form .camera-box,.ingreso-form .bio-box{grid-template-columns:1fr!important}.nice-form b,.pro-form b,.compact-form b,.c-form b{justify-content:flex-start!important;text-align:left!important}.scan-tools,.records-toolbar,.video-base-grid{grid-template-columns:1fr!important}.ingreso-form .camera-box video,.ingreso-form .camera-box img{height:240px!important;min-height:240px!important}}
 
 
-/* PATCH FINAL CONTRATACION PRO - visible */
-.req-mark{color:#dc2626;font-weight:1000}.semaforo{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border-radius:999px;font-weight:1000;border:1px solid #d7e3ec;background:#fff}.semaforo.ok{color:#047857;background:#ecfdf5}.semaforo.warn{color:#a16207;background:#fffbeb}.semaforo.bad{color:#b91c1c;background:#fef2f2}.tipo-ingreso-alert{border:2px solid #16a34a!important;border-radius:18px!important;padding:16px!important;background:#ecfdf5!important;animation:pulseTipo 1.2s ease-in-out 2}.tipo-ingreso-alert.reingresante{border-color:#2563eb!important;background:#eff6ff!important}.tipo-ingreso-alert select{font-size:22px!important;font-weight:1000!important}.fixed-field{background:#f1f5f9!important;color:#334155!important;font-weight:1000!important}.contract-note{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:14px;padding:12px 14px;font-weight:800;margin:10px 0}.expediente-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}.expediente-tabs span{background:#f8fafc;border:1px solid #dbe7ef;border-radius:14px;padding:12px;font-weight:900;text-align:center}.mini-btn{padding:8px 10px!important;font-size:12px!important}@keyframes pulseTipo{0%{transform:scale(.99)}50%{transform:scale(1.01)}100%{transform:scale(1)}}
+/* Mejoras PRO flujo contratación */
+.flow-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}.flow-step{background:#fff;border:1px solid #dbe3ef;border-radius:14px;padding:14px;box-shadow:0 8px 20px rgba(15,23,42,.06)}.flow-step b{display:block;color:#111827}.flow-step small{color:#64748b}.semaforo-ticket{display:inline-flex;gap:6px;align-items:center}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.dot.ok{background:#16a34a}.dot.warn{background:#f59e0b}.dot.bad{background:#dc2626}.dot.info{background:#2563eb}.status-pill.warn{background:#fff7ed!important;color:#9a3412!important;border-color:#fed7aa!important}.status-pill.info{background:#eff6ff!important;color:#1d4ed8!important;border-color:#bfdbfe!important}.missing-list{font-size:12px;color:#9a3412;max-width:260px}.checklist-mini{display:flex;gap:6px;flex-wrap:wrap}.checklist-mini span{font-size:11px;border:1px solid #dbe3ef;border-radius:999px;padding:4px 7px;background:#f8fafc}.checklist-mini .ok{background:#ecfdf5;color:#166534}.checklist-mini .warn{background:#fff7ed;color:#9a3412}
+@media(max-width:900px){.flow-strip{grid-template-columns:1fr}}
+
 </style>
 <script>
 function side(){return document.querySelector('.side')}
@@ -3201,6 +3295,7 @@ def sidebar(active):
             <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span></a>
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
+            <a class='{cls('cursos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cursos'><i class='bi bi-journal-text'></i><span class='label'>Cursos / Capacitación</span></a>
             <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
             <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-diagram-3'></i><span class='label'>Integración NISIRA</span></a>
             <div id='grp_documentaria' data-group='documentaria' class='menu-group nested force-open'>
@@ -5451,52 +5546,11 @@ def descargar_plantilla_nisira_trabajadores():
     return send_file(path, as_attachment=True, download_name='PLANTILLA_NISIRA_TRABAJADORES.xlsx')
 
 
-
-
-# ======================= PATCH FINAL CONTRATACION PRO 2026-05-29 =======================
-CAMPOS_OBLIGATORIOS_CONTRATO_PRO = [
-    ('dni','DNI'),('trabajador','Trabajador / nombres'),('fecha_nacimiento','Fecha nacimiento'),
-    ('direccion','Direccion'),('distrito','Distrito'),('provincia','Provincia'),('departamento','Departamento'),
-    ('empresa','Empresa'),('area','Area'),('cargo','Cargo'),('actividad','Actividad'),
-    ('regimen_laboral','Regimen laboral'),('fecha_ingreso','Fecha ingreso / inicio contrato'),
-    ('fecha_fin_contrato','Fecha fin contrato'),('remuneracion_basica','Remuneracion basica'),
-]
-
-def _row_val(row, campo):
-    try:
-        if row is None: return ''
-        if hasattr(row, 'keys') and campo in row.keys(): return clean(row[campo])
-        return clean(row.get(campo,'')) if isinstance(row, dict) else ''
-    except Exception:
-        return ''
-
-def campos_faltantes_contrato_pro(row):
-    return [nombre for campo,nombre in CAMPOS_OBLIGATORIOS_CONTRATO_PRO if not _row_val(row,campo)]
-
-def ficha_contrato_completa_pro(row):
-    return len(campos_faltantes_contrato_pro(row)) == 0
-
-def semaforo_requerimiento_pro(req, ingresos_req):
-    try: solicitados = int(_row_val(req,'cantidad') or 0)
-    except Exception: solicitados = 0
-    registrados = len(ingresos_req)
-    completos = sum(1 for x in ingresos_req if ficha_contrato_completa_pro(x))
-    incompletos = sum(1 for x in ingresos_req if not ficha_contrato_completa_pro(x))
-    pendientes = max((solicitados or registrados) - completos, 0)
-    if incompletos: color,texto,cls = 'ROJO','Incompletos','bad'
-    elif solicitados and registrados < solicitados: color,texto,cls = 'AMARILLO','Pendientes','warn'
-    else: color,texto,cls = 'VERDE','Listos para contratacion','ok'
-    return dict(solicitados=solicitados, registrados=registrados, completos=completos, incompletos=incompletos, pendientes=pendientes, color=color, texto=texto, cls=cls)
-# ===================== FIN PATCH FINAL CONTRATACION PRO 2026-05-29 =====================
-
 @app.route('/admin/contratacion', methods=['GET','POST'])
 @admin_required
 def admin_contratacion():
     """Gestión Contratos estilo Adapta: flujos, cargas, reportes, maestros, anuncios y documentaria."""
     sec = request.args.get('sec','dashboard')
-    # Módulo Induccion eliminado: todo queda dentro de Inducción.
-    if sec in ('cursos','capacitacion'):
-        sec = 'induccion'
     if request.method=='POST':
         accion = request.form.get('accion','doc')
         # Acciones PRO: eliminar registros operativos desde las tablas de cada módulo.
@@ -5729,8 +5783,20 @@ def admin_contratacion():
                     con.commit()
                     flash(f'ALERTA: el DNI {dni} ya está registrado en el requerimiento {ticket}. No se permite duplicar postulante.', 'error')
                     return redirect(url_for('admin_contratacion', sec='requerimientos'))
-                vals = (dni,nombre,empresa,req['sede'] if req else '',ticket,req['actividad'] if req else '',tipo,'PRE REGISTRADO',req['fecha_ingreso'] if req else fecha_sin_hora(hoy_iso()),cargo,area,correo,celular,'Registrado desde escaneo DNI/código de barras en requerimiento',now_txt(),session.get('admin_user','admin'))
+                if req:
+                    try:
+                        cantidad_req = int(req['cantidad'] or 0)
+                    except Exception:
+                        cantidad_req = 0
+                    registrados_req = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (ticket,)).fetchone()[0]
+                    if cantidad_req > 0 and registrados_req >= cantidad_req:
+                        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO' WHERE ticket=?", (ticket,))
+                        con.commit()
+                        flash(f'Cupo cerrado: el requerimiento {ticket} ya alcanzó {cantidad_req} postulante(s).', 'error')
+                        return redirect(url_for('admin_contratacion', sec='requerimientos'))
+                vals = (dni,nombre,empresa,req['sede'] if req else '',ticket,req['actividad'] if req else '',tipo,'PRE REGISTRADO',req['fecha_ingreso'] if req else fecha_sin_hora(hoy_iso()),cargo or (req['cargo'] if req else ''),area,correo,celular,'Registrado desde escaneo DNI/código de barras en requerimiento',now_txt(),session.get('admin_user','admin'))
                 con.execute("INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", vals)
+                sincronizar_estado_requerimiento_por_cupo(con, ticket)
                 con.commit()
             flash('DNI conectado al requerimiento. Si existe en historial, se marca como REINGRESANTE; si no, queda como NUEVO para completar ficha.', 'ok')
             return redirect(url_for('admin_contratacion', sec='requerimientos'))
@@ -5746,15 +5812,17 @@ def admin_contratacion():
             except Exception:
                 cantidad = 0
             fecha_ingreso = fecha_sin_hora(request.form.get('fecha_ingreso')) or fecha_sin_hora(hoy_iso())
-            if not ticket or not area or not actividad or not fecha_ingreso:
-                flash('Campos obligatorios: requerimiento, empresa, área, actividad y fecha objetivo.', 'error')
+            if not ticket or not empresa or not area or not cargo or not actividad or not fecha_ingreso or not tipo_contrato:
+                flash('Campos obligatorios: requerimiento, empresa, área, cargo, actividad, fecha objetivo y tipo de contrato.', 'error')
                 return redirect(url_for('admin_contratacion', sec='requerimientos'))
+            regimen_laboral = clean(request.form.get('regimen_laboral')).upper()
+            tipo_contrato = clean(request.form.get('tipo_contrato')).upper()
             prioridad = clean(request.form.get('prioridad')) or 'MEDIA'
             estado = clean(request.form.get('estado')) or 'SOLICITADO'
             responsable = clean(request.form.get('responsable'))
             observacion = clean(request.form.get('observacion'))
             with db() as con:
-                con.execute('''INSERT OR REPLACE INTO contratacion_requerimientos(ticket,empresa,sede,area,cargo,actividad,cantidad,fecha_solicitud,fecha_ingreso,prioridad,estado,responsable,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (ticket,empresa,sede,area,cargo,actividad,cantidad,now_txt(),fecha_ingreso,prioridad,estado,responsable,observacion,now_txt(),session.get('admin_user','admin')))
+                con.execute('''INSERT OR REPLACE INTO contratacion_requerimientos(ticket,empresa,sede,area,cargo,actividad,cantidad,fecha_solicitud,fecha_ingreso,prioridad,estado,responsable,observacion,fecha_registro,registrado_por,regimen_laboral,tipo_contrato) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (ticket,empresa,sede,area,cargo,actividad,cantidad,now_txt(),fecha_ingreso,prioridad,estado,responsable,observacion,now_txt(),session.get('admin_user','admin'),regimen_laboral,tipo_contrato))
                 con.commit()
             flash('Requerimiento registrado correctamente.', 'ok')
             return redirect(url_for('admin_contratacion', sec='requerimientos'))
@@ -5902,21 +5970,12 @@ def admin_contratacion():
             if huella_file and huella_file.filename and dni:
                 hname=now_file()+'_huella_'+secure_filename(huella_file.filename)
                 hpath=carpeta_bio/hname; huella_file.save(hpath); huella_ruta=str(hpath)
-            oblig = [(dni,'DNI'),(nombre,'Trabajador'),(empresa,'Empresa'),(cargo,'Puesto/Cargo'),(area,'Área'),(actividad,'Actividad'),(regimen_laboral,'Régimen laboral'),(tipo_contrato,'Tipo contrato'),(fecha_ingreso,'Fecha ingreso / inicio contrato'),(fecha_fin_contrato,'Fecha fin contrato'),(fecha_nacimiento,'Fecha nacimiento'),(direccion,'Dirección'),(distrito,'Distrito'),(provincia,'Provincia'),(departamento,'Departamento'),(remuneracion_basica,'Remuneración básica'),(nacionalidad,'Nacionalidad')]
+            oblig = [(dni,'DNI'),(nombre,'Trabajador'),(empresa,'Empresa'),(cargo,'Puesto/Cargo'),(area,'Área'),(fecha_ingreso,'Fecha ingreso'),(fecha_nacimiento,'Fecha nacimiento'),(direccion,'Dirección'),(distrito,'Distrito'),(provincia,'Provincia'),(departamento,'Departamento'),(nacionalidad,'Nacionalidad'),(sistema_pensionario,'Sistema pensionario'),(estado_civil,'Estado civil')]
             faltan = [nom for val,nom in oblig if not val]
             if faltan:
                 flash('Campos obligatorios pendientes: ' + ', '.join(faltan), 'error')
                 return redirect(url_for('admin_contratacion', sec='nuevos'))
             with db() as con:
-                # Bloquea duplicado real por requerimiento y controla cupos solicitados.
-                ing_existe_pre = con.execute('SELECT id FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni,requerimiento)).fetchone() if requerimiento else None
-                if not ing_existe_pre and requerimiento:
-                    req_row = con.execute('SELECT cantidad FROM contratacion_requerimientos WHERE ticket=? LIMIT 1', (requerimiento,)).fetchone()
-                    if req_row and int(req_row['cantidad'] or 0) > 0:
-                        registrados = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (requerimiento,)).fetchone()[0]
-                        if registrados >= int(req_row['cantidad'] or 0):
-                            flash(f'Cupo completo para el requerimiento {requerimiento}. Solicitados: {req_row["cantidad"]}, registrados: {registrados}.', 'error')
-                            return redirect(url_for('admin_contratacion', sec='nuevos'))
                 existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
                 if existe:
                     con.execute("""UPDATE trabajadores SET nombre=?, empresa=?, cargo=?, area=?, correo=?, celular=?, activo=1, fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso), observacion=?, foto_ruta=COALESCE(NULLIF(?,''),foto_ruta), fecha_nacimiento=COALESCE(NULLIF(?,''),fecha_nacimiento), fecha_fin_contrato=COALESCE(NULLIF(?,''),fecha_fin_contrato), tipo_contrato=COALESCE(NULLIF(?,''),tipo_contrato), remuneracion_basica=COALESCE(NULLIF(?,''),remuneracion_basica) WHERE dni=?""", (nombre,empresa,cargo,area,correo,celular,fecha_ingreso,obs,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica,dni))
@@ -5930,8 +5989,9 @@ def admin_contratacion():
                 else:
                     con.execute("""INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por,foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,biometria_estado,departamento,provincia,distrito,estado_civil,sistema_pensionario,ultima_empresa,discapacidad,cantidad_hijos) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (dni,nombre,empresa,sede,requerimiento,actividad,tipo_ingreso,'REGISTRADO',fecha_ingreso,cargo,area,correo,celular,obs,now_txt(),session.get('admin_user','admin'),foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,'CAPTURADA' if huella_ruta else 'PENDIENTE',departamento,provincia,distrito,estado_civil,sistema_pensionario,ultima_empresa,discapacidad,cantidad_hijos))
                 con.execute('''UPDATE contratacion_ingresos SET fecha_nacimiento=?, fecha_fin_contrato=?, tipo_contrato=?, remuneracion_basica=?, remuneracion_letra=?, nacionalidad=?, sexo=?, regimen_laboral=?, periodicidad_pago=?, tipo_pago=?, cuspp=?, nombre_moneda=?, simbolo_moneda=?, funciones=?, meses_contrato=? WHERE dni=? AND requerimiento=?''', (fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica,remuneracion_letra,nacionalidad,sexo,regimen_laboral,periodicidad_pago,tipo_pago,cuspp,nombre_moneda,simbolo_moneda,funciones,meses_contrato,dni,requerimiento))
+                sincronizar_estado_requerimiento_por_cupo(con, requerimiento)
                 con.commit()
-            flash(f'Trabajador {tipo_ingreso} registrado correctamente.', 'ok')
+            flash(f'Trabajador {tipo_ingreso} registrado correctamente. Estado de ficha: {estado_ficha_postulante(row_to_dict({})) if False else "actualizado"}.', 'ok')
             return redirect(url_for('admin_contratacion', sec='nuevos'))
         if accion == 'importar_ingresos_excel':
             f = request.files.get('archivo')
@@ -5964,14 +6024,6 @@ def admin_contratacion():
                             con.execute('UPDATE trabajadores SET nombre=?,empresa=?,cargo=?,area=?,correo=?,celular=?,activo=1,fecha_ingreso=COALESCE(NULLIF(?,""),fecha_ingreso) WHERE dni=?', (nombre,empresa,cargo,area,correo,celular,fecha,dni))
                         else:
                             con.execute('INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,usuario_portal,clave_portal) VALUES(?,?,?,?,?,?,1,?,?,?,?,?)', (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha,celular,dni,dni))
-                        if req and con.execute('SELECT 1 FROM contratacion_ingresos WHERE dni=? AND requerimiento=? LIMIT 1', (dni,req)).fetchone():
-                            continue
-                        if req:
-                            req_row = con.execute('SELECT cantidad FROM contratacion_requerimientos WHERE ticket=? LIMIT 1', (req,)).fetchone()
-                            if req_row and int(req_row['cantidad'] or 0) > 0:
-                                registrados = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (req,)).fetchone()[0]
-                                if registrados >= int(req_row['cantidad'] or 0):
-                                    continue
                         con.execute('INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (dni,nombre,empresa,sede,req,act,tipo,'IMPORTADO',fecha,cargo,area,correo,celular,now_txt(),session.get('admin_user','admin')))
                         ok += 1
                     con.commit()
@@ -6363,6 +6415,10 @@ def admin_contratacion():
             if not dni or not trab:
                 flash('Selecciona un trabajador valido para generar documentos desde plantillas.', 'error')
                 return redirect(url_for('admin_contratacion', sec='firma'))
+            listo_firma, bloqueos_firma = puede_pasar_a_firma(dni)
+            if not listo_firma:
+                flash('Documentos bloqueados: antes de generar/enviar a firma debe completar: ' + ', '.join(bloqueos_firma), 'error')
+                return redirect(url_for('admin_contratacion', sec='firma'))
             with db() as con:
                 for pid_raw in ids_raw:
                     if not str(pid_raw).isdigit():
@@ -6405,21 +6461,10 @@ def admin_contratacion():
                     if 'INCOMPLETO' in clean(doc['estado']).upper() or 'OBSERVADO_DATOS_INCOMPLETOS' in clean(doc['ruta_archivo']).upper():
                         con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado',now_txt(),f"No se envió {doc['tipo_doc']} porque tiene datos incompletos."))
                         continue
-                    ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (doc['dni'],)).fetchone()
-                    if ing:
-                        faltan = [c for c in ['fecha_nacimiento','direccion','distrito','provincia','departamento','remuneracion_basica','cargo','area','fecha_ingreso','fecha_fin_contrato'] if c in ing.keys() and not clean(ing[c])]
-                        if faltan:
-                            flash('No se puede enviar a firma. Faltan datos: ' + ', '.join(faltan), 'error')
-                            return redirect(url_for('admin_contratacion', sec='firma'))
-                        if clean(ing['estado_medico']).upper() not in ('APTO','APTO CON RESTRICCIONES'):
-                            flash('No se puede enviar a firma. Evaluación médica pendiente/no apta.', 'error')
-                            return redirect(url_for('admin_contratacion', sec='firma'))
-                    ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (doc['dni'],)).fetchone()
-                    if ing:
-                        faltan = [c for c in ['fecha_nacimiento','direccion','distrito','provincia','departamento','remuneracion_basica','cargo','area','fecha_ingreso','fecha_fin_contrato'] if c in ing.keys() and not clean(ing[c])]
-                        if faltan or clean(ing['estado_medico']).upper() not in ('APTO','APTO CON RESTRICCIONES'):
-                            con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado por validación final',now_txt(),'Faltan datos o evaluación médica no apta.'))
-                            continue
+                    ok_firma, bloqueos = puede_pasar_a_firma(doc['dni'])
+                    if not ok_firma:
+                        con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado por flujo',now_txt(),'Faltan requisitos: ' + ', '.join(bloqueos)))
+                        continue
                     token=crear_token_firma()
                     con.execute('INSERT INTO firma_solicitudes(documento_id,dni,trabajador,metodo,estado,evidencia_ref,fecha_envio,observacion,firma_token,validacion_estado) VALUES(?,?,?,?,?,?,?,?,?,?)',(doc['id'],doc['dni'],doc['trabajador'],metodo,'Pendiente de captura facial','',now_txt(),obs,token,'PENDIENTE'))
                     con.execute("UPDATE contratacion_docs SET estado='ENVIADO A FIRMA' WHERE id=?",(doc['id'],))
@@ -6437,6 +6482,10 @@ def admin_contratacion():
                 if doc:
                     if 'INCOMPLETO' in clean(doc['estado']).upper() or 'OBSERVADO_DATOS_INCOMPLETOS' in clean(doc['ruta_archivo']).upper():
                         flash('No se puede enviar: el documento tiene datos incompletos. Previsualiza/exporta el Word observado y completa la base antes de enviar.', 'error')
+                        return redirect(url_for('admin_contratacion', sec='firma'))
+                    ok_firma, bloqueos = puede_pasar_a_firma(doc['dni'])
+                    if not ok_firma:
+                        flash('Firma digital bloqueada. Pendiente: ' + ', '.join(bloqueos), 'error')
                         return redirect(url_for('admin_contratacion', sec='firma'))
                     token = crear_token_firma()
                     con.execute('INSERT INTO firma_solicitudes(documento_id,dni,trabajador,metodo,estado,evidencia_ref,fecha_envio,observacion,firma_token,validacion_estado) VALUES(?,?,?,?,?,?,?,?,?,?)',(doc['id'],doc['dni'],doc['trabajador'],metodo,'Pendiente de captura facial','',now_txt(),obs,token,'PENDIENTE'))
@@ -6541,12 +6590,6 @@ def admin_contratacion():
     opt_modalidad_select=''.join([f"<option>{h(x)}</option>" for x in _modalidades])
     opt_periodicidad_select=''.join([f"<option>{h(x)}</option>" for x in _periodicidades])
     opt_tipo_pago_select=''.join([f"<option>{h(x)}</option>" for x in _tipos_pago])
-    # Estadisticas por requerimiento: solicitados / registrados / completos / pendientes / semaforo.
-    req_stats = {}
-    for _rq in requerimientos:
-        _ticket = clean(_rq['ticket'])
-        _ings = [x for x in ingresos if clean(x['requerimiento']) == _ticket]
-        req_stats[_ticket] = semaforo_requerimiento_pro(_rq, _ings)
     def _estado_pill(v):
         vv = str(v or 'PENDIENTE')
         cls = 'ok' if vv.upper() in ['APTO','APROBADO','REGISTRADO','IMPORTADO','ENTREGADO','ENVIADO','GENERADO','CAPTURADA','FINALIZADO'] else ''
@@ -6681,7 +6724,7 @@ html,body{overflow-x:hidden!important;}
 .bio-box b,.bio-box .label{position:static!important;transform:none!important;margin:0!important;}
 .bio-actions{display:flex!important;gap:12px!important;flex-wrap:wrap!important;}
 
-/* Inducción: distribución limpia */
+/* Inducción y cursos: distribución limpia */
 .learning-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(360px,430px)!important;gap:26px!important;align-items:start!important;overflow:hidden!important;}
 .learning-grid.solo-induccion{grid-template-columns:1fr!important;}
 .learning-grid.solo-induccion .eval-side{display:none!important;}
@@ -6733,48 +6776,32 @@ html,body{overflow-x:hidden!important;}
         total_cap = len(capacitaciones)
         total_ind = len(indumentarias)
         total_nisira = len(lotes_nisira)
-        aptos = len([r for r in medicas if (r['estado'] or '').upper() in ('APTO','APTO CON RESTRICCIONES')])
-        campos_minimos = ['dni','trabajador','empresa','cargo','area','fecha_ingreso','fecha_nacimiento','direccion','distrito','provincia','departamento','remuneracion_basica']
-        incompletos = 0
-        for _r in ingresos:
-            try:
-                if any(not clean(_r[c]) for c in campos_minimos if c in _r.keys()):
-                    incompletos += 1
-            except Exception:
-                pass
-        completos = max(total_ing - incompletos, 0)
-        pendientes_firma = len([r for r in firma_sols if 'PENDIENTE' in clean(r['estado']).upper()]) if 'firma_sols' in locals() else 0
-        avance = min(100, round(((aptos+total_ind+completos) / max(total_ing*3,1))*100, 1)) if total_ing else 0
+        aptos = len([r for r in medicas if (r['estado'] or '').upper()=='APTO'])
+        avance = min(100, round(((total_med+total_cap+total_ind) / max(total_ing*3,1))*100, 1)) if total_ing else 0
         ult_rows=''.join([f"<tr><td>—</td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos[:10]]) or "<tr><td colspan='7'>Sin ingresos registrados.</td></tr>"
         content=wrap(f"""
         <section class='dashboard-contratacion'>
           <div class='dash-hero'>
-            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, indumentaria, fotocheck, NISIRA y Gestión Documental.</p></div>
+            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, cursos, indumentaria, fotocheck, NISIRA y Gestión Documental.</p></div>
             <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=requerimientos'>Nuevo ticket</a><a class='c-btn gray' href='/admin/contratacion?sec=nuevos'>Registrar trabajador</a></div>
           </div>
-          <div class='dash-kpis'><div class='dash-card'><small>Tickets</small><b>{total_req}</b></div><div class='dash-card'><small>Postulantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Fichas completas</small><b>{completos}</b></div><div class='dash-card'><small>Incompletos</small><b style='color:#dc2626'>{incompletos}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Pendientes firma</small><b>{pendientes_firma}</b></div></div>
-          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, inducción e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
+          <div class='dash-kpis'><div class='dash-card'><small>Tickets</small><b>{total_req}</b></div><div class='dash-card'><small>Postulantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Lotes NISIRA</small><b>{total_nisira}</b></div></div>
+          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, capacitación e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=cursos'>Cursos</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
           <div class='dash-card table-wrap'><h2>Últimos registros del embudo</h2><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Ingreso</th><th>Sede</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
         </section>
         """)
     elif sec=='requerimientos':
         req_options=''.join([f"<option value='{h(r['ticket'])}'>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['actividad'])}</option>" for r in requerimientos])
-        req_rows_list=[]
-        for r in requerimientos:
-            st = req_stats.get(clean(r['ticket']), {})
-            cupo = f"{st.get('registrados',0)}/{st.get('solicitados') or 'SIN LIMITE'}"
-            sem = f"<span class='semaforo {st.get('cls','')}'>{h(st.get('color','AMARILLO'))} - {h(st.get('texto','Pendiente'))}</span>"
-            req_rows_list.append(f"<tr><td><b>{h(r['ticket'])}</b><br><small>{h(r['fecha_registro'])}</small></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['cargo'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td>{cupo}</td><td>{st.get('completos',0)}</td><td>{st.get('pendientes',0)}</td><td>{sem}</td><td><a class='c-btn mini-btn' href='/admin/contratacion?sec=nuevos&req={h(r['ticket'])}'>Crear Postulante</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td></tr>")
-        req_rows=''.join(req_rows_list) or "<tr><td colspan='12'>Sin requerimientos registrados.</td></tr>"
+        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='8'>Sin requerimientos registrados.</td></tr>"
         trabajadores_scan_js = json.dumps({normalizar_dni(r['dni']): {'nombre': (r['nombre'] or ''), 'empresa': (r['empresa'] or ''), 'cargo': (r['cargo'] or ''), 'area': (r['area'] or ''), 'correo': (r['correo'] or '')} for r in trabajadores}, ensure_ascii=False)
         content=wrap(f'''
         <h2 class='c-title'>Requerimiento de personal</h2>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Requerimiento de contratación</h1><p class='muted2'>Primero crea el requerimiento por empresa, área y actividad. Luego escanea DNI o código de barras en este mismo módulo para armar la base del requerimiento.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Completar ficha trabajador</a></div>
         <div class='req-pro-grid'>
-          <form method='post' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos del requerimiento</h3><b>Ticket / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001 / LABORES 29.08.2024'><b>Empresa</b><select name='empresa' required>{opt_empresa_select}</select><b>Area</b><input name='area' list='lista_areas_cfg' required placeholder='Buscar area configurada'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' required placeholder='Buscar actividad configurada'><b>Fecha ingreso objetivo</b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><b>Cargo</b><input name='cargo' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado'><b>Cantidad solicitada</b><input name='cantidad' type='number' min='1' value='1' required><div class='actions'><button class='c-btn'>💾 Crear ticket</button><span class='muted2'>Cargo y cantidad se calculan/definen en el proceso posterior.</span></div></form>
+          <form method='post' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Ticket / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001'><b>Empresa</b><select name='empresa' required>{opt_empresa_select}</select><b>Área</b><input name='area' list='lista_areas_cfg' required placeholder='Área desde Datos Maestros'><b>Cargo</b><input name='cargo' list='lista_cargos_cfg' required placeholder='Cargo desde Datos Maestros'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' required placeholder='Actividad desde Datos Maestros'><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha ingreso objetivo</b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Tipo contrato</b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral</b><select name='regimen_laboral'>{opt_regimen_select}</select><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear ticket</button><span class='muted2'>Al cumplir la cantidad, el sistema cierra el cupo automáticamente.</span></div></form>
           <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='ticket_req' id='ticket_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏹ Detener</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
-        </div><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist>
-        <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Area</th><th>Cargo</th><th>Actividad</th><th>Ingreso</th><th>Cupo</th><th>Completos</th><th>Pendientes</th><th>Semaforo</th><th>Accion</th><th>Eliminar</th></tr>{req_rows}</table></div>
+        </div>
+        <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Eliminar</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
         let scanReqStream=null, scanReqCount=0, scanReqNuevos=0, scanReqReingresos=0, scanReqSaving=false;
         const trabajadoresReq = {trabajadores_scan_js};
@@ -6813,7 +6840,7 @@ html,body{overflow-x:hidden!important;}
         <h2 class='c-title'>Postulantes</h2>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Postulantes por requerimiento</h1><p class='muted2'>Primero seleccione el requerimiento. Luego busque o complete los postulantes registrados en ese requerimiento.</p></div><a class='c-btn' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato Excel</a></div><div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>1) Requerimiento / Ticket</b><select id='filtro_req_postulantes' onchange="location.href='/admin/contratacion?sec=nuevos&req='+encodeURIComponent(this.value)"><option value=''>Seleccione requerimiento para ver todos</option>{opt_req}</select><b>Buscar postulantes del requerimiento</b><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='DNI, trabajador, cargo, actividad...'></div>
         <div class='nr-tabs'><a class='active' href='#nuevo'>Nuevo</a><a href='#reingresante'>Reingresante</a><span>El DNI detecta si ya existe y cambia automáticamente a REINGRESANTE.</span></div>
-        <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'>{opt_empresa_select}</select><b>Celular</b><input name='celular' id='celular_ingreso'><b>Correo</b><input name='correo' id='correo_ingreso' type='email'><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b>Actividad <span class='req-mark'>*</span></b><input name='actividad' list='lista_actividades_cfg' required placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_fin_contrato' required><b>Tipo contrato <span class='req-mark'>*</span></b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required>{opt_regimen_select}</select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneracion basica <span class='req-mark'>*</span></b><input name='remuneracion_basica' required placeholder='Ej. 1130.00'><b>Remuneración en letras</b><input name='remuneracion_letra' placeholder='Ej. Mil ciento treinta con 00/100 soles'><b>Moneda</b><input name='nombre_moneda' value='{h(_moneda_nombre)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='{h(_moneda_simbolo)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'>{opt_periodicidad_select}</select><b>Tipo pago</b><select name='tipo_pago'>{opt_tipo_pago_select}</select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Requerimiento <span class='req-mark'>*</span></b><select name='requerimiento' required><option value=''>Seleccione requerimiento</option>{opt_req}</select><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏹ Detener</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Funciones / labores</b><textarea name='funciones' rows='2' placeholder='Funciones que se usarán en contrato si la plantilla lo requiere.'></textarea><b>Meses contrato</b><input name='meses_contrato' placeholder='Ej. 3 / TRES'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button class='c-btn'>💾 Guardar trabajador</button></form><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
+        <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'>{opt_empresa_select}</select><b>Celular</b><input name='celular' id='celular_ingreso'><b>Correo</b><input name='correo' id='correo_ingreso' type='email'><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato'><b>Tipo contrato</b><select name='tipo_contrato'>{opt_tipo_contrato_select}</select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required>{opt_regimen_select}</select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneración básica</b><input name='remuneracion_basica' placeholder='Ej. 1130.00'><b>Remuneración en letras</b><input name='remuneracion_letra' placeholder='Ej. Mil ciento treinta con 00/100 soles'><b>Moneda</b><input name='nombre_moneda' value='{h(_moneda_nombre)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='{h(_moneda_simbolo)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'>{opt_periodicidad_select}</select><b>Tipo pago</b><select name='tipo_pago'>{opt_tipo_pago_select}</select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Requerimiento <span class='req-mark'>*</span></b><select name='requerimiento' required><option value=''>Seleccione requerimiento</option>{opt_req}</select><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏹ Detener</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Funciones / labores</b><textarea name='funciones' rows='2' placeholder='Funciones que se usarán en contrato si la plantilla lo requiere.'></textarea><b>Meses contrato</b><input name='meses_contrato' placeholder='Ej. 3 / TRES'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button class='c-btn'>💾 Guardar trabajador</button></form><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
         <script>
         const trabajadoresBase = {{}};
         {';'.join([f"trabajadoresBase['{h(t['dni'])}']={{nombre:'{h(t['nombre'])}',empresa:'{h(t['empresa'])}',cargo:'{h(t['cargo'] or '')}',area:'{h(t['area'] or '')}',correo:'{h(t['correo'] or '')}'}}" for t in trabajadores[:700]])};
@@ -6837,9 +6864,9 @@ html,body{overflow-x:hidden!important;}
         {bandeja_operativa('tabla_embudo_medica')}
         <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, clínica, aptitud, observación'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_medica' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_medica' class='c-table'><tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Clínica</th><th>Programada</th><th>Resultado</th><th>Estado</th><th>Observación</th></tr>{med_rows}</table></div>
         """)
-    elif sec in ('induccion',):
+    elif sec in ('capacitacion','induccion','cursos'):
         es_ind = (sec=='induccion')
-        titulo_mod = 'Inducción laboral'
+        titulo_mod = 'Inducción laboral' if es_ind else 'Cursos y capacitación'
         desc_mod = 'Carga temas de inducción por etapa y asigna videos obligatorios al trabajador.' if es_ind else 'Administra cursos, videos, evaluaciones, exámenes y estados por trabajador.'
         opciones_curso = "<option>Bienvenida corporativa</option><option>SST inducción</option><option>Reglamento interno</option><option>Uso de EPP</option><option>Buenas prácticas agrícolas</option><option>Código de conducta</option>" if es_ind else "<option>Curso SST</option><option>Buenas prácticas agrícolas</option><option>Manipulación de alimentos</option><option>Bioseguridad</option><option>Calidad</option><option>Uso de herramientas</option><option>Curso personalizado</option>"
         cap_rows=''.join([f"<tr><td><input type='checkbox' name='cap_ids' value='{r['id']}'></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['curso'])}</td><td>{h(r['archivo_video_nombre'] or r['video_url'])}</td><td>{h(r['nota'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar capacitación?&quot;)'><input type='hidden' name='accion' value='eliminar_capacitacion'><input type='hidden' name='capacitacion_id' value='{r['id']}'><button class='delete-mini'>Eliminar</button></form></td><td>{h(r['observacion'])}</td></tr>" for r in capacitaciones])
@@ -7234,7 +7261,7 @@ html,body{overflow-x:hidden!important;}
         periodos_html = ''.join([f"<span class='mini-chip'>{h(p['periodo_inicio'])}/{h(p['periodo_fin'])} · saldo {h(p['saldo'])}</span>" for p in vac_periodos]) or '<span class="mini-chip">Sin periodos cargados</span>'
 
         content=wrap(f"""
-        <h2 class='c-title'>Expediente Único del Trabajador</h2>
+        <h2 class='c-title'>Ficha Trabajador</h2>
         <form method='get' action='/admin/contratacion' class='ficha-search'>
           <input type='hidden' name='sec' value='ficha'>
           <input name='dni' value='{h(dni_sel)}' list='trabajadores_ficha_list' placeholder='Buscar por DNI'>
@@ -7892,34 +7919,6 @@ def descargar_formato_maestros_empleador():
     path = EXCEL_LOCAL_DIR / ('FORMATO_DATOS_MAESTROS_EMPLEADOR_'+now_file()+'.xlsx')
     wb.save(path)
     return send_file(path, as_attachment=True, download_name='FORMATO_DATOS_MAESTROS_EMPLEADOR.xlsx')
-
-
-# ======================= SIDEBAR FINAL CONTRATACION PRO =======================
-def sidebar(active):
-    active_txt = str(active or '')
-    active_sub = active_txt.split(':', 1)[1] if ':' in active_txt else ''
-    if session.get('admin_id'):
-        def cls(sec):
-            return 'menu-item sub-mini active' if active_sub == sec else 'menu-item sub-mini'
-        items = [
-            ('dashboard','bi bi-speedometer2','Dashboard'),
-            ('requerimientos','bi bi-ticket-perforated','Requerimientos'),
-            ('nuevos','bi bi-person-plus','Postulantes'),
-            ('ficha','bi bi-person-lines-fill','Ficha Trabajador'),
-            ('plantillas','bi bi-file-earmark-word','Configuracion Documentaria'),
-            ('firma','bi bi-pen','Firma Digital'),
-            ('medica','bi bi-heart-pulse','Evaluacion Medica'),
-            ('induccion','bi bi-camera-video','Induccion'),
-            ('indumentaria','bi bi-bag-check','Indumentaria'),
-            ('maestros','bi bi-collection','Datos Maestros'),
-            ('reportes','bi bi-bar-chart-line','Reportes'),
-        ]
-        links = ''.join([f"<a class='{cls(sec)}' onclick='saveSideScroll()' href='/admin/contratacion?sec={sec}'><i class='{ico}'></i><span class='label'>{label}</span></a>" for sec,ico,label in items])
-        admin = "<div id='grp_contratacion' data-group='contratacion' class='menu-group force-open'><button type='button' class='menu-title active' onclick=\"toggleGroup('grp_contratacion')\"><i class='bi bi-clipboard-data'></i><span class='label'>Gestion Contratacion</span><span class='chev'>v</span></button><div class='submenu'>" + links + "</div></div>"
-        cuenta = "<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick=\"toggleGroup('grp_cuenta')\"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>v</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div>"
-        return '<nav>' + admin + cuenta + '</nav>'
-    return """<nav><div id='grp_user_contrato' data-group='user_contrato' class='menu-group force-open'><button type='button' class='menu-title active' onclick="toggleGroup('grp_user_contrato')"><i class='bi bi-clipboard-data'></i><span class='label'>Gestion Contratacion</span><span class='chev'>v</span></button><div class='submenu'><a class='menu-item active' onclick='saveSideScroll()' href='/contratacion/mis_documentos'><span>📊</span><span class='label'>Mis documentos</span></a></div></div><div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>v</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div></nav>"""
-# ===================== FIN SIDEBAR FINAL CONTRATACION PRO =====================
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
