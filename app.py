@@ -21,6 +21,7 @@ import base64
 import hashlib
 import uuid
 import json
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from copy import copy
@@ -3295,7 +3296,6 @@ def sidebar(active):
             <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span></a>
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
-            <a class='{cls('cursos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cursos'><i class='bi bi-journal-text'></i><span class='label'>Cursos / Capacitación</span></a>
             <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
             <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-diagram-3'></i><span class='label'>Integración NISIRA</span></a>
             <div id='grp_documentaria' data-group='documentaria' class='menu-group nested force-open'>
@@ -5546,6 +5546,179 @@ def descargar_plantilla_nisira_trabajadores():
     return send_file(path, as_attachment=True, download_name='PLANTILLA_NISIRA_TRABAJADORES.xlsx')
 
 
+
+
+# ==========================================================
+# CENTRO DE DESCARGAS - Gestión de Contratación
+# Plantillas, reportes y expediente ZIP por trabajador
+# ==========================================================
+def _excel_header_style(ws):
+    fill = PatternFill('solid', fgColor='0F5132')
+    font = Font(bold=True, color='FFFFFF')
+    border = Border(left=Side(style='thin', color='D9E2EC'), right=Side(style='thin', color='D9E2EC'), top=Side(style='thin', color='D9E2EC'), bottom=Side(style='thin', color='D9E2EC'))
+    for cell in ws[1]:
+        cell.fill = fill
+        cell.font = font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    ws.freeze_panes = 'A2'
+    for col in range(1, ws.max_column + 1):
+        try:
+            ws.column_dimensions[chr(64 + col) if col <= 26 else 'A'].width = 24
+        except Exception:
+            pass
+
+
+def _crear_excel_simple(nombre_archivo, titulo_hoja, headers, filas=None):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = titulo_hoja[:31]
+    ws.append(headers)
+    for fila in (filas or []):
+        ws.append(fila)
+    _excel_header_style(ws)
+    out = PERSIST_DIR / f"{nombre_archivo}_{now_file()}.xlsx"
+    wb.save(out)
+    return out
+
+
+@app.route('/admin/contratacion/descargas/plantilla/<tipo>')
+@admin_required
+def contratacion_descarga_plantilla(tipo):
+    tipo = (tipo or '').lower().strip()
+    plantillas = {
+        'postulantes': ('PLANTILLA_POSTULANTES','POSTULANTES',
+            ['REQUERIMIENTO','DNI','TRABAJADOR','EMPRESA','AREA','CARGO','ACTIVIDAD','TIPO INGRESO','FECHA INGRESO','FECHA NACIMIENTO','CELULAR','CORREO','DIRECCION','DEPARTAMENTO','PROVINCIA','DISTRITO','REMUNERACION BASICA','TIPO CONTRATO','REGIMEN LABORAL','CUENTA BANCARIA','TALLA INDUMENTARIA','CONTACTO EMERGENCIA'],
+            [['REQ-0001','12345678','APELLIDOS Y NOMBRES','AQUANQA I','Campo','Obrero de Campo','COSECHA','NUEVO',hoy_iso(),'1995-01-01','999999999','correo@empresa.com','Dirección actual','La Libertad','Trujillo','Trujillo','1130','INTERMITENTE','AGRARIO','001-0000000000','M','Contacto / Teléfono']]),
+        'requerimientos': ('PLANTILLA_REQUERIMIENTOS','REQUERIMIENTOS',
+            ['TICKET','EMPRESA','AREA','CARGO','ACTIVIDAD','CANTIDAD','FECHA INGRESO','REGIMEN LABORAL','TIPO CONTRATO','PRIORIDAD','RESPONSABLE','OBSERVACION'],
+            [['REQ-0001','AQUANQA I','Campo','Obrero de Campo','COSECHA','25',hoy_iso(),'AGRARIO','INTERMITENTE','ALTA','RRHH','Ingreso campaña']]),
+        'medica': ('PLANTILLA_EVALUACION_MEDICA','MEDICA',
+            ['REQUERIMIENTO','DNI','TRABAJADOR','ESTADO','APTITUD','FECHA PROGRAMADA','FECHA RESULTADO','FECHA VENCIMIENTO','CLINICA','RESTRICCIONES','RECOMENDACIONES','OBSERVACION'],
+            [['REQ-0001','12345678','APELLIDOS Y NOMBRES','APTO','APTO',hoy_iso(),hoy_iso(),'2027-05-29','Clínica','Sin restricciones','Sin recomendaciones','']]),
+        'indumentaria': ('PLANTILLA_INDUMENTARIA','INDUMENTARIA',
+            ['REQUERIMIENTO','DNI','TRABAJADOR','POLO','PANTALON','BOTAS','CASACA','GORRO','LENTES','GUANTES','FOTOCHECK','OTROS','ESTADO','FECHA ENTREGA','OBSERVACION'],
+            [['REQ-0001','12345678','APELLIDOS Y NOMBRES','M','32','40','M','SI','SI','SI','PENDIENTE','','PENDIENTE',hoy_iso(),'']]),
+    }
+    if tipo not in plantillas:
+        abort(404)
+    nombre, hoja, headers, ejemplo = plantillas[tipo]
+    out = _crear_excel_simple(nombre, hoja, headers, ejemplo)
+    return send_file(out, as_attachment=True, download_name=f'{nombre}.xlsx')
+
+
+@app.route('/admin/contratacion/descargas/reporte/<tipo>')
+@admin_required
+def contratacion_descarga_reporte(tipo):
+    tipo = (tipo or '').lower().strip()
+    with db() as con:
+        if tipo == 'seguimiento':
+            rows = con.execute("""SELECT requerimiento,dni,trabajador,empresa,area,cargo,actividad,tipo_ingreso,estado,
+                                         estado_medico,estado_documentos,estado_indumentaria,fotocheck_estado,biometria_estado,
+                                         fecha_ingreso,fecha_registro
+                                  FROM contratacion_ingresos ORDER BY id DESC""").fetchall()
+            headers = ['REQUERIMIENTO','DNI','TRABAJADOR','EMPRESA','AREA','CARGO','ACTIVIDAD','TIPO INGRESO','ESTADO FICHA','ESTADO MEDICO','ESTADO DOCUMENTOS','ESTADO INDUMENTARIA','FOTOCHECK','BIOMETRIA','FECHA INGRESO','FECHA REGISTRO']
+            filas = [[row_get(r,'requerimiento'),row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'empresa'),row_get(r,'area'),row_get(r,'cargo'),row_get(r,'actividad'),row_get(r,'tipo_ingreso'),row_get(r,'estado'),row_get(r,'estado_medico'),row_get(r,'estado_documentos'),row_get(r,'estado_indumentaria'),row_get(r,'fotocheck_estado'),row_get(r,'biometria_estado'),row_get(r,'fecha_ingreso'),row_get(r,'fecha_registro')] for r in rows]
+            nombre = 'REPORTE_SEGUIMIENTO_REQUERIMIENTO'
+        elif tipo == 'incompletos':
+            rows = con.execute("""SELECT requerimiento,dni,trabajador,empresa,area,cargo,fecha_nacimiento,direccion,
+                                         remuneracion_basica,tipo_contrato,regimen_laboral,estado,fecha_registro
+                                  FROM contratacion_ingresos ORDER BY id DESC""").fetchall()
+            headers = ['REQUERIMIENTO','DNI','TRABAJADOR','EMPRESA','AREA','CARGO','CAMPOS FALTANTES','ESTADO','FECHA REGISTRO']
+            campos = ['fecha_nacimiento','direccion','remuneracion_basica','cargo','tipo_contrato','regimen_laboral']
+            filas = []
+            for r in rows:
+                faltan = [c.upper() for c in campos if not clean(row_get(r,c))]
+                if faltan:
+                    filas.append([row_get(r,'requerimiento'),row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'empresa'),row_get(r,'area'),row_get(r,'cargo'),', '.join(faltan),row_get(r,'estado'),row_get(r,'fecha_registro')])
+            nombre = 'REPORTE_POSTULANTES_INCOMPLETOS'
+        elif tipo == 'documentos_pendientes':
+            rows = con.execute("""SELECT dni,trabajador,empresa,etapa,tipo_doc,estado,archivo_nombre,fecha_registro,uploaded_by
+                                  FROM contratacion_docs
+                                  WHERE UPPER(COALESCE(estado,'')) NOT IN ('FIRMADO','COMPLETADO','VALIDADO','APROBADO')
+                                  ORDER BY id DESC""").fetchall()
+            headers = ['DNI','TRABAJADOR','EMPRESA','ETAPA','TIPO DOCUMENTO','ESTADO','ARCHIVO','FECHA','USUARIO']
+            filas = [[row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'empresa'),row_get(r,'etapa'),row_get(r,'tipo_doc'),row_get(r,'estado'),row_get(r,'archivo_nombre'),row_get(r,'fecha_registro'),row_get(r,'uploaded_by')] for r in rows]
+            nombre = 'REPORTE_DOCUMENTOS_PENDIENTES'
+        elif tipo == 'firmas':
+            rows = con.execute("""SELECT f.dni,f.trabajador,d.tipo_doc,f.metodo,f.estado,f.fecha_envio,f.fecha_firma,f.observacion
+                                  FROM firma_solicitudes f
+                                  LEFT JOIN contratacion_docs d ON d.id=f.documento_id
+                                  ORDER BY f.id DESC""").fetchall()
+            headers = ['DNI','TRABAJADOR','TIPO DOCUMENTO','METODO','ESTADO FIRMA','FECHA ENVIO','FECHA FIRMA','OBSERVACION']
+            filas = [[row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'tipo_doc'),row_get(r,'metodo'),row_get(r,'estado'),row_get(r,'fecha_envio'),row_get(r,'fecha_firma'),row_get(r,'observacion')] for r in rows]
+            nombre = 'REPORTE_FIRMAS'
+        elif tipo == 'medicos':
+            rows = con.execute("""SELECT requerimiento,dni,trabajador,estado,aptitud,fecha_programada,fecha_resultado,fecha_vencimiento,clinica,observacion
+                                  FROM contratacion_medica ORDER BY id DESC""").fetchall()
+            headers = ['REQUERIMIENTO','DNI','TRABAJADOR','ESTADO','APTITUD','FECHA PROGRAMADA','FECHA RESULTADO','VENCIMIENTO','CLINICA','OBSERVACION']
+            filas = [[row_get(r,'requerimiento'),row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'estado'),row_get(r,'aptitud'),row_get(r,'fecha_programada'),row_get(r,'fecha_resultado'),row_get(r,'fecha_vencimiento'),row_get(r,'clinica'),row_get(r,'observacion')] for r in rows]
+            nombre = 'REPORTE_MEDICOS'
+        else:
+            abort(404)
+    out = _crear_excel_simple(nombre, 'REPORTE', headers, filas)
+    return send_file(out, as_attachment=True, download_name=f'{nombre}.xlsx')
+
+
+@app.route('/admin/contratacion/descargas/expediente/<dni>')
+@admin_required
+def contratacion_descarga_expediente(dni):
+    dni = normalizar_dni(dni)
+    if not dni:
+        abort(404)
+    out = PERSIST_DIR / f"EXPEDIENTE_{dni}_{now_file()}.zip"
+    with db() as con:
+        trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+        ingreso = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (dni,)).fetchone()
+        docs = con.execute('SELECT * FROM contratacion_docs WHERE dni=? ORDER BY id DESC', (dni,)).fetchall()
+        medicos = con.execute('SELECT * FROM contratacion_medica WHERE dni=? ORDER BY id DESC', (dni,)).fetchall()
+        indumentaria = con.execute('SELECT * FROM contratacion_indumentaria WHERE dni=? ORDER BY id DESC', (dni,)).fetchall()
+        firmas = con.execute('SELECT * FROM firma_solicitudes WHERE dni=? ORDER BY id DESC', (dni,)).fetchall()
+    if not trab and not ingreso and not docs:
+        abort(404)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'RESUMEN'
+    ws.append(['SECCION','CAMPO','VALOR'])
+    base = ingreso or trab
+    for campo in ['dni','trabajador','nombre','empresa','requerimiento','area','cargo','actividad','tipo_ingreso','estado','estado_medico','estado_documentos','estado_indumentaria','fecha_ingreso','fecha_registro']:
+        val = row_get(base, campo)
+        if val:
+            ws.append(['DATOS PRINCIPALES', campo.upper(), val])
+    ws.append(['RESUMEN','DOCUMENTOS',len(docs)])
+    ws.append(['RESUMEN','EVALUACIONES MEDICAS',len(medicos)])
+    ws.append(['RESUMEN','INDUMENTARIA',len(indumentaria)])
+    ws.append(['RESUMEN','FIRMAS',len(firmas)])
+    _excel_header_style(ws)
+    resumen = PERSIST_DIR / f"RESUMEN_EXPEDIENTE_{dni}_{now_file()}.xlsx"
+    wb.save(resumen)
+    def add_file(zf, path_value, carpeta):
+        try:
+            path = Path(path_value or '')
+            if path.exists() and path.is_file():
+                zf.write(path, f"{carpeta}/{path.name}")
+        except Exception:
+            pass
+    with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.write(resumen, '00_RESUMEN/RESUMEN_EXPEDIENTE.xlsx')
+        if trab:
+            add_file(zf, row_get(trab,'foto_ruta'), '01_FOTO')
+        if ingreso:
+            add_file(zf, row_get(ingreso,'foto_ruta'), '01_FOTO')
+            add_file(zf, row_get(ingreso,'huella_ruta'), '02_BIOMETRIA')
+        for d in docs:
+            add_file(zf, row_get(d,'ruta_archivo'), '03_DOCUMENTOS')
+        for m in medicos:
+            add_file(zf, row_get(m,'ruta_archivo'), '04_EVALUACION_MEDICA')
+        for i in indumentaria:
+            add_file(zf, row_get(i,'cargo_pdf'), '05_INDUMENTARIA')
+        for f in firmas:
+            add_file(zf, row_get(f,'selfie_path'), '06_FIRMA_DIGITAL')
+            add_file(zf, row_get(f,'documento_firmado_path'), '06_FIRMA_DIGITAL')
+    return send_file(out, as_attachment=True, download_name=f'EXPEDIENTE_{dni}.zip')
+
+
+
 @app.route('/admin/contratacion', methods=['GET','POST'])
 @admin_required
 def admin_contratacion():
@@ -6782,11 +6955,11 @@ html,body{overflow-x:hidden!important;}
         content=wrap(f"""
         <section class='dashboard-contratacion'>
           <div class='dash-hero'>
-            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, cursos, indumentaria, fotocheck, NISIRA y Gestión Documental.</p></div>
+            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, indumentaria, fotocheck, NISIRA y Gestión Documental.</p></div>
             <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=requerimientos'>Nuevo ticket</a><a class='c-btn gray' href='/admin/contratacion?sec=nuevos'>Registrar trabajador</a></div>
           </div>
           <div class='dash-kpis'><div class='dash-card'><small>Tickets</small><b>{total_req}</b></div><div class='dash-card'><small>Postulantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Lotes NISIRA</small><b>{total_nisira}</b></div></div>
-          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, capacitación e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=cursos'>Cursos</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
+          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, inducción e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
           <div class='dash-card table-wrap'><h2>Últimos registros del embudo</h2><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Ingreso</th><th>Sede</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
         </section>
         """)
@@ -6865,6 +7038,9 @@ html,body{overflow-x:hidden!important;}
         <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, clínica, aptitud, observación'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_medica' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_medica' class='c-table'><tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Clínica</th><th>Programada</th><th>Resultado</th><th>Estado</th><th>Observación</th></tr>{med_rows}</table></div>
         """)
     elif sec in ('capacitacion','induccion','cursos'):
+        if sec in ('capacitacion','cursos'):
+            flash('El módulo Cursos / Capacitación fue retirado del menú. Usa Inducción para videos obligatorios.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='induccion'))
         es_ind = (sec=='induccion')
         titulo_mod = 'Inducción laboral' if es_ind else 'Cursos y capacitación'
         desc_mod = 'Carga temas de inducción por etapa y asigna videos obligatorios al trabajador.' if es_ind else 'Administra cursos, videos, evaluaciones, exámenes y estados por trabajador.'
@@ -7638,7 +7814,88 @@ html,body{overflow-x:hidden!important;}
     elif sec=='nisira':
         return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
     elif sec=='descargas':
-        content=wrap(f"<h2 class='c-title'>Descargas</h2><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th></tr>{docs_rows or '<tr><td colspan=6>No hay archivos.</td></tr>'}</table></div>")
+        trab_exp_rows = ''.join([f"""
+          <tr>
+            <td>{html.escape(row_get(t,'dni'))}</td>
+            <td>{html.escape(row_get(t,'nombre'))}</td>
+            <td>{html.escape(row_get(t,'empresa'))}</td>
+            <td>{html.escape(row_get(t,'area'))}</td>
+            <td>{html.escape(row_get(t,'cargo'))}</td>
+            <td><a class='c-btn mini' href='{url_for('contratacion_descarga_expediente', dni=row_get(t,'dni'))}'>⬇ ZIP</a></td>
+          </tr>""" for t in trabajadores[:60]])
+        content=wrap(f"""
+        <style>
+          .download-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}}
+          .download-grid{{display:grid;grid-template-columns:repeat(2,minmax(280px,1fr));gap:18px;margin-bottom:18px}}
+          .download-box{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:22px;box-shadow:0 12px 30px #0f172a0d}}
+          .download-box h3{{margin:0 0 8px;color:#0b2742;font-size:22px}}
+          .download-box p{{margin:0 0 14px;color:#64748b;line-height:1.45}}
+          .download-actions{{display:flex;gap:10px;flex-wrap:wrap}}
+          .c-btn.mini{{padding:8px 12px;font-size:13px;border-radius:10px}}
+          .download-list{{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px}}
+          @media(max-width:900px){{.download-grid,.download-list{{grid-template-columns:1fr}}.download-hero{{display:block}}}}
+        </style>
+        <div class='download-hero c-card' style='padding:26px'>
+          <div>
+            <h2 class='c-title' style='margin-bottom:8px'>Centro de Descargas</h2>
+            <p class='muted2'>Descarga plantillas Excel, reportes del proceso, documentos generados y expedientes completos por trabajador.</p>
+          </div>
+          <a class='c-btn' href='{url_for('admin_contratacion', sec='dashboard')}'>← Volver al dashboard</a>
+        </div>
+
+        <div class='download-grid'>
+          <div class='download-box'>
+            <h3>1) Plantillas Excel</h3>
+            <p>Formatos oficiales para cargar información masiva sin romper la estructura del sistema.</p>
+            <div class='download-list'>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='postulantes')}'>⬇ Base postulantes</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='requerimientos')}'>⬇ Base requerimientos</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='medica')}'>⬇ Evaluación médica</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='indumentaria')}'>⬇ Indumentaria</a>
+            </div>
+          </div>
+
+          <div class='download-box'>
+            <h3>2) Reportes de seguimiento</h3>
+            <p>Archivos Excel para controlar bloqueos, pendientes críticos y avance por requerimiento.</p>
+            <div class='download-list'>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='seguimiento')}'>⬇ Seguimiento general</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='incompletos')}'>⬇ Fichas incompletas</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='documentos_pendientes')}'>⬇ Documentos pendientes</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='firmas')}'>⬇ Firmas pendientes/completadas</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='medicos')}'>⬇ Médicos APTO / NO APTO</a>
+            </div>
+          </div>
+
+          <div class='download-box'>
+            <h3>3) Formatos generados</h3>
+            <p>Accesos rápidos a documentos que ya se generan desde el flujo documentario.</p>
+            <div class='download-actions'>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='plantillas')}'>📄 Contratos y anexos</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='fotocheck')}'>🪪 Fotocheck</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='indumentaria')}'>🎽 Cargos de entrega</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='firma')}'>✍ Firmas digitales</a>
+            </div>
+          </div>
+
+          <div class='download-box'>
+            <h3>4) Expediente trabajador</h3>
+            <p>Descarga un ZIP con resumen, documentos, firma, foto, biometría, médico e indumentaria del trabajador.</p>
+            <form class='download-actions' method='get' onsubmit="event.preventDefault(); const dni=this.dni.value.trim(); if(dni) location.href='/admin/contratacion/descargas/expediente/'+encodeURIComponent(dni);">
+              <input name='dni' placeholder='Ingrese DNI' list='trabajadores_list' style='min-width:220px'>
+              <button class='c-btn'>⬇ Descargar ZIP</button>
+            </form>
+          </div>
+        </div>
+
+        <div class='c-card table-wrap'>
+          <h3 style='margin:0 0 12px'>Expedientes rápidos</h3>
+          <table class='c-table'>
+            <tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Descarga</th></tr>
+            {trab_exp_rows or '<tr><td colspan="6">No hay trabajadores para mostrar.</td></tr>'}
+          </table>
+        </div>
+        """)
     else:
         content=wrap(f"<h2 class='c-title'>Archivos Trabajador</h2><div class='toolbar'>🔎 Filtros &nbsp; ⚙ Acción ▾ &nbsp; ⬇ Descargar ▾</div><form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:18px'><b>Trabajador</b><input name='dni' list='trabajadores_list' required><datalist id='trabajadores_list'>{opt_trab}</datalist><b>Etapa</b><select name='etapa'><option>Incorporación</option><option>Renovación</option><option>Cese</option></select><b>Tipo documento</b><select name='tipo_doc'>{opt_tipo}</select><b>Archivo</b><input type='file' name='archivo' required><span></span><button class='c-btn'>⬆ Subir Docs Individual</button></form><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th></tr>{docs_rows or '<tr><td colspan=7>No hay archivos.</td></tr>'}</table></div>")
     return render_page(content, active=f'Gestion Contratacion:{sec}')
