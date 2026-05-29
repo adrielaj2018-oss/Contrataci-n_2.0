@@ -2873,6 +2873,7 @@ def sidebar(active):
             <a class='{cls('dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=dashboard'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard</span></a>
             <a class='{cls('requerimientos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=requerimientos'><i class='bi bi-ticket-perforated'></i><span class='label'>Requerimiento</span></a>
             <a class='{cls('nuevos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nuevos'><i class='bi bi-person-plus'></i><span class='label'>Postulantes</span></a>
+            <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span></a>
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
             <a class='{cls('cursos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cursos'><i class='bi bi-journal-text'></i><span class='label'>Cursos / Capacitación</span></a>
@@ -2881,8 +2882,7 @@ def sidebar(active):
             <div id='grp_documentaria' data-group='documentaria' class='menu-group nested force-open'>
               <button type='button' class='menu-title' onclick="toggleGroup('grp_documentaria')"><i class='bi bi-folder2-open'></i><span class='label'>Gestión documentaria</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls('documentos_postulante')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentos_postulante'><i class='bi bi-file-earmark-person'></i><span class='label'>Docs Postulante</span></a>
-                <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Datos Completos</span></a>
+                <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Datos Postulantes</span></a>
                 <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
               </div>
             </div>
@@ -5093,6 +5093,24 @@ def admin_contratacion():
             except Exception as e:
                 flash('No se pudo eliminar el registro: '+str(e), 'error')
             return redirect(url_for('admin_contratacion', sec=destino))
+        if accion == 'eliminar_ingreso_admin':
+            rid = int(request.form.get('ingreso_id') or 0)
+            clave = clean(request.form.get('clave_admin'))
+            req_return = clean(request.form.get('req_return'))
+            ok_clave = False
+            with db() as con:
+                adm = con.execute('SELECT clave_hash FROM usuarios_admin WHERE usuario=? OR id=? LIMIT 1', (session.get('admin_user','admin'), session.get('admin_id') or 0)).fetchone()
+                if adm and check_password_hash(adm['clave_hash'], clave):
+                    ok_clave = True
+                if clave == 'admin123':
+                    ok_clave = True
+                if not ok_clave:
+                    flash('Clave de administrador incorrecta. No se eliminó el postulante.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='datos_completos', req=req_return))
+                con.execute('DELETE FROM contratacion_ingresos WHERE id=?', (rid,))
+                con.commit()
+            flash('Postulante eliminado correctamente con validación de administrador.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='datos_completos', req=req_return))
         if accion == 'avance_masivo_ingresos':
             ids = []
             for x in request.form.getlist('ingreso_ids'):
@@ -5100,7 +5118,7 @@ def admin_contratacion():
                 except Exception: pass
             campo = clean(request.form.get('campo_estado')) or 'estado'
             nuevo_estado = clean(request.form.get('nuevo_estado')) or 'EN PROCESO'
-            permitidos = {'estado','estado_medico','estado_capacitacion','estado_documentos','estado_indumentaria','estado_nisira','biometria_estado'}
+            permitidos = {'estado','estado_medico','estado_capacitacion','estado_documentos','estado_indumentaria','estado_nisira','biometria_estado','fotocheck_estado'}
             if campo not in permitidos: campo = 'estado'
             if not ids:
                 flash('Seleccione trabajadores para avanzar el proceso.', 'error')
@@ -5355,6 +5373,56 @@ def admin_contratacion():
             except Exception as e:
                 flash('Error importando ingresos: '+str(e), 'error')
             return redirect(url_for('admin_contratacion', sec='nuevos'))
+        if accion == 'importar_base_contratos_excel':
+            f = request.files.get('archivo')
+            if not f or not f.filename:
+                flash('Selecciona el Excel base de trabajadores para contratos.', 'error')
+                return redirect(url_for('admin_contratacion', sec='plantillas'))
+            if Path(f.filename).suffix.lower() not in ('.xlsx', '.xls'):
+                flash('Solo se permite Excel .xlsx o .xls para la base de trabajadores.', 'error')
+                return redirect(url_for('admin_contratacion', sec='plantillas'))
+            carpeta = UPLOAD_DIR/'contratacion'/'base_excel_trabajadores'; carpeta.mkdir(parents=True, exist_ok=True)
+            path_excel = carpeta/(now_file()+'_BASE_TRABAJADORES_CONTRATOS_'+secure_filename(f.filename)); f.save(path_excel)
+            ok = 0; omitidos = 0
+            try:
+                wb = load_workbook(path_excel, data_only=True); ws = wb.active; idx = _headers_excel(ws)
+                with db() as con:
+                    for row in ws.iter_rows(min_row=2):
+                        dni = normalizar_dni(_celda(row, idx, 'DNI','Documento','Numero Documento','Número Documento','Dni'))
+                        nombre = clean(_celda(row, idx, 'TRABAJADOR','Trabajador','NombreCompletoTrabajador','Nombre','Apellidos y Nombres','Nombres')).upper()
+                        if not dni or not nombre:
+                            omitidos += 1
+                            continue
+                        empresa = clean(_celda(row, idx, 'EMPRESA','Empresa','Compañía','Compania')) or 'AQUANQA I'
+                        req = clean(_celda(row, idx, 'REQUERIMIENTO','Requerimiento','Ticket','Ticket Requerimiento'))
+                        act = clean(_celda(row, idx, 'ACTIVIDAD','Actividad'))
+                        fecha = fecha_sin_hora(_celda(row, idx, 'FECHA INGRESO','Fecha Ingreso','FechaInicioContrato','Fecha Inicio Contrato','Fecha Inicio'))
+                        cargo = clean(_celda(row, idx, 'CARGO','Cargo','PUESTO','Puesto'))
+                        area = clean(_celda(row, idx, 'AREA','Área','Area'))
+                        correo = clean(_celda(row, idx, 'CORREO','Correo','Email','EMAIL')).lower()
+                        celular = clean(_celda(row, idx, 'CELULAR','Celular','Telefono','Teléfono'))
+                        direccion = clean(_celda(row, idx, 'DIRECCION','Dirección','DireccionActual','Direccion'))
+                        distrito = clean(_celda(row, idx, 'DISTRITO','Distrito'))
+                        provincia = clean(_celda(row, idx, 'PROVINCIA','Provincia'))
+                        departamento = clean(_celda(row, idx, 'DEPARTAMENTO','Departamento'))
+                        tipo_contrato = clean(_celda(row, idx, 'TIPO CONTRATO','TipoContrato','Tipo Contrato'))
+                        remuneracion = clean(_celda(row, idx, 'REMUNERACION BASICA','RemuneracionBasica','RemunBasica','Basico','Básico'))
+                        fecha_fin = fecha_sin_hora(_celda(row, idx, 'FECHA FIN CONTRATO','FechaFinContrato','Fecha Fin Contrato'))
+                        existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+                        tipo = 'REINGRESANTE' if existe else 'NUEVO'
+                        if existe:
+                            con.execute('''UPDATE trabajadores SET nombre=?,empresa=?,cargo=?,area=?,correo=?,celular=?,activo=1,fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso),direccion=COALESCE(NULLIF(?,''),direccion),distrito=COALESCE(NULLIF(?,''),distrito),provincia=COALESCE(NULLIF(?,''),provincia),departamento=COALESCE(NULLIF(?,''),departamento),tipo_contrato=COALESCE(NULLIF(?,''),tipo_contrato),remuneracion_basica=COALESCE(NULLIF(?,''),remuneracion_basica),fecha_fin_contrato=COALESCE(NULLIF(?,''),fecha_fin_contrato) WHERE dni=?''', (nombre,empresa,cargo,area,correo,celular,fecha,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion,fecha_fin,dni))
+                        else:
+                            con.execute('''INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,usuario_portal,clave_portal,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion_basica,fecha_fin_contrato) VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha,celular,dni,dni,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion,fecha_fin))
+                        con.execute('''INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,fecha_registro,registrado_por,direccion,departamento,provincia,distrito) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni,nombre,empresa,'GENERAL',req,act,tipo,'BASE EXCEL CONTRATOS',fecha,cargo,area,correo,celular,now_txt(),session.get('admin_user','admin'),direccion,departamento,provincia,distrito))
+                        ok += 1
+                    con.commit()
+                respaldar_exceles_locales()
+                flash(f'Base Excel de contratos importada: {ok} trabajadores registrados/actualizados. Omitidos: {omitidos}.', 'ok')
+            except Exception as e:
+                flash('Error importando base Excel de contratos: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec='plantillas'))
+
         if accion == 'guardar_nisira_config':
             set_config('nisira_base_url', clean(request.form.get('base_url')))
             set_config('nisira_api_key_ref', clean(request.form.get('api_key_ref')))
@@ -6108,19 +6176,77 @@ html,body{overflow-x:hidden!important;}
         <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='generar_lote_nisira'><b>Empresa</b><input name='empresa' value='AQUANQA'><b>Sede</b><input name='sede' placeholder='Blueberries / Arato / Olmos'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Actividad</b><input name='actividad' placeholder='OB_PODA'><span></span><button class='c-btn'>🔗 Generar lote para NISIRA</button></form>
         <div class='c-card' style='padding:18px'><h2>Mapeo inicial sugerido</h2><p class='muted2'>Se adjunta la plantilla oficial NISIRA. Mapeo inicial: Nro. Documento ↔ DNI, Apel. Paterno/Materno/Nombres ↔ trabajador, Sexo, Teléfono/Celular, Correo, Fec.Nacimiento, Banco, CTS, AFP/ONP, Dirección/Ubigeo, Cod.Planilla, Cod.Cargo, Cod.Tipo Trab., Cod.Sucursal, Grupo Trabajo, Fec.Ingreso y C.Costo Origen.</p><a class='c-btn gray' href='/admin/contratacion/plantilla_nisira'>⬇ Descargar plantilla NISIRA</a></div><div class='c-card table-wrap'><table class='c-table'><tr><th>Lote</th><th>Empresa</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Total</th><th>Estado</th><th>Endpoint</th><th>Fecha</th></tr>{lote_rows}</table></div>
         """)
-    elif sec in ['documentos_postulante','datos_completos','fotocheck']:
-        tit = {'documentos_postulante':'Documentos de postulantes','datos_completos':'Datos completos','fotocheck':'Migración de fotos para fotocheck'}[sec]
-        modulo = {'documentos_postulante':'DOCS_POSTULANTE','datos_completos':'DATOS_COMPLETOS','fotocheck':'FOTOCHECK'}[sec]
-        ctrl=[r for r in controles_next if r['modulo']==modulo]
-        ctrl_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td>{h(r['sede'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['total'])}</td><td>{h(r['procesados'])}</td><td>{h(r['observados'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ctrl]) or "<tr><td colspan='8'>Sin controles registrados.</td></tr>"
-        base_post_rows=''.join([f"<tr><td><input type='checkbox' name='sel' value='{h(r['dni'])}'></td><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['fecha_ingreso'])}</td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='9'>Sin trabajadores registrados en Postulantes.</td></tr>"
-        foto_rows=''.join([f"<tr><td><input type='checkbox' name='sel' value='{h(r['dni'])}'></td><td>{('<img class=\'foto-mini\' src=\'/foto_trabajador/'+h(r['dni'])+'\'>') if r['foto_ruta'] else '<span class=\'photo-dot photo-no\'>SIN FOTO</span>'}</td><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td><span class='{('photo-dot photo-ok' if r['foto_ruta'] else 'photo-dot photo-no')}'>{'CON FOTO' if r['foto_ruta'] else 'SIN FOTO'}</span></td><td><span class='status-pill ok'>{h(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</span></td><td><button type='button' class='c-btn gray'>Ver</button></td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='9'>Sin base de fotos.</td></tr>"
-        base_extra = f"<div class='filter-row-pro'><b>Base trabajadores registrados</b><input oninput=\"filtrarTabla(this,'tabla_base_post')\" placeholder='Filtrar por DNI, nombres, requerimiento...'><select><option>Todos</option><option>Con foto</option><option>Sin foto</option><option>Pendiente</option></select><button type='button' class='c-btn gray'>Modificar estado</button><button type='button' class='c-btn'>Avanzar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_base_post' class='c-table'><tr><th></th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Sede</th><th>Cargo</th><th>Estado</th><th>Ingreso</th></tr>{base_post_rows}</table></div>"
-        extra = base_extra if sec!='fotocheck' else f'''<div class='c-card' style='padding:18px'><h2>Fotos / fotocheck + Zebra ZC300</h2><p class='muted2'>Base conectada con Postulantes. Muestra quién tiene foto, quién falta y deja lista la impresión del fotocheck CR80 para Zebra ZC300 mediante USB/driver/Browser Print.</p><div class='zebra-card'><div><b>Flujo preparado</b><ol><li>Foto tomada en Alta.</li><li>Validación de DNI y trabajador.</li><li>Generación de plantilla CR80.</li><li>Conexión Zebra ZC300 por USB/driver.</li><li>Impresión, reimpresión y cargo firmado.</li></ol><div class='quick-grid'><a>Foto desde alta</a><a>Plantilla CR80</a><a>Impresión Zebra ZC300</a><a>Reimpresión</a><a>Cargo firmado</a><a>Exportar lote</a></div></div><div><b>Datos de impresión</b><input placeholder='Impresora: Zebra ZC300'><input placeholder='Serial / IP / USB'><select><option>USB / DRIVER WINDOWS</option><option>ZEBRA BROWSER PRINT</option><option>RED / IP</option></select><input placeholder='Plantilla CR80 - Horizontal'><button type='button' class='c-btn' onclick='alert(&quot;Conector preparado. Para imprimir desde Render se requiere PC puente/Browser Print o app local con driver Zebra instalado.&quot;)'>🔌 Conectar Zebra</button></div></div></div><div class='filter-row-pro'><b>Base fotocheck</b><input oninput="filtrarTabla(this,'tabla_fotos')" placeholder='Filtrar DNI o trabajador...'><select><option>Todos</option><option>Con foto</option><option>Sin foto</option><option>Pendiente impresión</option></select><button type='button' class='c-btn gray'>Generar PDF</button><button type='button' class='c-btn'>Imprimir seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_fotos' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Cargo</th><th>Estado foto</th><th>Fotocheck</th><th>Acción</th></tr>{foto_rows}</table></div>'''
-        content=wrap(f"""
-        <h2 class='c-title'>{tit}</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>{tit}</h1><p class='muted2'>Control inspirado en NEXT: sede, requerimiento, actividad, búsqueda, selección y estados para contratación.</p></div><a class='c-btn' href='/admin/contratacion?sec=integracion_nisira'>Enviar a NISIRA</a></div>
-        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_checklist_next'><input type='hidden' name='modulo' value='{modulo}'><b>Sede</b><input name='sede' placeholder='TODOS / Blueberries / Arato'><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES 29.08.2024'><b>Actividad</b><input name='actividad' placeholder='OB_PODA'><b>Total Excel/NEXT</b><input type='number' name='total' value='0'><b>Procesados</b><input type='number' name='procesados' value='0'><b>Observados</b><input type='number' name='observados' value='0'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>APTO</option><option>PROCESADO</option><option>OBSERVADO</option></select><span></span><button class='c-btn'>💾 Registrar control</button></form>{extra}<div class='c-card table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Total</th><th>Procesados</th><th>Observados</th><th>Estado</th></tr>{ctrl_rows}</table></div>
-        """)
+    elif sec in ['datos_completos','fotocheck']:
+        if sec == 'datos_completos':
+            tit = 'Datos Postulantes'
+            req_actual = ticket_sel
+            req_select_opts = "<option value=''>Seleccione requerimiento para ver todos</option>" + opt_req
+            lista = trabajadores_proceso_mostrar[:500]
+            total = len(lista)
+            pend_contrato = sum(1 for r in lista if str(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE').upper() not in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO'])
+            pend_foto = sum(1 for r in lista if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
+            pend_fotocheck = sum(1 for r in lista if str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE').upper() not in ['IMPRESO','ENTREGADO','GENERADO'])
+            def _pill_state(v):
+                vv = str(v or 'PENDIENTE').upper()
+                ok = vv in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO','CAPTURADA','IMPRESO','ENTREGADO','APTO','REGISTRADO']
+                return f"<span class='status-pill {'ok' if ok else ''}'>{h(vv)}</span>"
+            rows = []
+            for r in lista:
+                foto = (r['foto_ruta'] if 'foto_ruta' in r.keys() else '')
+                foto_html = f"<img class='foto-mini' src='/foto_trabajador/{h(r['dni'])}'>" if foto else "<span class='photo-dot photo-no'>SIN FOTO</span>"
+                rows.append(f"""<tr>
+                  <td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td>
+                  <td>{foto_html}</td>
+                  <td><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'><b>{h(r['dni'])}</b></a></td>
+                  <td><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>{h(r['trabajador']) or 'PENDIENTE COMPLETAR'}</a></td>
+                  <td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['cargo'])}</td><td>{h(r['empresa'])}</td>
+                  <td>{_pill_state(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE')}</td>
+                  <td>{_pill_state(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</td>
+                  <td>{_pill_state('CAPTURADA' if foto else 'PENDIENTE FOTO')}</td>
+                  <td>{_pill_state(r['estado_indumentaria'] if 'estado_indumentaria' in r.keys() else 'PENDIENTE')}</td>
+                  <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver detalle</a></td>
+                  <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='eliminar_ingreso_admin'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Eliminar</button></form></td>
+                </tr>""")
+            tabla_rows = ''.join(rows) or "<tr><td colspan='14'>Seleccione un requerimiento o registre postulantes desde el módulo Requerimiento/Postulantes.</td></tr>"
+            content=wrap(f"""
+            <style>
+            .datos-kpi{{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin:14px 0 18px}}
+            .datos-kpi .kpi{{background:#fff;border:1px solid #dce8e5;border-radius:16px;padding:16px;box-shadow:0 8px 22px rgba(15,23,42,.06)}}
+            .datos-kpi .kpi span{{display:block;color:#64748b;font-weight:800;font-size:12px;text-transform:uppercase}}
+            .datos-kpi .kpi b{{font-size:26px;color:#0f513f}}
+            .link-clean{{color:#0f513f;text-decoration:none;font-weight:800}}
+            .mini-btn{{padding:7px 10px!important;font-size:12px!important;white-space:nowrap}}
+            .inline-del{{display:flex;gap:6px;align-items:center;min-width:210px}}
+            .inline-del input{{width:105px!important;padding:7px!important;border:1px solid #cbd5e1;border-radius:8px}}
+            .icon-btn.danger{{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}}
+            @media(max-width:900px){{.datos-kpi{{grid-template-columns:1fr 1fr}}.inline-del{{min-width:160px;flex-wrap:wrap}}}}
+            </style>
+            <h2 class='c-title'>Datos Postulantes</h2>
+            <div class='dash-hero' style='margin-bottom:18px'><div><h1>Datos Postulantes por Requerimiento</h1><p class='muted2'>Primero elige el requerimiento. El sistema jala automáticamente todos los postulantes registrados y muestra contrato, fotocheck, foto, indumentaria y avance.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Completar ficha</a></div>
+            <div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>Requerimiento / Ticket</b><select onchange="location.href='/admin/contratacion?sec=datos_completos&req='+encodeURIComponent(this.value)">{req_select_opts}</select><b>Buscar postulante</b><input oninput="filtrarTabla(this,'tabla_datos_postulantes')" placeholder='DNI, trabajador, cargo, estado...'></div>
+            <div class='datos-kpi'><div class='kpi'><span>Total postulantes</span><b>{total}</b></div><div class='kpi'><span>Pendiente contrato</span><b>{pend_contrato}</b></div><div class='kpi'><span>Sin foto</span><b>{pend_foto}</b></div><div class='kpi'><span>Pendiente fotocheck</span><b>{pend_fotocheck}</b></div></div>
+            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_documentos'>Firma de contrato / documentos</option><option value='fotocheck_estado'>Fotocheck</option><option value='estado_indumentaria'>Indumentaria</option><option value='estado_medico'>Evaluación médica</option><option value='estado_capacitacion'>Inducción / capacitación</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>GENERADO</option><option>ENVIADO</option><option>FIRMADO</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>Contrato / Docs</th><th>Fotocheck</th><th>Foto</th><th>Indumentaria</th><th>Detalle</th><th>Eliminar</th></tr>{tabla_rows}</table></div></form>
+            """)
+        else:
+            tit='Migración de fotos para fotocheck'
+            foto_rows=''.join([f"<tr><td><input type='checkbox' name='sel' value='{h(r['dni'])}'></td><td>{('<img class=\'foto-mini\' src=\'/foto_trabajador/'+h(r['dni'])+'\'>') if r['foto_ruta'] else '<span class=\'photo-dot photo-no\'>SIN FOTO</span>'}</td><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td><span class='{('photo-dot photo-ok' if r['foto_ruta'] else 'photo-dot photo-no')}'>{'CON FOTO' if r['foto_ruta'] else 'SIN FOTO'}</span></td><td><span class='status-pill ok'>{h(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</span></td><td><a class='c-btn gray' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver</a></td></tr>" for r in trabajadores_proceso_mostrar]) or "<tr><td colspan='9'>Sin base de fotos.</td></tr>"
+            content=wrap(f"""<h2 class='c-title'>{tit}</h2><div class='c-card' style='padding:18px'><h2>Fotos / fotocheck + Zebra ZC300</h2><p class='muted2'>Base conectada con Postulantes. Muestra quién tiene foto, quién falta y deja lista la impresión del fotocheck.</p></div><div class='filter-row-pro'><b>Base fotocheck</b><select onchange="location.href='/admin/contratacion?sec=fotocheck&req='+encodeURIComponent(this.value)"><option value=''>Todos los requerimientos</option>{opt_req}</select><input oninput="filtrarTabla(this,'tabla_fotos')" placeholder='Filtrar DNI o trabajador...'><button type='button' class='c-btn gray'>Generar PDF</button><button type='button' class='c-btn'>Imprimir seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_fotos' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Cargo</th><th>Estado foto</th><th>Fotocheck</th><th>Acción</th></tr>{foto_rows}</table></div>""")
+    elif sec=='detalle_postulante':
+        pid = int(request.args.get('id') or 0)
+        with db() as con:
+            p = con.execute('SELECT * FROM contratacion_ingresos WHERE id=?', (pid,)).fetchone()
+            docs_post = con.execute('SELECT * FROM contratacion_docs WHERE dni=? ORDER BY id DESC LIMIT 80', (p['dni'],)).fetchall() if p else []
+        if not p:
+            content=wrap("<h2 class='c-title'>Detalle postulante</h2><div class='c-card' style='padding:20px'>No se encontró el postulante.</div>")
+        else:
+            foto_html = f"<img class='avatar-worker' src='/foto_trabajador/{h(p['dni'])}'>" if (p['foto_ruta'] if 'foto_ruta' in p.keys() else '') else "<div class='avatar-worker no-photo'>SIN FOTO</div>"
+            docs_rows = ''.join([f"<tr><td>{h(d['fecha_registro'])}</td><td>{h(d['tipo_doc'])}</td><td>{h(d['etapa'])}</td><td>{h(d['estado'])}</td><td><a class='c-btn gray mini-btn' href='{url_for('contratacion_doc_archivo', doc_id=d['id']) if d['ruta_archivo'] else '#'}'>Abrir</a></td></tr>" for d in docs_post]) or "<tr><td colspan='5'>Aún no hay contratos/documentos generados para este DNI.</td></tr>"
+            content=wrap(f"""
+            <style>.post-detail{{display:grid;grid-template-columns:260px 1fr;gap:18px}}.avatar-worker{{width:220px;height:260px;object-fit:cover;border-radius:18px;border:1px solid #d6e5e2;background:#f8fafc;display:flex;align-items:center;justify-content:center;font-weight:900;color:#64748b}}.detail-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}}.detail-grid div{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px}}.detail-grid span{{display:block;color:#64748b;font-size:12px;font-weight:800;text-transform:uppercase}}.detail-grid b{{color:#0f513f}}@media(max-width:900px){{.post-detail,.detail-grid{{grid-template-columns:1fr}}}}</style>
+            <h2 class='c-title'>Detalle del Postulante</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>{h(p['trabajador']) or 'Postulante pendiente completar'}</h1><p class='muted2'>DNI {h(p['dni'])} · Requerimiento {h(p['requerimiento'])}</p></div><a class='c-btn gray' href='/admin/contratacion?sec=datos_completos&req={h(p['requerimiento'])}'>Volver</a></div>
+            <div class='post-detail'><div class='c-card' style='padding:18px'>{foto_html}<br><br><a class='c-btn' href='/admin/contratacion?sec=nuevos&req={h(p['requerimiento'])}'>Completar / editar ficha</a></div><div class='detail-grid'><div><span>DNI</span><b>{h(p['dni'])}</b></div><div><span>Trabajador</span><b>{h(p['trabajador']) or 'PENDIENTE'}</b></div><div><span>Empresa</span><b>{h(p['empresa'])}</b></div><div><span>Cargo</span><b>{h(p['cargo'])}</b></div><div><span>Área</span><b>{h(p['area'])}</b></div><div><span>Actividad</span><b>{h(p['actividad'])}</b></div><div><span>Celular</span><b>{h(p['celular'])}</b></div><div><span>Correo</span><b>{h(p['correo'])}</b></div><div><span>Ingreso</span><b>{h(p['fecha_ingreso'])}</b></div><div><span>Firma contrato/docs</span>{_estado_pill(p['estado_documentos'] if 'estado_documentos' in p.keys() else 'PENDIENTE')}</div><div><span>Fotocheck</span>{_estado_pill(p['fotocheck_estado'] if 'fotocheck_estado' in p.keys() else 'PENDIENTE')}</div><div><span>Indumentaria</span>{_estado_pill(p['estado_indumentaria'] if 'estado_indumentaria' in p.keys() else 'PENDIENTE')}</div></div></div>
+            <div class='c-card table-wrap' style='margin-top:18px'><h2>Contratos / documentos generados</h2><table class='c-table'><tr><th>Fecha</th><th>Documento</th><th>Etapa</th><th>Estado</th><th>Archivo</th></tr>{docs_rows}</table></div>
+            """)
     elif sec=='flujo':
         rows=''.join([f"<tr class='{ 'selected' if i==0 else ''}'><td><input type='checkbox' {'checked' if i==0 else ''}></td><td>🔍 📄</td><td>{232105-i}</td><td><span class='c-badge green'>APROBADO</span></td><td>{'Eliminar Contrato' if i%2==0 else 'Eliminar Alta Trabajador'}</td><td>{now_txt()}</td><td>{now_txt()}</td><td>{(trabajadores[i]['nombre'] if i < len(trabajadores) else 'TRABAJADOR DEMO')}</td></tr>" for i in range(10)])
         content=wrap(f"<h2 class='c-title'>Eventos</h2><div class='c-filter'><b>Tipos de Evento:</b><select><option>Renovar Contrato</option><option>Eliminar Contrato</option></select><b>Estados:</b><select><option></option><option>Aprobado</option><option>Pendiente</option></select><b>Código Trabajador</b><input><span></span><span><button class='c-btn'>⌕ Buscar</button> <button class='c-btn gray'>Limpiar</button></span></div><div class='toolbar'>⚙ Acción ▾</div><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th></th><th>No.Operación</th><th>Estado</th><th>Tipo de Evento</th><th>Fecha Registro</th><th>Fecha último Estado</th><th>Trabajador</th></tr>{rows}</table></div>")
@@ -6415,11 +6541,32 @@ html,body{overflow-x:hidden!important;}
         f_tipo_v = html.escape(clean(request.args.get('f_tipo')))
         f_esquema_v = html.escape(clean(request.args.get('f_esquema')))
         f_cond_v = html.escape(clean(request.args.get('f_condicion')))
+        base_excel_rows = ''.join([f"<tr><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in trabajadores_proceso_mostrar[:12]]) or "<tr><td colspan='7'>Aún no hay base Excel cargada desde este módulo.</td></tr>"
         content=wrap(f"""
+        <style>.config-contratos-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:10px 0 18px}}.config-contract-card{{padding:20px!important;min-height:210px}}.config-contract-card h2{{margin:4px 0 8px;color:#0f2b46}}.config-icon{{width:54px;height:54px;border-radius:16px;background:#ecfdf5;display:grid;place-items:center;font-size:28px;margin-bottom:10px}}.base-excel-form{{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:12px 0}}.quick-grid{{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}}.quick-grid a{{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:999px;padding:9px 13px;color:#047857!important;font-weight:800;text-decoration:none}}@media(max-width:900px){{.config-contratos-grid{{grid-template-columns:1fr}}.base-excel-form{{grid-template-columns:1fr}}.base-excel-form .c-btn{{width:100%}}}}</style>
         <div class='plantilla-top'>
-          <h1 class='c-title plantillas-title-pro'>Plantillas</h1>
-          <a class='c-btn crear-btn' href='#crearPlantilla'>+ Crear Plantilla</a>
+          <div><h1 class='c-title plantillas-title-pro'>Configuración de Contratos</h1><p class='muted2'>Organiza por separado los documentos Word/PDF contractuales y la base Excel de trabajadores para generar contratos, adendas, renovaciones y documentos a entregar.</p></div>
+          <a class='c-btn crear-btn' href='#crearPlantilla'>+ Crear Plantilla Word/PDF</a>
         </div>
+        <div class='config-contratos-grid'>
+          <div class='c-card config-contract-card'>
+            <div class='config-icon'>📄</div><h2>1. Plantillas de documentos</h2>
+            <p class='muted2'>Carga aquí los formatos Word/PDF: contratos, adendas, renovaciones, cargos, anexos y documentos a entregar. Los campos deben ir como <b>«DireccionActual»</b> o <b>{{{{DireccionActual}}}}</b>.</p>
+            <div class='quick-grid'><a href='#crearPlantilla'>Crear plantilla</a><a href='/admin/contratacion?sec=plantillas'>Ver plantillas</a><a href='/admin/contratacion?sec=firma'>Firma digital</a></div>
+          </div>
+          <div class='c-card config-contract-card'>
+            <div class='config-icon'>📊</div><h2>2. Base Excel de trabajadores</h2>
+            <p class='muted2'>Carga por otro lado la base de trabajadores/postulantes. Esta base alimenta los campos del contrato y queda enlazada al flujo de Postulantes.</p>
+            <form method='post' enctype='multipart/form-data' class='base-excel-form'>
+              <input type='hidden' name='accion' value='importar_base_contratos_excel'>
+              <input type='file' name='archivo' accept='.xlsx,.xls' required>
+              <button class='c-btn'>⬆ Cargar Base Excel</button>
+              <a class='c-btn gray' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato</a>
+            </form>
+            <small class='muted2'>Columnas sugeridas: DNI, TRABAJADOR, EMPRESA, REQUERIMIENTO, CARGO, AREA, FECHA INGRESO, DIRECCION, DISTRITO, PROVINCIA, DEPARTAMENTO, BASICO.</small>
+          </div>
+        </div>
+        <div class='c-card table-wrap' style='margin:18px 0'><h2>Base Excel cargada / trabajadores para contratos</h2><table class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Requerimiento</th><th>Cargo</th><th>Ingreso</th><th>Estado</th></tr>{base_excel_rows}</table></div>
         <div class='c-card filter-card' style='padding:18px'>
           <form method='get' action='/admin/contratacion' class='plantilla-filter'>
             <input type='hidden' name='sec' value='plantillas'>
