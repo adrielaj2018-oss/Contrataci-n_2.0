@@ -1314,6 +1314,11 @@ def admin_required(fn):
         return fn(*args, **kwargs)
     return wrapper
 
+# Alias de compatibilidad para rutas nuevas.
+# Render fallaba porque algunas rutas usaban @login_required_admin
+# pero el decorador oficial del sistema se llama @admin_required.
+login_required_admin = admin_required
+
 
 def worker_required(fn):
     @wraps(fn)
