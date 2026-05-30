@@ -1116,6 +1116,20 @@ def init_db():
             casaca TEXT, gorro TEXT, lentes TEXT, guantes TEXT, fotocheck TEXT, otros TEXT, estado TEXT DEFAULT 'PENDIENTE',
             cargo_pdf TEXT, fecha_entrega TEXT, observacion TEXT, fecha_registro TEXT, registrado_por TEXT
         )''')
+        # PRO: campos adicionales para control completo de indumentaria.
+        # No se mezcla con evaluación médica; solo controla entrega, responsable y cargo firmado.
+        for col, ddl in [
+            ('empresa', 'ALTER TABLE contratacion_indumentaria ADD COLUMN empresa TEXT'),
+            ('area', 'ALTER TABLE contratacion_indumentaria ADD COLUMN area TEXT'),
+            ('cargo', 'ALTER TABLE contratacion_indumentaria ADD COLUMN cargo TEXT'),
+            ('actividad', 'ALTER TABLE contratacion_indumentaria ADD COLUMN actividad TEXT'),
+            ('fecha_ingreso', 'ALTER TABLE contratacion_indumentaria ADD COLUMN fecha_ingreso TEXT'),
+            ('responsable_entrega', 'ALTER TABLE contratacion_indumentaria ADD COLUMN responsable_entrega TEXT'),
+            ('cargo_firmado_nombre', 'ALTER TABLE contratacion_indumentaria ADD COLUMN cargo_firmado_nombre TEXT'),
+            ('ruta_cargo_firmado', 'ALTER TABLE contratacion_indumentaria ADD COLUMN ruta_cargo_firmado TEXT'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
         for col, ddl in [
             ('tipo_examen', 'ALTER TABLE contratacion_medica ADD COLUMN tipo_examen TEXT'),
             ('protocolo', 'ALTER TABLE contratacion_medica ADD COLUMN protocolo TEXT'),
@@ -6154,11 +6168,27 @@ def admin_contratacion():
             if not dni:
                 flash('Digite DNI obligatorio para registrar indumentaria.', 'error')
                 return redirect(url_for('admin_contratacion', sec='indumentaria'))
+            data_ind = datos_unificados_contratacion(dni, clean(request.form.get('requerimiento')))
+            trabajador_ind = clean(request.form.get('trabajador')) or data_ind.get('nombre') or (trab['nombre'] if trab else '')
+            estado_ind = clean(request.form.get('estado')) or 'PENDIENTE'
+            cargo_file = request.files.get('cargo_firmado')
+            ruta_cargo = ''; nombre_cargo = ''
+            if cargo_file and cargo_file.filename:
+                carpeta = UPLOAD_DIR/'contratacion'/'indumentaria'/dni
+                carpeta.mkdir(parents=True, exist_ok=True)
+                nombre_cargo = now_file() + '_' + secure_filename(cargo_file.filename)
+                path_cargo = carpeta / nombre_cargo
+                cargo_file.save(path_cargo)
+                ruta_cargo = str(path_cargo)
+            obs_base = clean(request.form.get('observacion'))
+            resp_entrega = clean(request.form.get('responsable_entrega'))
+            if resp_entrega:
+                obs_base = (obs_base + (' | ' if obs_base else '') + f'Responsable entrega: {resp_entrega}').strip()
             with db() as con:
-                con.execute('''INSERT INTO contratacion_indumentaria(dni,trabajador,requerimiento,polo,pantalon,botas,casaca,gorro,lentes,guantes,fotocheck,otros,estado,fecha_entrega,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('requerimiento')), clean(request.form.get('polo')), clean(request.form.get('pantalon')), clean(request.form.get('botas')), clean(request.form.get('casaca')), clean(request.form.get('gorro')), clean(request.form.get('lentes')), clean(request.form.get('guantes')), clean(request.form.get('fotocheck')), clean(request.form.get('otros')), clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_entrega')) or fecha_sin_hora(hoy_iso()), clean(request.form.get('observacion')), now_txt(), session.get('admin_user','admin')))
-                con.execute('UPDATE contratacion_ingresos SET estado_indumentaria=? WHERE dni=?', (clean(request.form.get('estado')) or 'PENDIENTE', dni))
+                con.execute('''INSERT INTO contratacion_indumentaria(dni,trabajador,requerimiento,polo,pantalon,botas,casaca,gorro,lentes,guantes,fotocheck,otros,estado,fecha_entrega,observacion,fecha_registro,registrado_por,empresa,area,cargo,actividad,fecha_ingreso,responsable_entrega,cargo_firmado_nombre,ruta_cargo_firmado) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trabajador_ind, clean(request.form.get('requerimiento')) or data_ind.get('requerimiento',''), clean(request.form.get('polo')), clean(request.form.get('pantalon')), clean(request.form.get('botas')), clean(request.form.get('casaca')), clean(request.form.get('gorro')), clean(request.form.get('lentes')), clean(request.form.get('guantes')), clean(request.form.get('fotocheck')), clean(request.form.get('otros')), estado_ind, fecha_sin_hora(request.form.get('fecha_entrega')) or fecha_sin_hora(hoy_iso()), obs_base, now_txt(), session.get('admin_user','admin'), data_ind.get('empresa',''), data_ind.get('area',''), data_ind.get('cargo',''), data_ind.get('actividad',''), data_ind.get('fecha_ingreso',''), resp_entrega, nombre_cargo, ruta_cargo))
+                con.execute('UPDATE contratacion_ingresos SET estado_indumentaria=? WHERE dni=?', (estado_ind, dni))
                 con.commit()
-            flash('Entrega de indumentaria registrada.', 'ok')
+            flash('Entrega de indumentaria registrada y sincronizada con el postulante.', 'ok')
             return redirect(url_for('admin_contratacion', sec='indumentaria'))
         if accion == 'guardar_ingreso':
             dni = normalizar_dni(request.form.get('dni'))
@@ -7456,12 +7486,60 @@ html,body{overflow-x:hidden!important;}
         <form method='post' class='pro-card'><input type='hidden' name='accion' value='marcar_visto_masivo'><input type='hidden' name='volver' value='{sec}'><h3 class='pro-section-title'>3) Registros de trabajadores y estados</h3><div class='records-toolbar'><input oninput="filtrarTabla(this,'tabla_capacitacion')" placeholder='Filtrar DNI, trabajador, curso, estado...'><select><option>Todos los estados</option><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>DESAPROBADO</option></select><button type='button' class='c-btn gray' onclick="document.querySelectorAll('#tabla_capacitacion input[name=cap_ids]').forEach(x=>x.checked=true)">Seleccionar todo</button><button type='submit' form='form_capacitacion' class='c-btn'>Guardar</button></div><div class='mass-actions'><b>Cambio masivo / notificaciones:</b><select name='estado_masivo'><option>VIDEO VISTO</option><option>VIDEO ASIGNADO</option><option>APROBADO</option><option>PENDIENTE</option></select><button class='c-btn'>Cambiar seleccionados y notificar</button></div><div class='table-wrap'><table id='tabla_capacitacion' class='c-table clean-table'><tr><th></th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>{'Tema' if es_ind else 'Curso'}</th><th>Video</th><th>Nota</th><th>Estado</th><th>Eliminar</th><th>Observación</th></tr>{cap_rows}</table></div></form>
         ''')
     elif sec=='indumentaria':
-        ind_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['polo'])}</td><td>{h(r['pantalon'])}</td><td>{h(r['botas'])}</td><td>{h(r['fotocheck'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['fecha_entrega'])}</td></tr>" for r in indumentarias]) or "<tr><td colspan='10'>Sin entregas registradas.</td></tr>"
+        ind_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(r['polo'])}</td><td>{h(r['pantalon'])}</td><td>{h(r['botas'])}</td><td>{h(r['fotocheck'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['fecha_entrega'])}</td></tr>" for r in indumentarias]) or "<tr><td colspan='14'>Sin entregas registradas.</td></tr>"
         content=wrap(f"""
-        <h2 class='c-title'>Entrega de indumentaria</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Indumentaria y fotocheck</h1><p class='muted2'>Controla entrega de EPP, uniformes, tallas, fotocheck, cargo de entrega y validación previa a NISIRA.</p></div><a class='c-btn' href='/admin/contratacion?sec=integracion_nisira'>Validar NISIRA</a></div>
-        <form id='form_indumentaria' method='post' class='c-card c-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_indumentaria'><b>DNI</b><input name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI y seleccione trabajador'><datalist id='lista_ingresos'>{opt_ingresos}</datalist><b>Requerimiento</b><input name='requerimiento' placeholder='LABORES / REQ'><b>Polo</b><select name='polo'><option></option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option><option>NO APLICA</option></select><b>Pantalón</b><select name='pantalon'><option></option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>44</option><option>NO APLICA</option></select><b>Botas</b><select name='botas'><option></option><option>35</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option><option>NO APLICA</option></select><b>Casaca</b><select name='casaca'><option></option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>NO APLICA</option></select><b>Gorro</b><select name='gorro'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Lentes</b><select name='lentes'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Guantes</b><select name='guantes'><option></option><option>7</option><option>8</option><option>9</option><option>10</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>NO APLICA</option></select><b>Fotocheck</b><select name='fotocheck'><option>PENDIENTE</option><option>IMPRESO</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Otros / cantidad</b><input name='otros' placeholder='Ej. 2 mascarillas, 1 chaleco'><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select><b>Fecha entrega</b><input type='date' name='fecha_entrega' value='{hoy_iso()}'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle de entrega, responsable o cargo firmado.'></textarea><span></span><button class='c-btn'>💾 Registrar entrega</button></form>
+        <h2 class='c-title'>Entrega de indumentaria</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Indumentaria y fotocheck</h1><p class='muted2'>Controla entrega de EPP, uniformes, tallas, fotocheck, cargo de entrega y validación previa a NISIRA. No mezcla datos médicos: solo datos laborales y entrega.</p></div><a class='c-btn' href='/admin/contratacion?sec=integracion_nisira'>Validar NISIRA</a></div>
+        <form id='form_indumentaria' method='post' enctype='multipart/form-data' class='c-card c-form pro-form indumentaria-pro' style='padding:20px'><input type='hidden' name='accion' value='guardar_indumentaria'>
+          <div class='ind-alert span-12'><div><small>ESTADO DE ENTREGA</small><select name='estado' id='ind_estado' onchange='actualizarEstadoIndumentaria()'><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select></div><div id='ind_estado_msg'>Digite DNI para iniciar el control de entrega.</div></div>
+          <h3 class='pro-section-title span-12'>1) Buscar postulante / trabajador</h3>
+          <b>DNI</b><input id='ind_dni' name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI y presione buscar'><datalist id='lista_ingresos'>{opt_ingresos}</datalist><span></span><button type='button' class='c-btn gray' onclick='buscarIndumentariaDNI()'>🔎 Buscar DNI</button>
+          <h3 class='pro-section-title span-12'>2) Datos del trabajador</h3>
+          <b>Trabajador</b><input id='ind_trabajador' name='trabajador' readonly placeholder='Se carga automático por DNI'>
+          <b>Empresa</b><input id='ind_empresa' readonly placeholder='Empresa'>
+          <b>Área</b><input id='ind_area' readonly placeholder='Área'>
+          <b>Cargo</b><input id='ind_cargo' readonly placeholder='Cargo'>
+          <b>Requerimiento / ticket</b><input id='ind_requerimiento' name='requerimiento' placeholder='Se carga automático o puede editarse'>
+          <b>Fecha ingreso</b><input id='ind_fecha_ingreso' readonly placeholder='Fecha ingreso'>
+          <h3 class='pro-section-title span-12'>3) Detalle de prendas / EPP</h3>
+          <b>Polo</b><select name='polo'><option></option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option><option>NO APLICA</option></select><b>Pantalón</b><select name='pantalon'><option></option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>44</option><option>NO APLICA</option></select><b>Botas</b><select name='botas'><option></option><option>35</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option><option>NO APLICA</option></select><b>Casaca</b><select name='casaca'><option></option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>NO APLICA</option></select><b>Gorro</b><select name='gorro'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Lentes</b><select name='lentes'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Guantes</b><select name='guantes'><option></option><option>7</option><option>8</option><option>9</option><option>10</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>NO APLICA</option></select><b>Fotocheck</b><select name='fotocheck'><option>PENDIENTE</option><option>IMPRESO</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Otros / cantidad</b><input name='otros' placeholder='Ej. 2 mascarillas, 1 chaleco'>
+          <h3 class='pro-section-title span-12'>4) Cargo y trazabilidad</h3>
+          <b>Fecha entrega</b><input type='date' name='fecha_entrega' value='{hoy_iso()}'><b>Responsable entrega</b><input name='responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle de entrega, faltantes, responsable o cargo firmado.'></textarea><span></span><button class='c-btn'>💾 Registrar entrega</button>
+        </form>
         {bandeja_operativa('tabla_embudo_indumentaria')}
-        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar DNI, trabajador, prenda o estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_indumentaria' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_indumentaria' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Eliminar</th><th>Entrega</th></tr>{ind_rows}</table></div>
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar DNI, trabajador, prenda o estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_indumentaria' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_indumentaria' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Responsable</th><th>Eliminar</th><th>Entrega</th></tr>{ind_rows}</table></div>
+        <script>
+        async function buscarIndumentariaDNI(){{
+          const dni=(document.getElementById('ind_dni')?.value||'').replace(/\D/g,'');
+          if(dni.length!==8){{ alert('Digite un DNI válido de 8 dígitos.'); return; }}
+          try{{
+            const r=await fetch('/api/contratacion/trabajador/'+dni);
+            const j=await r.json();
+            if(!j.ok){{ document.getElementById('ind_estado_msg').innerText='DNI no encontrado en postulantes/base. Complete la ficha primero.'; return; }}
+            const t=j.trabajador||{{}};
+            const map={{ind_trabajador:(t.nombre||t.trabajador||''), ind_empresa:(t.empresa||''), ind_area:(t.area||''), ind_cargo:(t.cargo||''), ind_requerimiento:(t.requerimiento||''), ind_fecha_ingreso:(t.fecha_ingreso||'')}};
+            Object.keys(map).forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=map[id]||''; }});
+            document.getElementById('ind_estado_msg').innerText='Datos cargados correctamente. Registre prendas, responsable y cargo firmado.';
+          }}catch(e){{ alert('No se pudo consultar el DNI.'); }}
+        }}
+        function actualizarEstadoIndumentaria(){{
+          const v=document.getElementById('ind_estado')?.value||'PENDIENTE';
+          const msg=document.getElementById('ind_estado_msg');
+          if(!msg) return;
+          if(v==='ENTREGADO') msg.innerText='Entrega completa: trabajador listo en indumentaria.';
+          else if(v==='PARCIAL') msg.innerText='Entrega parcial: quedan prendas o cargo pendientes.';
+          else if(v==='OBSERVADO') msg.innerText='Observado: registrar motivo antes de continuar.';
+          else msg.innerText='Pendiente: falta registrar entrega.';
+        }}
+        document.getElementById('ind_dni')?.addEventListener('change', buscarIndumentariaDNI);
+        actualizarEstadoIndumentaria();
+        </script>
+        <style>
+        .indumentaria-pro .span-12,.ind-alert.span-12{{grid-column:1/-1}}
+        .ind-alert{{display:flex;gap:18px;align-items:center;justify-content:space-between;border:1px solid rgba(16,185,129,.25);background:linear-gradient(135deg,rgba(16,185,129,.14),rgba(15,23,42,.03));border-radius:18px;padding:16px;margin-bottom:8px}}
+        .ind-alert small{{display:block;color:#64748b;font-weight:800;letter-spacing:.08em}}
+        .ind-alert select{{font-size:16px;font-weight:800;border-radius:12px;padding:10px 12px}}
+        #ind_estado_msg{{font-weight:700;color:#0f172a}}
+        </style>
         """)
     elif sec=='integracion_nisira':
         with db() as con_bc:
