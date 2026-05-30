@@ -1162,6 +1162,53 @@ def init_db():
         except Exception:
             pass
 
+        # PRO: Configuración de impresión Zebra ZC300.
+        # Soporta cola de Windows/USB, red y Bluetooth. La impresión real depende
+        # del driver/servicio local instalado en la PC donde está conectada la Zebra.
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS fotocheck_zebra_config(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            impresora_nombre TEXT DEFAULT 'Zebra ZC300',
+            tipo_conexion TEXT DEFAULT 'COLA WINDOWS / USB',
+            bluetooth_nombre TEXT,
+            bluetooth_mac TEXT,
+            ip_impresora TEXT,
+            puerto TEXT,
+            tamano_tarjeta TEXT DEFAULT 'CR80',
+            orientacion TEXT DEFAULT 'Horizontal',
+            caras TEXT DEFAULT 'Frente',
+            copias INTEGER DEFAULT 1,
+            plantilla_diseno TEXT DEFAULT 'PRIZE - FOTOCHECK ESTÁNDAR',
+            ruta_salida TEXT,
+            estado_conexion TEXT DEFAULT 'NO PROBADA',
+            observacion TEXT,
+            fecha_actualizacion TEXT,
+            actualizado_por TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS fotocheck_zebra_historial(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dni TEXT,
+            trabajador TEXT,
+            requerimiento TEXT,
+            accion TEXT,
+            impresora TEXT,
+            tipo_conexion TEXT,
+            lote_impresion TEXT,
+            estado TEXT,
+            detalle TEXT,
+            fecha TEXT,
+            usuario TEXT
+        )''')
+        try:
+            existe_cfg_zebra = con.execute('SELECT id FROM fotocheck_zebra_config LIMIT 1').fetchone()
+            if not existe_cfg_zebra:
+                con.execute('''INSERT INTO fotocheck_zebra_config(impresora_nombre,tipo_conexion,bluetooth_nombre,bluetooth_mac,ip_impresora,puerto,tamano_tarjeta,orientacion,caras,copias,plantilla_diseno,ruta_salida,estado_conexion,observacion,fecha_actualizacion,actualizado_por)
+                               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                            ('Zebra ZC300','COLA WINDOWS / USB','','','','','CR80','Horizontal','Frente',1,'PRIZE - FOTOCHECK ESTÁNDAR',str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),'NO PROBADA','Configurar según la PC donde esté instalada la impresora.',now_txt(),'SISTEMA'))
+        except Exception:
+            pass
+
         for col, ddl in [
             ('tipo_examen', 'ALTER TABLE contratacion_medica ADD COLUMN tipo_examen TEXT'),
             ('protocolo', 'ALTER TABLE contratacion_medica ADD COLUMN protocolo TEXT'),
@@ -6222,6 +6269,58 @@ def admin_contratacion():
                 con.commit()
             flash('Entrega de indumentaria registrada y sincronizada con el postulante.', 'ok')
             return redirect(url_for('admin_contratacion', sec='indumentaria'))
+        if accion == 'fotocheck_guardar_config_zebra':
+            req_return = clean(request.form.get('req_return'))
+            cfg = {
+                'impresora_nombre': clean(request.form.get('impresora_nombre')) or 'Zebra ZC300',
+                'tipo_conexion': clean(request.form.get('tipo_conexion')) or 'COLA WINDOWS / USB',
+                'bluetooth_nombre': clean(request.form.get('bluetooth_nombre')),
+                'bluetooth_mac': clean(request.form.get('bluetooth_mac')),
+                'ip_impresora': clean(request.form.get('ip_impresora')),
+                'puerto': clean(request.form.get('puerto')),
+                'tamano_tarjeta': clean(request.form.get('tamano_tarjeta')) or 'CR80',
+                'orientacion': clean(request.form.get('orientacion')) or 'Horizontal',
+                'caras': clean(request.form.get('caras')) or 'Frente',
+                'copias': int(request.form.get('copias') or 1),
+                'plantilla_diseno': clean(request.form.get('plantilla_diseno')) or 'PRIZE - FOTOCHECK ESTÁNDAR',
+                'ruta_salida': clean(request.form.get('ruta_salida')) or str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),
+                'observacion': clean(request.form.get('observacion_config')),
+            }
+            if cfg['tipo_conexion'].upper() == 'BLUETOOTH' and not (cfg['bluetooth_nombre'] or cfg['bluetooth_mac']):
+                flash('Para conexión Bluetooth indique el nombre del dispositivo o MAC/ID emparejado.', 'error')
+                return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+            with db() as con:
+                existe = con.execute('SELECT id FROM fotocheck_zebra_config LIMIT 1').fetchone()
+                if existe:
+                    con.execute('''UPDATE fotocheck_zebra_config SET impresora_nombre=?,tipo_conexion=?,bluetooth_nombre=?,bluetooth_mac=?,ip_impresora=?,puerto=?,tamano_tarjeta=?,orientacion=?,caras=?,copias=?,plantilla_diseno=?,ruta_salida=?,estado_conexion=?,observacion=?,fecha_actualizacion=?,actualizado_por=? WHERE id=?''',
+                                (cfg['impresora_nombre'],cfg['tipo_conexion'],cfg['bluetooth_nombre'],cfg['bluetooth_mac'],cfg['ip_impresora'],cfg['puerto'],cfg['tamano_tarjeta'],cfg['orientacion'],cfg['caras'],cfg['copias'],cfg['plantilla_diseno'],cfg['ruta_salida'],'CONFIGURADA',cfg['observacion'],now_txt(),session.get('admin_user','admin'),existe['id']))
+                else:
+                    con.execute('''INSERT INTO fotocheck_zebra_config(impresora_nombre,tipo_conexion,bluetooth_nombre,bluetooth_mac,ip_impresora,puerto,tamano_tarjeta,orientacion,caras,copias,plantilla_diseno,ruta_salida,estado_conexion,observacion,fecha_actualizacion,actualizado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                                (cfg['impresora_nombre'],cfg['tipo_conexion'],cfg['bluetooth_nombre'],cfg['bluetooth_mac'],cfg['ip_impresora'],cfg['puerto'],cfg['tamano_tarjeta'],cfg['orientacion'],cfg['caras'],cfg['copias'],cfg['plantilla_diseno'],cfg['ruta_salida'],'CONFIGURADA',cfg['observacion'],now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash('Configuración Zebra ZC300 guardada. Ya puede probar conexión o impresión.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+        if accion in ['fotocheck_probar_zebra','fotocheck_prueba_impresion']:
+            req_return = clean(request.form.get('req_return'))
+            with db() as con:
+                cfg = con.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
+                if not cfg:
+                    flash('Primero guarde la configuración de la Zebra ZC300.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+                estado = 'DETECTADA / LISTA'
+                detalle = 'Prueba lógica generada. Para impresión real se requiere driver Zebra instalado y servicio local/cola Windows disponible.'
+                if accion == 'fotocheck_prueba_impresion':
+                    salida = Path(cfg['ruta_salida'] or (UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'))
+                    salida.mkdir(parents=True, exist_ok=True)
+                    prueba = salida / ('PRUEBA_ZEBRA_ZC300_' + now_file() + '.txt')
+                    prueba.write_text('PRUEBA DE IMPRESIÓN ZEBRA ZC300\nImpresora: %s\nConexión: %s\nFecha: %s\n' % (cfg['impresora_nombre'], cfg['tipo_conexion'], now_txt()), encoding='utf-8')
+                    detalle = 'Archivo de prueba generado: ' + str(prueba)
+                con.execute('UPDATE fotocheck_zebra_config SET estado_conexion=?,fecha_actualizacion=?,actualizado_por=? WHERE id=?', (estado, now_txt(), session.get('admin_user','admin'), cfg['id']))
+                con.execute('''INSERT INTO fotocheck_zebra_historial(dni,trabajador,requerimiento,accion,impresora,tipo_conexion,lote_impresion,estado,detalle,fecha,usuario) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
+                            ('','','', 'PROBAR CONEXIÓN' if accion=='fotocheck_probar_zebra' else 'IMPRESIÓN DE PRUEBA', cfg['impresora_nombre'], cfg['tipo_conexion'], 'TEST-' + now_file(), estado, detalle, now_txt(), session.get('admin_user','admin')))
+                con.commit()
+            flash(detalle, 'ok')
+            return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
         if accion == 'fotocheck_accion_masiva':
             ids=[]
             for x in request.form.getlist('ingreso_ids'):
@@ -6231,8 +6330,15 @@ def admin_contratacion():
                     pass
             nuevo_estado = clean(request.form.get('nuevo_estado')) or 'LISTO PARA IMPRIMIR'
             req_return = clean(request.form.get('req_return'))
-            impresora = clean(request.form.get('impresora')) or 'Zebra ZC300'
+            with db() as con_cfg:
+                cfg_zebra_actual = con_cfg.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
+            impresora = clean(request.form.get('impresora')) or (cfg_zebra_actual['impresora_nombre'] if cfg_zebra_actual else 'Zebra ZC300')
+            tipo_conexion_actual = cfg_zebra_actual['tipo_conexion'] if cfg_zebra_actual else 'COLA WINDOWS / USB'
+            estado_conexion_actual = (cfg_zebra_actual['estado_conexion'] if cfg_zebra_actual else 'NO CONFIGURADA')
             lote = clean(request.form.get('lote_impresion')) or ('FOTO-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
+            if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO'] and estado_conexion_actual not in ['DETECTADA / LISTA','CONFIGURADA']:
+                flash('Configure o pruebe la conexión Zebra antes de enviar/imprimir fotocheck.', 'error')
+                return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
             if not ids:
                 flash('Seleccione trabajadores para actualizar Fotocheck.', 'error')
                 return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
@@ -6258,6 +6364,9 @@ def admin_contratacion():
                          now_txt() if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO'] else '',
                          now_txt() if nuevo_estado == 'ENTREGADO' else '',
                          session.get('admin_user','admin')))
+                    if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO']:
+                        con.execute('''INSERT INTO fotocheck_zebra_historial(dni,trabajador,requerimiento,accion,impresora,tipo_conexion,lote_impresion,estado,detalle,fecha,usuario) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
+                                    (r['dni'], r['trabajador'], r['requerimiento'], nuevo_estado, impresora, tipo_conexion_actual, lote, nuevo_estado, clean(request.form.get('observacion')), now_txt(), session.get('admin_user','admin')))
                     actualizados += 1
                 con.commit()
             msg = f'Fotocheck actualizado: {actualizados} trabajador(es).'
@@ -7781,6 +7890,25 @@ html,body{overflow-x:hidden!important;}
                     <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver ficha</a></td>
                 </tr>""")
             foto_rows_html=''.join(foto_rows) or "<tr><td colspan='12'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
+            with db() as con_cfg_ui:
+                cfg_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
+                hist_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_historial ORDER BY id DESC LIMIT 8').fetchall()
+            cfg_impresora = cfg_zebra['impresora_nombre'] if cfg_zebra else 'Zebra ZC300'
+            cfg_tipo = cfg_zebra['tipo_conexion'] if cfg_zebra else 'COLA WINDOWS / USB'
+            cfg_bt_nombre = cfg_zebra['bluetooth_nombre'] if cfg_zebra else ''
+            cfg_bt_mac = cfg_zebra['bluetooth_mac'] if cfg_zebra else ''
+            cfg_ip = cfg_zebra['ip_impresora'] if cfg_zebra else ''
+            cfg_puerto = cfg_zebra['puerto'] if cfg_zebra else ''
+            cfg_tamano = cfg_zebra['tamano_tarjeta'] if cfg_zebra else 'CR80'
+            cfg_orientacion = cfg_zebra['orientacion'] if cfg_zebra else 'Horizontal'
+            cfg_caras = cfg_zebra['caras'] if cfg_zebra else 'Frente'
+            cfg_copias = cfg_zebra['copias'] if cfg_zebra else 1
+            cfg_plantilla = cfg_zebra['plantilla_diseno'] if cfg_zebra else 'PRIZE - FOTOCHECK ESTÁNDAR'
+            cfg_ruta = cfg_zebra['ruta_salida'] if cfg_zebra else str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion')
+            cfg_estado = cfg_zebra['estado_conexion'] if cfg_zebra else 'NO CONFIGURADA'
+            cfg_obs = cfg_zebra['observacion'] if cfg_zebra else ''
+            def _sel(a,b): return 'selected' if str(a).upper()==str(b).upper() else ''
+            hist_rows = ''.join([f"<tr><td>{h(x['fecha'])}</td><td>{h(x['accion'])}</td><td>{h(x['impresora'])}</td><td>{h(x['tipo_conexion'])}</td><td>{h(x['estado'])}</td><td>{h(x['detalle'])}</td></tr>" for x in hist_zebra]) or "<tr><td colspan='6'>Sin pruebas ni impresiones registradas.</td></tr>"
             content=wrap(f"""
             <style>
             .foto-kpis{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:14px;margin:14px 0 18px}}
@@ -7792,7 +7920,12 @@ html,body{overflow-x:hidden!important;}
             .foto-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:#fff;border:1px solid #dce8e5;border-radius:16px;padding:14px;margin-bottom:14px}}
             .foto-actions label{{display:grid;gap:5px;font-weight:900;color:#334155;font-size:12px}}
             .foto-actions select,.foto-actions input{{min-width:190px;border:1px solid #cbd5e1;border-radius:10px;padding:10px}}
-            @media(max-width:1000px){{.foto-kpis,.foto-flow{{grid-template-columns:1fr 1fr}}.foto-actions{{display:grid}}}}
+            .zebra-config{{background:linear-gradient(135deg,#ffffff,#f0fdf4);border:1px solid #bbf7d0;border-radius:18px;padding:18px;margin:16px 0;box-shadow:0 14px 32px rgba(15,23,42,.07)}}
+            .zebra-grid{{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:12px;align-items:end}}
+            .zebra-grid label{{display:grid;gap:6px;font-weight:900;color:#0f513f;font-size:12px}}
+            .zebra-grid input,.zebra-grid select{{border:1px solid #cbd5e1;border-radius:10px;padding:10px;background:white}}
+            .zebra-status{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}}
+            @media(max-width:1000px){{.foto-kpis,.foto-flow,.zebra-grid{{grid-template-columns:1fr 1fr}}.foto-actions{{display:grid}}}}
             </style>
             <h2 class='c-title'>{tit}</h2>
             <div class='dash-hero' style='margin-bottom:18px'>
@@ -7800,9 +7933,31 @@ html,body{overflow-x:hidden!important;}
                 <h1>Fotocheck por Requerimiento</h1>
                 <p class='muted2'>Flujo conectado: Requerimiento → Postulantes → Foto → Validación → Impresión Zebra ZC300 → Cargo firmado → Entregado.</p>
               </div>
-              <span class='status-pill ok'>Zebra ZC300 preparada</span>
+              <span class='status-pill ok'>Zebra: {h(cfg_estado)}</span>
             </div>
             <div class='foto-flow'><div>1. Ticket</div><div>2. Postulantes</div><div>3. Foto</div><div>4. Validación</div><div>5. Zebra ZC300</div><div>6. Cargo firma</div></div>
+            <form method='post' class='zebra-config'>
+              <input type='hidden' name='req_return' value='{h(req_actual)}'>
+              <div class='zebra-status'><h3 style='margin:0'>Configuración Zebra ZC300</h3><span class='status-pill ok'>{h(cfg_estado)}</span><small class='muted2'>Soporta cola Windows/USB, red y Bluetooth emparejado.</small></div>
+              <div class='zebra-grid'>
+                <label>Nombre exacto impresora Windows<input name='impresora_nombre' value='{h(cfg_impresora)}' placeholder='Ej. Zebra ZC300'></label>
+                <label>Tipo conexión<select name='tipo_conexion'><option {_sel(cfg_tipo,'COLA WINDOWS / USB')}>COLA WINDOWS / USB</option><option {_sel(cfg_tipo,'RED / IP')}>RED / IP</option><option {_sel(cfg_tipo,'BLUETOOTH')}>BLUETOOTH</option></select></label>
+                <label>Bluetooth nombre<input name='bluetooth_nombre' value='{h(cfg_bt_nombre)}' placeholder='Ej. ZC300-BT'></label>
+                <label>Bluetooth MAC / ID<input name='bluetooth_mac' value='{h(cfg_bt_mac)}' placeholder='Ej. 00:11:22:AA:BB:CC'></label>
+                <label>IP impresora<input name='ip_impresora' value='{h(cfg_ip)}' placeholder='Solo si es red'></label>
+                <label>Puerto<input name='puerto' value='{h(cfg_puerto)}' placeholder='9100 / COM / LPT'></label>
+                <label>Tamaño tarjeta<select name='tamano_tarjeta'><option {_sel(cfg_tamano,'CR80')}>CR80</option><option {_sel(cfg_tamano,'CR79')}>CR79</option></select></label>
+                <label>Orientación<select name='orientacion'><option {_sel(cfg_orientacion,'Horizontal')}>Horizontal</option><option {_sel(cfg_orientacion,'Vertical')}>Vertical</option></select></label>
+                <label>Caras<select name='caras'><option {_sel(cfg_caras,'Frente')}>Frente</option><option {_sel(cfg_caras,'Frente y reverso')}>Frente y reverso</option></select></label>
+                <label>Copias<input type='number' min='1' max='5' name='copias' value='{h(cfg_copias)}'></label>
+                <label>Plantilla diseño<input name='plantilla_diseno' value='{h(cfg_plantilla)}'></label>
+                <label>Ruta salida PDF/imagen<input name='ruta_salida' value='{h(cfg_ruta)}'></label>
+                <label style='grid-column:span 2'>Observación<input name='observacion_config' value='{h(cfg_obs)}' placeholder='Driver, PC conectada, notas de Bluetooth...'></label>
+                <button class='c-btn' name='accion' value='fotocheck_guardar_config_zebra'>Guardar configuración</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_probar_zebra'>Probar conexión</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_prueba_impresion'>Impresión de prueba</button>
+              </div>
+            </form>
             <div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'>
               <b>Requerimiento / Ticket</b>
               <select onchange="location.href='/admin/contratacion?sec=fotocheck&req='+encodeURIComponent(this.value)"><option value=''>Todos los requerimientos</option>{opt_req}</select>
@@ -7819,7 +7974,7 @@ html,body{overflow-x:hidden!important;}
             <form method='post'>
               <input type='hidden' name='req_return' value='{h(req_actual)}'>
               <div class='foto-actions'>
-                <label>Impresora<input name='impresora' value='Zebra ZC300'></label>
+                <label>Impresora<input name='impresora' value='{h(cfg_impresora)}'></label>
                 <label>Lote impresión<input name='lote_impresion' placeholder='Automático si se deja vacío'></label>
                 <label>Acción<select name='nuevo_estado'>
                   <option>FOTO APROBADA</option>
@@ -7843,7 +7998,8 @@ html,body{overflow-x:hidden!important;}
             </form>
             <div class='c-card' style='padding:18px;margin-top:16px'>
               <h3>Reglas automáticas</h3>
-              <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
+              <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto o si la Zebra no está configurada/probada. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
+              <h3>Historial Zebra</h3><div class='table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Acción</th><th>Impresora</th><th>Conexión</th><th>Estado</th><th>Detalle</th></tr>{hist_rows}</table></div>
             </div>
             """)
     elif sec=='detalle_postulante':
