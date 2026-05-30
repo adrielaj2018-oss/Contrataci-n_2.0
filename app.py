@@ -3320,7 +3320,6 @@ def sidebar(active):
             <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
             <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
             <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><i class='bi bi-signpost-split'></i><span class='label'>Flujos de aprobación</span></a>
-            <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
             <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><i class='bi bi-bar-chart-line'></i><span class='label'>Reportes</span></a>
             <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
               <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
@@ -3331,6 +3330,7 @@ def sidebar(active):
                 <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><i class='bi bi-card-checklist'></i><span class='label'>Tipo Documento Empleado</span></a>
                 <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><i class='bi bi-briefcase'></i><span class='label'>Cargo</span></a>
                 <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><i class='bi bi-arrow-repeat'></i><span class='label'>Actualizar Trabajador</span></a>
+                <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
                 <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Centro de Descargas</span></a>
                 <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-database-check'></i><span class='label'>Base Central / Integración</span></a>
               </div>
@@ -7236,13 +7236,20 @@ html,body{overflow-x:hidden!important;}
     elif sec=='carga':
         emp_opts = "<option>AQUANQA</option><option>AQUANCA II</option>"
         content=wrap(f"""
-        <h2 class='c-title'>Carga Masiva</h2>
-        <div class='c-card'><div class='tabs'><div class='tab active'>Carga Masiva</div><div class='tab'>Registros de Carga Masiva</div></div></div>
-        <div class='c-filter' style='grid-template-columns:1fr 1fr;max-width:980px;margin:auto'><input placeholder='Código/Nombre'><select><option>Grupo</option><option>Actualización de datos</option><option>Baja de trabajador</option></select></div>
-        <div class='tile-grid'>
-          <div class='c-tile' onclick='abrirCargaModal("actualizar")'><div class='tile-icon'>▤</div><h2>Carga Masiva Actualizar Datos Trabajador</h2><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='actualizar')}'>⬇</a></div>
-          <div class='c-tile' onclick='abrirCargaModal("baja")'><div class='tile-icon'>▤</div><h2>Carga Masiva Bajas Trabajador</h2><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='baja')}'>⬇</a></div>
+        <h2 class='c-title'>Carga Masiva / Mantenimiento de Datos</h2>
+        <div class='dash-hero' style='margin-bottom:18px'>
+          <div><h1>Carga Masiva</h1><p class='muted2'>Este módulo queda integrado dentro de Datos Maestros para mantenimiento de información: actualizar correos, celulares, cargos, áreas, cuentas y ejecutar bajas masivas. Las renovaciones masivas se gestionan desde Gestión Renovación para no mezclar procesos.</p></div>
+          <a class='c-btn' href='/admin/contratacion?sec=renovacion'>Ir a Renovación Masiva</a>
         </div>
+        <div class='c-card'><div class='tabs'><div class='tab active'>Carga Masiva</div><div class='tab'>Registros de Carga Masiva</div></div></div>
+        <div class='c-filter' style='grid-template-columns:1fr 1fr;max-width:980px;margin:auto'><input placeholder='Código/Nombre'><select><option>Grupo</option><option>Mantenimiento de trabajadores</option><option>Actualización de datos</option><option>Baja de trabajador</option><option>Datos maestros</option></select></div>
+        <div class='tile-grid'>
+          <div class='c-tile' onclick='abrirCargaModal("actualizar")'><div class='tile-icon'>▤</div><h2>Actualizar Datos Trabajador</h2><p class='muted2'>Correo, celular, cargo, área, cuenta, datos laborales y personales.</p><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='actualizar')}'>⬇</a></div>
+          <div class='c-tile' onclick='abrirCargaModal("baja")'><div class='tile-icon'>▤</div><h2>Bajas Masivas Trabajador</h2><p class='muted2'>Cambiar estado a inactivo con fecha, motivo y observación.</p><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='baja')}'>⬇</a></div>
+          <div class='c-tile' onclick='abrirCargaModal("actualizar")'><div class='tile-icon'>▤</div><h2>Importar Base Trabajadores</h2><p class='muted2'>Alta o actualización de la base central desde Excel.</p><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='actualizar')}'>⬇</a></div>
+          <div class='c-tile' onclick="location.href='/admin/contratacion?sec=maestros'"><div class='tile-icon'>▤</div><h2>Importar Datos Maestros</h2><p class='muted2'>Empresas, áreas, cargos, actividades, régimen y tipo contrato.</p><span class='download-corner'>↗</span></div>
+        </div>
+        <div class='c-card' style='padding:18px;margin-top:18px'><h2>Regla de integración</h2><p class='muted2'><b>Datos Maestros → Carga Masiva</b> se usa para mantenimiento de trabajadores y bajas. <b>Gestión Renovación → Renovación Masiva</b> se usa para fechas fin, meses de renovación, documentos de renovación y firma.</p></div>
         <div id='modalActualizar' class='obs-modal'><div class='obs-box'><div class='obs-head'><h2>Importar registros - Actualización de datos</h2><button type='button' onclick='cerrarCargaModal()'>×</button></div>
           <form method='post' enctype='multipart/form-data' class='obs-form'><input type='hidden' name='accion' value='carga_actualizar_datos'>
             <label>Compañía:</label><select name='empresa'>{emp_opts}</select>
@@ -7255,7 +7262,7 @@ html,body{overflow-x:hidden!important;}
             <label>Archivo Excel:</label><input type='file' name='archivo' accept='.xlsx,.xls' required>
             <div></div><div class='obs-actions'><a class='c-btn gray' href='{url_for('descargar_plantilla_carga_contratacion', tipo='baja')}'>⬇ Plantilla</a><button class='c-btn'>Subir</button><button type='button' class='c-btn gray' onclick='cerrarCargaModal()'>Cerrar</button></div>
           </form></div></div>
-        <style>.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(620px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:150px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input,.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}</style>
+        <style>.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(620px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:150px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input,.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}}.c-tile p{{margin-top:8px;line-height:1.35}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}</style>
         <script>function abrirCargaModal(t){{cerrarCargaModal();document.getElementById(t==='baja'?'modalBaja':'modalActualizar').classList.add('show');}}function cerrarCargaModal(){{document.querySelectorAll('.obs-modal').forEach(m=>m.classList.remove('show'));}}</script>
         """)
     elif sec=='reportes':
