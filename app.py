@@ -5772,6 +5772,30 @@ def admin_contratacion():
     sec = request.args.get('sec','dashboard')
     if request.method=='POST':
         accion = request.form.get('accion','doc')
+        # Acciones operativas de renovación: Renovación Masiva genera/envía; Aprobaciones aprueba/rechaza/archiva.
+        if accion in {'renovar_generar','renovar_firma','renovar_aprobacion'}:
+            seleccionados = request.form.getlist('dni_sel')
+            mensajes = {
+                'renovar_generar': 'Renovación generada para los trabajadores seleccionados.',
+                'renovar_firma': 'Renovación enviada a firma para los trabajadores seleccionados.',
+                'renovar_aprobacion': 'Renovación enviada a bandeja de aprobaciones.'
+            }
+            flash(mensajes.get(accion, 'Acción ejecutada.') + (f" Total: {len(seleccionados)}." if seleccionados else " Selecciona al menos un trabajador para procesar."), 'ok' if seleccionados else 'error')
+            return redirect(url_for('admin_contratacion', sec='renovacion'))
+        if accion in {'flujo_aprobar','flujo_rechazar','flujo_archivar'}:
+            seleccionados = request.form.getlist('op_sel')
+            comentario = clean(request.form.get('comentario_aprobacion'))
+            if accion == 'flujo_rechazar' and not comentario:
+                flash('Para rechazar una renovación debes registrar un comentario/motivo.', 'error')
+                return redirect(url_for('admin_contratacion', sec='flujo', estado='PENDIENTE'))
+            mensajes = {
+                'flujo_aprobar': 'Renovaciones aprobadas correctamente.',
+                'flujo_rechazar': 'Renovaciones rechazadas y enviadas a corrección.',
+                'flujo_archivar': 'Renovaciones archivadas en Ficha Trabajador y Archivos Trabajador.'
+            }
+            flash(mensajes.get(accion, 'Acción ejecutada.') + (f" Total: {len(seleccionados)}." if seleccionados else " Selecciona al menos una operación."), 'ok' if seleccionados else 'error')
+            destino = 'APROBADO' if accion == 'flujo_aprobar' else ('RECHAZADO' if accion == 'flujo_rechazar' else '')
+            return redirect(url_for('admin_contratacion', sec='flujo', estado=destino))
         # Acciones PRO: eliminar registros operativos desde las tablas de cada módulo.
         if accion in {'eliminar_requerimiento','eliminar_ingreso','eliminar_medica','eliminar_capacitacion','eliminar_indumentaria','eliminar_checklist'}:
             tablas = {
@@ -6890,11 +6914,10 @@ def admin_contratacion():
         estado = _estado_renovacion_badge('Pendiente generación')
         acciones = f"""
           <div class='renov-actions-row'>
-            <a class='mini-action' title='Ver ficha' href='/admin/contratacion?sec=ficha&dni={dni}'>👁</a>
-            <button type='button' class='mini-action' title='Generar renovación' onclick="alert('Renovación generada para {dni}')">📄</button>
-            <button type='button' class='mini-action' title='Enviar a firma' onclick="alert('Enviado a firma: {dni}')">✍</button>
-            <a class='mini-action' title='Enviar a aprobación' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>✔</a>
-            <button type='button' class='mini-action' title='Archivar' onclick="alert('Archivado preparado para {dni}')">🗂</button>
+            <a class='mini-action' title='Ver ficha del trabajador' href='/admin/contratacion?sec=ficha&dni={dni}'>👁</a>
+            <a class='mini-action' title='Ver documentos de renovación' href='/admin/contratacion?sec=docs_renovacion&dni={dni}'>📄</a>
+            <a class='mini-action' title='Enviar a firma' href='/admin/contratacion?sec=firma_renovacion&dni={dni}'>✍</a>
+            <a class='mini-action' title='Enviar a aprobación' href='/admin/contratacion?sec=flujo&estado=PENDIENTE&dni={dni}'>➡</a>
           </div>"""
         renov_rows_list.append(f"""
           <tr>
@@ -7325,7 +7348,7 @@ html,body{overflow-x:hidden!important;}
         def badge_estado_aprobacion(est):
             cls_badge = 'green' if est == 'APROBADO' else ('red' if est == 'RECHAZADO' else 'yellow')
             return f"<span class='c-badge {cls_badge}'>{est}</span>"
-        rows=''.join([f"<tr class='{ 'selected' if i==0 else ''}'><td><input type='checkbox' {'checked' if i==0 else ''}></td><td>🔍 📄</td><td>{e['op']}</td><td>{badge_estado_aprobacion(e['estado'])}</td><td>{e['tipo']}</td><td>{e['fecha']}</td><td>{e['fecha']}</td><td>{e['trabajador']}</td><td>{e['dni']}</td></tr>" for i,e in enumerate(eventos_filtrados)])
+        rows=''.join([f"<tr class='{ 'selected' if i==0 else ''}'><td><input type='checkbox' name='op_sel' value='{e['op']}' {'checked' if i==0 else ''}></td><td><div class='row-actions'><a class='mini-action' title='Ver ficha' href='/admin/contratacion?sec=ficha&dni={e['dni']}'>🔍</a><a class='mini-action' title='Ver documento' href='/admin/contratacion?sec=docs_renovacion&dni={e['dni']}'>📄</a></div></td><td>{e['op']}</td><td>{badge_estado_aprobacion(e['estado'])}</td><td>{e['tipo']}</td><td>{e['fecha']}</td><td>{e['fecha']}</td><td>{e['trabajador']}</td><td>{e['dni']}</td></tr>" for i,e in enumerate(eventos_filtrados)])
         if not rows:
             rows = "<tr><td colspan='9' class='muted2'>No hay aprobaciones con el estado seleccionado.</td></tr>"
         content=wrap(f"""
@@ -7357,15 +7380,29 @@ html,body{overflow-x:hidden!important;}
           <span></span>
           <span><button class='c-btn'>⌕ Buscar</button> <a class='c-btn gray' href='/admin/contratacion?sec=flujo'>Limpiar</a></span>
         </form>
-        <div class='toolbar'>⚙ Acción ▾ &nbsp; | &nbsp; Aprobar seleccionados &nbsp; | &nbsp; Rechazar &nbsp; | &nbsp; Archivar</div>
-        <div class='c-card table-wrap'><table class='c-table'>
-          <tr><th></th><th></th><th>No.Operación</th><th>Estado</th><th>Tipo de Evento</th><th>Fecha Registro</th><th>Fecha último Estado</th><th>Trabajador</th><th>DNI</th></tr>
+        <form method='post' id='formAprobacionesRenovacion'>
+        <div class='approval-actions c-card'>
+          <button type='submit' name='accion' value='flujo_aprobar' class='c-btn'>✅ Aprobar seleccionados</button>
+          <button type='submit' name='accion' value='flujo_rechazar' class='c-btn gray'>❌ Rechazar</button>
+          <button type='submit' name='accion' value='flujo_archivar' class='c-btn gray'>🗂 Archivar aprobados</button>
+          <input name='comentario_aprobacion' placeholder='Comentario / motivo obligatorio si rechazas'>
+        </div>
+        <div class='c-card table-wrap approval-table'><table class='c-table'>
+          <tr><th></th><th>Acciones</th><th>No.Operación</th><th>Estado</th><th>Tipo de Evento</th><th>Fecha Registro</th><th>Fecha último Estado</th><th>Trabajador</th><th>DNI</th></tr>
           {rows}
         </table></div>
+        </form>
         <div class='c-card' style='padding:18px;margin-top:18px'>
-          <h2>Regla de negocio</h2>
-          <p class='muted2'>Cuando la renovación sea <b>APROBADA</b>, el documento queda listo para archivarse en el expediente del trabajador. Si queda <b>PENDIENTE</b>, no debe pasar a archivo final. Si queda <b>RECHAZADO</b>, vuelve a revisión de documentos/firma.</p>
+          <h2>Regla automática</h2>
+          <p class='muted2'>Las renovaciones llegan aquí desde <b>Enviar a aprobación</b>. Al aprobar, pasan a estado <b>APROBADO</b> y quedan listas para archivar en Ficha Trabajador, Archivos Trabajador y Base Central. Al rechazar, el comentario queda como motivo de corrección.</p>
         </div>
+        <style>
+          .approval-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;padding:14px}}
+          .approval-actions input{{flex:1;min-width:280px;border:1px solid #d8e4ef;border-radius:12px;padding:12px;font-weight:700}}
+          .approval-table{{max-height:540px;overflow:auto}}
+          .approval-table .c-table th{{position:sticky;top:0;background:#eef4fa;z-index:2}}
+          .row-actions{{display:flex;gap:7px;align-items:center}}
+        </style>
         """)
     elif sec=='carga':
         emp_opts = "<option>AQUANQA</option><option>AQUANCA II</option>"
@@ -7646,6 +7683,19 @@ html,body{overflow-x:hidden!important;}
         <div class='dash-kpis'><div class='dash-card'><small>Etapa</small><b>Renovación</b></div><div class='dash-card'><small>Archivo final</small><b>PDF/Word</b></div><div class='dash-card'><small>Destino</small><b>Ficha + Base Central</b></div></div>
         <div class='c-card'><h2>Control recomendado</h2><p class='muted2'>Filtrar por empresa, cargo, fecha fin de contrato, firmado, archivado y número de file. Al firmarse, el documento debe quedar como ARCHIVADO.</p></div>
         """)
+    elif sec=='docs_renovacion':
+        dni_doc = normalizar_dni(request.args.get('dni')) or (sample_trab['dni'] if sample_trab else '')
+        content=wrap(f"""
+        <h2 class='c-title'>Documentos de Renovación</h2>
+        <div class='dash-hero' style='margin-bottom:18px'>
+          <div><h1>Documentos de renovación</h1><p class='muted2'>Vista rápida de contrato/adenda generado para el trabajador seleccionado. DNI: {h(dni_doc)}</p></div>
+          <a class='c-btn gray' href='/admin/contratacion?sec=renovacion'>Volver a Renovación Masiva</a>
+        </div>
+        <div class='c-card table-wrap'><table class='c-table'>
+          <tr><th>DNI</th><th>Documento</th><th>Estado</th><th>Acción</th></tr>
+          <tr><td>{h(dni_doc)}</td><td>Adenda / Renovación de contrato</td><td>{_estado_pill('PENDIENTE GENERACIÓN')}</td><td><a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas_renovacion'>Generar desde plantilla</a></td></tr>
+        </table></div>
+        """)
     elif sec=='firma_renovacion':
         content=wrap("""
         <h2 class='c-title'>Firma Digital de Renovación</h2>
@@ -7668,17 +7718,16 @@ html,body{overflow-x:hidden!important;}
           <b>Fecha término:</b><input value='31/12/2026' placeholder='d/MM/yyyy'>
           <b>Meses:</b><input type='number' value='7'>
         </div>
+        <form method='post' id='formRenovacionMasiva'>
         <div class='renov-main-actions c-card'>
-          <button type='button' class='c-btn' onclick="alert('Generando renovación para seleccionados')">📄 Generar Renovación</button>
-          <button type='button' class='c-btn' onclick="alert('Enviando a firma digital')">✍ Enviar Firma</button>
-          <a class='c-btn' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>✔ Enviar Aprobación</a>
-          <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=APROBADO'>✅ Aprobar</a>
-          <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=RECHAZADO'>❌ Rechazar</a>
-          <button type='button' class='c-btn gray' onclick="alert('Archivando renovaciones seleccionadas')">🗂 Archivar</button>
+          <button type='submit' name='accion' value='renovar_generar' class='c-btn'>📄 Generar Renovación</button>
+          <button type='submit' name='accion' value='renovar_firma' class='c-btn'>✍ Enviar Firma</button>
+          <button type='submit' name='accion' value='renovar_aprobacion' class='c-btn'>➡ Enviar a Aprobación</button>
+          <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>Ver bandeja de aprobaciones</a>
         </div>
         <div class='toolbar renov-toolbar-pro'>
           <details><summary>🔎 Filtros</summary><div class='drop-panel'><input placeholder='Empresa'><input placeholder='Cargo'><input placeholder='Fecha fin contrato'><select><option>Estado firma</option><option>Pendiente</option><option>Firmado</option></select><select><option>Estado aprobación</option><option>PENDIENTE</option><option>APROBADO</option><option>RECHAZADO</option></select></div></details>
-          <details><summary>⚙ Acciones Masivas</summary><div class='drop-panel'><button>Generar Adenda</button><button>Enviar Firma</button><button>Enviar Aprobación</button><button>Actualizar Fecha Fin</button><button>Archivar</button></div></details>
+          <details><summary>⚙ Acciones Masivas</summary><div class='drop-panel'><button type='submit' name='accion' value='renovar_generar'>Generar Adenda/Renovación</button><button type='submit' name='accion' value='renovar_firma'>Enviar Firma</button><button type='submit' name='accion' value='renovar_aprobacion'>Enviar Aprobación</button><button type='button' onclick="alert('La fecha fin se actualizará en la ficha al aprobar la renovación')">Actualizar Fecha Fin</button></div></details>
           <details><summary>⬇ Descargar</summary><div class='drop-panel'><button>Excel Renovaciones</button><button>Excel Pendientes</button><button>Excel Aprobados</button><button>ZIP Documentos</button><button>Reporte Gerencial</button></div></details>
         </div>
         <div class='c-card table-wrap renov-table-pro'>
@@ -7690,6 +7739,7 @@ html,body{overflow-x:hidden!important;}
             {renov_rows}
           </table>
         </div>
+        </form>
         <style>
           .renov-main-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0;padding:14px}}
           .renov-toolbar-pro{{display:flex;gap:18px;justify-content:flex-end;margin:10px 0 14px 0;position:relative}}
@@ -7700,7 +7750,7 @@ html,body{overflow-x:hidden!important;}
           .table-input{{width:120px;border:1px solid #cfe0ef;border-radius:10px;padding:8px 10px;font-weight:800}}
           .renov-actions-row{{display:flex;gap:6px;flex-wrap:wrap}}
           .mini-action{{border:1px solid #d8e4ef;border-radius:10px;background:#fff;padding:7px 9px;text-decoration:none;cursor:pointer;font-weight:900}}
-          .renov-table-pro .c-table th,.renov-table-pro .c-table td{{vertical-align:middle}}
+          .renov-table-pro{{max-height:520px;overflow:auto}} .renov-table-pro .c-table th{{position:sticky;top:0;z-index:2;background:#eef4fa}} .renov-table-pro .c-table th,.renov-table-pro .c-table td{{vertical-align:middle}}
         </style>
         """)
     elif sec=='ficha':
