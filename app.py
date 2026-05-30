@@ -6838,7 +6838,80 @@ def admin_contratacion():
         </form>"""
     sample_trab = trabajadores[0] if trabajadores else None
     docs_rows=''.join([f"<tr><td><input type='checkbox'></td><td>🔍 📄</td><td>{r['dni']}</td><td>{r['trabajador']}</td><td>{r['tipo_doc']}</td><td><span class='c-badge cyan'>{r['estado'][:1] or 'F'}</span></td><td>{r['fecha_registro']}</td></tr>" for r in docs])
-    renov_rows=''.join([f"<tr><td><input type='checkbox'></td><td>{t['dni']}</td><td>{t['nombre']}</td><td>INICIO</td><td>{fecha_sin_hora(t['fecha_registro'])}</td><td></td><td>30/06/2026</td><td><span class='c-badge green'>✓</span></td><td><span class='c-badge green'>✓</span></td><td>0</td></tr>" for t in trabajadores[:12]])
+
+    # Tabla PRO de Renovación Masiva: limpia campos técnicos y muestra datos útiles para RR.HH.
+    # Estructura recomendada: DNI, trabajador, empresa, cargo, fecha fin actual, nueva fecha fin,
+    # días para vencer, firma, aprobación, estado y acciones operativas.
+    def _parse_fecha_renovacion(v):
+        txt = fecha_sin_hora(v)
+        for fmt in ('%d/%m/%Y','%Y-%m-%d'):
+            try:
+                return datetime.strptime(txt, fmt)
+            except Exception:
+                pass
+        return None
+
+    def _dias_vencimiento_badge(v):
+        f = _parse_fecha_renovacion(v)
+        if not f:
+            return "<span class='c-badge gray'>Sin fecha</span>"
+        dias = (f.date() - datetime.now(APP_TZ).date()).days
+        if dias < 0:
+            return f"<span class='c-badge red'>{dias} días</span>"
+        if dias <= 15:
+            return f"<span class='c-badge red'>{dias} días</span>"
+        if dias <= 30:
+            return f"<span class='c-badge yellow'>{dias} días</span>"
+        return f"<span class='c-badge green'>{dias} días</span>"
+
+    def _estado_renovacion_badge(estado):
+        estado = clean(estado).upper() or 'PENDIENTE GENERACIÓN'
+        cls = 'gray'
+        if 'APROB' in estado or 'ARCHIV' in estado:
+            cls = 'green'
+        elif 'RECHAZ' in estado:
+            cls = 'red'
+        elif 'FIRMA' in estado or 'APROBACIÓN' in estado:
+            cls = 'yellow'
+        elif 'GENER' in estado:
+            cls = 'cyan'
+        return f"<span class='c-badge {cls}'>{html.escape(estado)}</span>"
+
+    renov_rows_list = []
+    for t in trabajadores[:12]:
+        dni = html.escape(str(t['dni'] or ''))
+        nombre = html.escape(str(t['nombre'] or ''))
+        empresa = html.escape(str(t['empresa'] or 'AQUANQA I'))
+        cargo = html.escape(str(t['cargo'] or 'SIN CARGO'))
+        ff_actual = fecha_sin_hora(t['fecha_fin_contrato'] if 'fecha_fin_contrato' in t.keys() else '') or '30/06/2026'
+        ff_nueva = '31/12/2026'
+        firma = "<span class='c-badge yellow'>Pendiente</span>"
+        aprob = "<span class='c-badge gray'>Sin enviar</span>"
+        estado = _estado_renovacion_badge('Pendiente generación')
+        acciones = f"""
+          <div class='renov-actions-row'>
+            <a class='mini-action' title='Ver ficha' href='/admin/contratacion?sec=ficha&dni={dni}'>👁</a>
+            <button type='button' class='mini-action' title='Generar renovación' onclick="alert('Renovación generada para {dni}')">📄</button>
+            <button type='button' class='mini-action' title='Enviar a firma' onclick="alert('Enviado a firma: {dni}')">✍</button>
+            <a class='mini-action' title='Enviar a aprobación' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>✔</a>
+            <button type='button' class='mini-action' title='Archivar' onclick="alert('Archivado preparado para {dni}')">🗂</button>
+          </div>"""
+        renov_rows_list.append(f"""
+          <tr>
+            <td><input type='checkbox' name='dni_sel' value='{dni}'></td>
+            <td>{dni}</td>
+            <td>{nombre}</td>
+            <td>{empresa}</td>
+            <td>{cargo}</td>
+            <td>{html.escape(str(ff_actual))}</td>
+            <td><input class='table-input' value='{html.escape(str(ff_nueva))}'></td>
+            <td>{_dias_vencimiento_badge(ff_actual)}</td>
+            <td>{firma}</td>
+            <td>{aprob}</td>
+            <td>{estado}</td>
+            <td>{acciones}</td>
+          </tr>""")
+    renov_rows = ''.join(renov_rows_list) or "<tr><td colspan='12'>Sin trabajadores disponibles para renovar.</td></tr>"
     def chk_badge(v):
         return "<span class='c-badge green'>✓</span>" if int(v or 0)==1 else "<span class='c-badge gray'>—</span>"
     def escjs(v):
@@ -7581,7 +7654,55 @@ html,body{overflow-x:hidden!important;}
         <div class='c-card'><h2>Reglas del módulo</h2><p class='muted2'>No enviar si falta plantilla, trabajador activo, fecha fin nueva, documento generado o token de firma. Al completarse, actualizar Ficha Trabajador, Archivos Trabajador y Base Central.</p></div>
         """)
     elif sec=='renovacion':
-        content=wrap(f"<h2 class='c-title'>Renovación masiva de contratos</h2><div class='c-form'><b>Renovar por:</b><span>Meses <input type='checkbox' checked> Fecha Termino</span><b>Fecha Termino:</b><input placeholder='d/MM/yyyy'><b>Meses:</b><input type='number' value='0'></div><div class='toolbar'>🔎 Filtros &nbsp; ⚙ Acción ▾ &nbsp; ⬇ Descargar</div><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Modalidad</th><th>FI Planilla</th><th>Fecha Migración</th><th>FI Contrato</th><th>FF Contrato</th><th>Firmado</th><th>Archivado</th><th>Nro File</th></tr>{renov_rows}</table></div>")
+        content=wrap(f"""
+        <h2 class='c-title'>Renovación masiva de contratos</h2>
+        <div class='dash-hero renov-hero-pro'>
+          <div>
+            <h1>Renovación masiva</h1>
+            <p class='muted2'>Selecciona trabajadores, define la nueva fecha fin, genera la renovación, envía a firma, envía a aprobación y archiva el documento final en Ficha Trabajador.</p>
+          </div>
+          <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>Ver aprobaciones pendientes</a>
+        </div>
+        <div class='c-form renov-form-pro'>
+          <b>Renovar por:</b><span>Meses <input type='checkbox' checked> Fecha término</span>
+          <b>Fecha término:</b><input value='31/12/2026' placeholder='d/MM/yyyy'>
+          <b>Meses:</b><input type='number' value='7'>
+        </div>
+        <div class='renov-main-actions c-card'>
+          <button type='button' class='c-btn' onclick="alert('Generando renovación para seleccionados')">📄 Generar Renovación</button>
+          <button type='button' class='c-btn' onclick="alert('Enviando a firma digital')">✍ Enviar Firma</button>
+          <a class='c-btn' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>✔ Enviar Aprobación</a>
+          <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=APROBADO'>✅ Aprobar</a>
+          <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=RECHAZADO'>❌ Rechazar</a>
+          <button type='button' class='c-btn gray' onclick="alert('Archivando renovaciones seleccionadas')">🗂 Archivar</button>
+        </div>
+        <div class='toolbar renov-toolbar-pro'>
+          <details><summary>🔎 Filtros</summary><div class='drop-panel'><input placeholder='Empresa'><input placeholder='Cargo'><input placeholder='Fecha fin contrato'><select><option>Estado firma</option><option>Pendiente</option><option>Firmado</option></select><select><option>Estado aprobación</option><option>PENDIENTE</option><option>APROBADO</option><option>RECHAZADO</option></select></div></details>
+          <details><summary>⚙ Acciones Masivas</summary><div class='drop-panel'><button>Generar Adenda</button><button>Enviar Firma</button><button>Enviar Aprobación</button><button>Actualizar Fecha Fin</button><button>Archivar</button></div></details>
+          <details><summary>⬇ Descargar</summary><div class='drop-panel'><button>Excel Renovaciones</button><button>Excel Pendientes</button><button>Excel Aprobados</button><button>ZIP Documentos</button><button>Reporte Gerencial</button></div></details>
+        </div>
+        <div class='c-card table-wrap renov-table-pro'>
+          <table class='c-table'>
+            <tr>
+              <th><input type='checkbox' onclick="this.closest('table').querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=this.checked)"></th>
+              <th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Cargo</th><th>FF Actual</th><th>FF Nueva</th><th>Días vence</th><th>Firma</th><th>Aprobación</th><th>Estado</th><th>Acciones</th>
+            </tr>
+            {renov_rows}
+          </table>
+        </div>
+        <style>
+          .renov-main-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0;padding:14px}}
+          .renov-toolbar-pro{{display:flex;gap:18px;justify-content:flex-end;margin:10px 0 14px 0;position:relative}}
+          .renov-toolbar-pro details{{position:relative}}
+          .renov-toolbar-pro summary{{cursor:pointer;font-weight:800;color:#40566f;list-style:none}}
+          .drop-panel{{position:absolute;right:0;top:30px;background:#fff;border:1px solid #d8e4ef;border-radius:16px;box-shadow:0 18px 40px rgba(15,35,55,.15);padding:14px;z-index:20;min-width:260px;display:grid;gap:8px}}
+          .drop-panel input,.drop-panel select,.drop-panel button{{border:1px solid #d8e4ef;border-radius:12px;padding:10px;background:#fff;font-weight:700}}
+          .table-input{{width:120px;border:1px solid #cfe0ef;border-radius:10px;padding:8px 10px;font-weight:800}}
+          .renov-actions-row{{display:flex;gap:6px;flex-wrap:wrap}}
+          .mini-action{{border:1px solid #d8e4ef;border-radius:10px;background:#fff;padding:7px 9px;text-decoration:none;cursor:pointer;font-weight:900}}
+          .renov-table-pro .c-table th,.renov-table-pro .c-table td{{vertical-align:middle}}
+        </style>
+        """)
     elif sec=='ficha':
         # FICHA TRABAJADOR MEJORADA: búsqueda real por DNI y pestañas funcionales.
         dni_sel = normalizar_dni(request.args.get('dni')) or (sample_trab['dni'] if sample_trab else '')
