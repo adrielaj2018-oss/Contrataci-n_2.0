@@ -6728,7 +6728,8 @@ def admin_contratacion():
                     creadas += 1
                 con.commit()
             flash(f'Solicitudes masivas creadas: {creadas}. Revisa la Bandeja de Firmas para copiar/enviar enlaces móviles.', 'ok' if creadas else 'error')
-            return redirect(url_for('admin_contratacion', sec='firma'))
+            destino_firma = 'firma_renovacion' if 'RENOV' in metodo.upper() else 'firma'
+            return redirect(url_for('admin_contratacion', sec=destino_firma))
         if accion == 'firma_solicitud':
             doc_id = request.form.get('documento_id')
             metodo = clean(request.form.get('metodo')) or 'FACIAL + FIRMA DIGITAL'
@@ -7715,63 +7716,207 @@ html,body{overflow-x:hidden!important;}
         </table></div>
         """)
     elif sec=='firma_renovacion':
-        # Firma Renovación reutiliza el motor de Firma / Facial / Digital, pero filtrado a etapa Renovación.
+        # Firma Renovación PRO: mismo motor de Firma Facial / Digital,
+        # pero ordenado y filtrado exclusivamente para documentos de Renovación / Adenda.
         with db() as con_fr:
             docs_ren = con_fr.execute("""SELECT * FROM contratacion_docs 
                                       WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' 
                                          OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'
                                          OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%'
                                       ORDER BY id DESC LIMIT 300""").fetchall()
-            firmas_ren = con_fr.execute("""SELECT f.* FROM firma_solicitudes f
+            firmas_ren = con_fr.execute("""SELECT f.*, d.tipo_doc, d.estado AS estado_doc, d.ruta_archivo, d.archivo_nombre
+                                      FROM firma_solicitudes f
                                       LEFT JOIN contratacion_docs d ON d.id=f.documento_id
                                       WHERE UPPER(COALESCE(d.etapa,'')) LIKE '%RENOV%' 
                                          OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%RENOV%'
                                          OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%ADENDA%'
                                       ORDER BY f.id DESC LIMIT 300""").fetchall()
+        total_docs_ren = len(docs_ren)
+        total_firmas_ren = len(firmas_ren)
+        total_pendientes_ren = sum(1 for f in firmas_ren if 'PEND' in clean(f['estado']).upper() or 'CAPTURA' in clean(f['estado']).upper())
+        total_firmadas_ren = sum(1 for f in firmas_ren if 'FIRM' in clean(f['estado']).upper())
+        total_aprobacion_ren = sum(1 for f in firmas_ren if 'APROB' in clean(f['estado']).upper())
+
         doc_cards_ren = ''
         for d in docs_ren:
-            doc_cards_ren += f"""<label class='doc-sign-card'><input type='checkbox' class='chk-doc-firma' value='{d['id']}' data-dni='{h(d['dni'])}' data-trabajador='{h(d['trabajador'])}' data-tipo='{h(d['tipo_doc'])}' checked><span class='doc-icon'>W</span><span class='doc-info'><b>{h(d['tipo_doc'] or 'RENOVACIÓN')}</b><small>{h(d['trabajador'] or '')} · DNI {h(d['dni'] or '')}</small><small>Estado: {h(d['estado'] or 'Pendiente')}</small></span></label>"""
+            estado_doc = clean(d['estado']) or 'Pendiente'
+            estado_cls = 'ok' if 'FIRM' in estado_doc.upper() or 'APROB' in estado_doc.upper() else ('warn' if 'FIRMA' in estado_doc.upper() else 'pend')
+            doc_cards_ren += f"""
+            <label class='ren-sign-card'>
+              <input type='checkbox' class='chk-doc-firma' value='{d['id']}' data-dni='{h(d['dni'])}' data-trabajador='{h(d['trabajador'])}' data-tipo='{h(d['tipo_doc'])}' checked>
+              <span class='ren-doc-icon'>W</span>
+              <span class='ren-doc-body'>
+                <b>{h(d['tipo_doc'] or 'RENOVACIÓN / ADENDA')}</b>
+                <small>{h(d['trabajador'] or '')}</small>
+                <small>DNI {h(d['dni'] or '')} · {h(d['empresa'] or '')}</small>
+              </span>
+              <span class='ren-status {estado_cls}'>{h(estado_doc)}</span>
+            </label>"""
+
         rows_firma_ren = ''
         for r in firmas_ren:
             token = r['firma_token'] if 'firma_token' in r.keys() and r['firma_token'] else ''
             link = firma_url_token(token) if token else ''
-            rows_firma_ren += f"""<tr><td>{r['id']}</td><td>{h(r['dni'])}</td><td>{h(r['trabajador'])}</td><td><span class='estado-pill'>{h(r['estado'])}</span></td><td>{h(r['fecha_envio'])}</td><td>{h(r['fecha_firma'] or '')}</td><td>{'<a class=\"c-btn gray mini-btn\" target=\"_blank\" href=\"'+h(link)+'\">Abrir enlace</a>' if link else '-'}</td></tr>"""
+            estado_firma = clean(r['estado']) or 'Pendiente'
+            estado_cls = 'ok' if 'FIRM' in estado_firma.upper() or 'APROB' in estado_firma.upper() else ('warn' if 'CAPTURA' in estado_firma.upper() or 'PEND' in estado_firma.upper() else 'pend')
+            rows_firma_ren += f"""
+            <tr>
+              <td>{h(r['dni'])}</td>
+              <td><b>{h(r['trabajador'])}</b><br><small>{h(r['tipo_doc'] or 'Renovación / Adenda')}</small></td>
+              <td><span class='ren-status {estado_cls}'>{h(estado_firma)}</span></td>
+              <td>{h(r['fecha_envio'] or '')}</td>
+              <td>{h(r['fecha_firma'] or '')}</td>
+              <td>
+                <div class='ren-row-actions'>
+                  {('<a class="mini-action" target="_blank" title="Abrir enlace de firma" href="'+h(link)+'">🔗</a>') if link else '<span class="mini-action disabled">🔗</span>'}
+                  <a class='mini-action' title='Ver ficha única' href='/admin/contratacion?sec=ficha&dni={h(r['dni'])}'>🔍</a>
+                  <a class='mini-action' title='Ver documento' href='/admin/contratacion?sec=docs_renovacion&dni={h(r['dni'])}'>📄</a>
+                </div>
+              </td>
+            </tr>"""
+        if not rows_firma_ren:
+            rows_firma_ren = "<tr><td colspan='6' class='muted2'>No hay solicitudes de firma para renovación.</td></tr>"
+
         content=wrap(f"""
-        <div class='firma-page firma-boceto-final firma-renovacion-pro'>
-          <div class='firma-topbar'>
-            <div class='title-wrap'><div class='title-icon'>✍</div><div><h1>Firma Renovación</h1><p>Misma funcionalidad de Firma Facial / Digital, filtrada para adendas y renovaciones.</p></div></div>
-            <a class='btn-back' href='/admin/contratacion?sec=renovacion'>← Volver a Renovación Masiva</a>
+        <div class='firma-renovacion-clean'>
+          <div class='dash-hero firma-ren-hero'>
+            <div>
+              <h1>Firma Renovación</h1>
+              <p class='muted2'>Firma facial/digital para adendas y renovaciones. Al completarse, la renovación queda lista para pasar a <b>Aprobaciones</b> y luego a la <b>Ficha Trabajador única</b>.</p>
+            </div>
+            <div class='hero-actions'>
+              <a class='c-btn gray' href='/admin/contratacion?sec=renovacion'>← Renovación Masiva</a>
+              <a class='c-btn' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>Ver Aprobaciones</a>
+            </div>
           </div>
-          <div class='person-strip'>
-            <div class='strip-item'><span class='strip-ico'>📄</span><div><small>Tipo de documento</small><b>RENOVACIÓN / ADENDA</b></div></div>
-            <div class='strip-item'><span class='strip-ico'>📸</span><div><small>Método</small><b>FACIAL + FIRMA DIGITAL</b></div></div>
-            <div class='strip-item'><span class='strip-ico'>➡</span><div><small>Siguiente paso</small><b>APROBACIONES</b></div></div>
-            <div class='strip-item'><span class='strip-ico'>🗂</span><div><small>Archivo final</small><b>FICHA ÚNICA</b></div></div>
+
+          <div class='ren-kpi-grid'>
+            <div class='ren-kpi'><small>Renovaciones generadas</small><b>{total_docs_ren}</b><span>Documentos listos para envío</span></div>
+            <div class='ren-kpi'><small>Pendientes de firma</small><b>{total_pendientes_ren}</b><span>Esperando captura/enlace</span></div>
+            <div class='ren-kpi'><small>Firmadas</small><b>{total_firmadas_ren}</b><span>Con evidencia registrada</span></div>
+            <div class='ren-kpi'><small>En aprobación</small><b>{total_aprobacion_ren}</b><span>Bandeja RRHH/Gerencia</span></div>
           </div>
+
           <form method='post' onsubmit='return prepararFirmaMasiva()'>
             <input type='hidden' name='accion' value='firma_masiva'>
             <input type='hidden' name='documentos_lote' id='documentos_lote'>
             <input type='hidden' name='metodo_masivo' value='FACIAL + FIRMA DIGITAL - RENOVACIÓN'>
-            <input type='hidden' name='observacion_masiva' value='Renovación pendiente de firma facial/digital'>
-            <div class='firma-grid-boceto-main'>
-              <div class='firma-card-b camera-card-b'>
-                <h2>Activación de cámara</h2><p class='b-muted'>Captura facial del trabajador para firmar adendas/renovaciones.</p>
-                <div class='cam-wrap cam-boceto'><video id='firmaVideo' autoplay playsinline muted></video><canvas id='firmaCanvas' style='display:none'></canvas><img id='firmaPreview' style='display:none'><div class='face-frame'></div><div class='face-mesh'></div><div id='liveBadge' class='live-badge'>● APAGADA</div><div id='captureToast' class='capture-toast'>✅ Rostro reconocido correctamente<br><small>Captura realizada automáticamente</small></div></div>
-                <div id='soundBox' class='sound-ok'><span class='sound-icon'>🔊</span><div><b>¡Captura exitosa!</b><small>Rostro reconocido correctamente</small></div><span class='wave'>▂▃▄▅▆▇▆▅▄▃▂</span></div>
-                <div class='firma-actions boceto-actions'><button type='button' id='btnActivarCamara' class='btn-green' onclick='return firmaStartCam(event)'>🎥 Activar cámara</button><button type='button' class='btn-yellow' onclick='return firmaCapture()'>📸 Capturar evidencia</button><button type='button' class='btn-dark' onclick='return firmaStopCam()'>■ Detener</button><label class='btn-dark filecam-label'>📁 Cámara/archivo<input id='firmaFileCam' type='file' accept='image/*' capture='user' onchange='firmaLoadFileCam(this)' style='display:none'></label></div><p id='firmaCamMsg' class='b-muted'></p>
-              </div>
-              <div class='firma-card-b docs-panel-b'>
-                <h2>Renovaciones a firmar <span id='docsBadge' class='badge-green'>0</span></h2><p class='b-muted'>Solo aparecen documentos de etapa Renovación / Adenda.</p>
-                <div class='doc-sign-list'>{doc_cards_ren or '<div class="empty-docs">No hay renovaciones generadas. Primero usa Renovación Masiva → Generar Renovación.</div>'}</div>
-                <label class='switch-row'><input type='checkbox' checked onchange='marcarTodosFirma(this.checked)'><span>Firma masiva de renovaciones</span></label>
-                <div class='ready-box'>🛡️ <div><b>Al firmar</b><small>La renovación quedará lista para pasar a Aprobaciones.</small></div></div><br>
-                <button class='btn-green btn-firmar'>🖊️ Enviar / firmar renovaciones<br><small id='firmaMassCounter'>0 seleccionados</small></button>
-              </div>
+            <input type='hidden' name='observacion_masiva' value='Renovación firmada / pendiente de aprobación'>
+
+            <div class='ren-sign-layout'>
+              <section class='ren-panel ren-camera'>
+                <div class='ren-section-head'>
+                  <div><h2>1. Evidencia facial</h2><p>Activa cámara, captura evidencia o adjunta imagen desde celular.</p></div>
+                  <span id='liveBadge' class='live-badge pro'>● APAGADA</span>
+                </div>
+                <div class='cam-box-ren'>
+                  <video id='firmaVideo' autoplay playsinline muted></video>
+                  <canvas id='firmaCanvas' style='display:none'></canvas>
+                  <img id='firmaPreview' style='display:none'>
+                  <div class='face-frame'></div>
+                  <div class='capture-toast' id='captureToast'>✅ Rostro reconocido correctamente<br><small>Captura realizada</small></div>
+                </div>
+                <div id='soundBox' class='sound-ok ren-sound'>
+                  <span>🔊</span><div><b>Captura exitosa</b><small>Rostro reconocido correctamente</small></div>
+                </div>
+                <div class='ren-action-bar'>
+                  <button type='button' id='btnActivarCamara' class='c-btn' onclick='return firmaStartCam(event)'>🎥 Activar cámara</button>
+                  <button type='button' class='c-btn gray' onclick='return firmaCapture()'>📸 Capturar evidencia</button>
+                  <button type='button' class='c-btn dark' onclick='return firmaStopCam()'>■ Detener</button>
+                  <label class='c-btn gray filecam-label'>📁 Cámara/archivo<input id='firmaFileCam' type='file' accept='image/*' capture='user' onchange='firmaLoadFileCam(this)' style='display:none'></label>
+                </div>
+                <p id='firmaCamMsg' class='muted2'></p>
+              </section>
+
+              <section class='ren-panel'>
+                <div class='ren-section-head'>
+                  <div><h2>2. Renovaciones a firmar</h2><p>Selecciona documentos de renovación/adenda.</p></div>
+                  <span id='docsBadge' class='ren-count'>0</span>
+                </div>
+                <div class='ren-doc-list'>{doc_cards_ren or '<div class="empty-docs">No hay renovaciones generadas. Primero usa Renovación Masiva → Generar Renovación.</div>'}</div>
+                <div class='ren-bulk-row'>
+                  <label><input type='checkbox' checked onchange='marcarTodosFirma(this.checked)'> Seleccionar todo</label>
+                  <span id='firmaMassCounter'>0 seleccionados</span>
+                </div>
+                <button class='c-btn ren-main-submit'>🖊️ Enviar / firmar renovaciones</button>
+                <div class='ren-rule-mini'>Al firmar, el documento pasa a <b>Aprobaciones</b>.</div>
+              </section>
             </div>
           </form>
-          <div class='firma-card table-wrap'><h2>Bandeja de firmas de renovación</h2><table class='c-table firma-table'><tr><th>ID</th><th>DNI</th><th>Trabajador</th><th>Estado</th><th>Fecha envío</th><th>Fecha firma</th><th>Enlace</th></tr>{rows_firma_ren or '<tr><td colspan=7>No hay solicitudes de firma para renovación.</td></tr>'}</table></div>
-          <div class='c-card'><h2>Regla automática</h2><p class='muted2'>Al completarse la firma, el documento pasa a <b>Aprobaciones</b> y se archiva en la <b>Ficha Trabajador única</b>, Archivos Trabajador y Base Central.</p></div>
+
+          <section class='ren-panel table-section'>
+            <div class='ren-section-head'>
+              <div><h2>Bandeja de firmas de renovación</h2><p>Seguimiento de enlaces, capturas y estados.</p></div>
+              <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>Ir a Aprobaciones</a>
+            </div>
+            <div class='table-wrap ren-scroll'>
+              <table class='c-table'>
+                <tr><th>DNI</th><th>Trabajador / Documento</th><th>Estado firma</th><th>Fecha envío</th><th>Fecha firma</th><th>Acciones</th></tr>
+                {rows_firma_ren}
+              </table>
+            </div>
+          </section>
+
+          <section class='ren-panel ren-auto-flow'>
+            <h2>Regla automática</h2>
+            <div class='flow-steps'>
+              <div><b>1</b><span>Generar renovación</span></div>
+              <div><b>2</b><span>Firma facial/digital</span></div>
+              <div><b>3</b><span>Aprobaciones</span></div>
+              <div><b>4</b><span>Ficha Trabajador única</span></div>
+            </div>
+          </section>
         </div>
+        <style>
+          .firma-renovacion-clean{{padding-bottom:30px}}
+          .firma-ren-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}}
+          .firma-ren-hero h1{{font-size:42px;margin-bottom:8px}}
+          .hero-actions{{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}}
+          .ren-kpi-grid{{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin:18px 0}}
+          .ren-kpi{{background:white;border:1px solid #dbe9f3;border-radius:20px;padding:18px;box-shadow:0 12px 28px rgba(15,40,70,.08)}}
+          .ren-kpi small{{display:block;color:#60728a;font-weight:800;margin-bottom:8px}}
+          .ren-kpi b{{font-size:34px;color:#0b2b4c}}
+          .ren-kpi span{{display:block;color:#60728a;font-size:13px;margin-top:6px}}
+          .ren-sign-layout{{display:grid;grid-template-columns:minmax(360px,0.95fr) minmax(420px,1.05fr);gap:18px;align-items:start}}
+          .ren-panel{{background:white;border:1px solid #dbe9f3;border-radius:22px;padding:20px;box-shadow:0 14px 32px rgba(15,40,70,.08);margin-bottom:18px}}
+          .ren-section-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}}
+          .ren-section-head h2{{font-size:25px;margin:0;color:#0b2b4c}}
+          .ren-section-head p{{margin:5px 0 0;color:#60728a;font-weight:600}}
+          .live-badge.pro{{position:static;background:#142032;color:#fff;border-radius:999px;padding:8px 12px;font-weight:900;white-space:nowrap}}
+          .cam-box-ren{{position:relative;min-height:310px;border:2px dashed #cfe1ef;border-radius:20px;background:linear-gradient(135deg,#eef7f4,#f8fbfd);display:flex;align-items:center;justify-content:center;overflow:hidden}}
+          .cam-box-ren video,.cam-box-ren img{{width:100%;height:310px;object-fit:cover;border-radius:18px}}
+          .cam-box-ren .face-frame{{position:absolute;width:190px;height:230px;border:3px solid rgba(16,185,129,.8);border-radius:50%;box-shadow:0 0 0 999px rgba(11,43,76,.08)}}
+          .cam-box-ren .capture-toast{{display:none;position:absolute;bottom:16px;left:16px;background:#ecfdf5;border:1px solid #8ee0b8;color:#065f46;border-radius:14px;padding:10px 12px;font-weight:900}}
+          .ren-sound{{margin-top:10px;display:none}}
+          .ren-action-bar{{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}}
+          .ren-action-bar .c-btn{{min-height:42px}}
+          .ren-doc-list{{display:grid;gap:10px;max-height:390px;overflow:auto;padding-right:5px}}
+          .ren-sign-card{{display:grid;grid-template-columns:auto 48px 1fr auto;align-items:center;gap:12px;border:1px solid #dbe9f3;border-radius:18px;padding:13px;background:#f8fbfd;cursor:pointer}}
+          .ren-sign-card:hover{{background:#f0fbf7;border-color:#77d8ad}}
+          .ren-sign-card input{{width:18px;height:18px}}
+          .ren-doc-icon{{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:14px;background:#dcfce7;color:#047857;font-weight:900}}
+          .ren-doc-body b{{display:block;color:#0b2b4c}}
+          .ren-doc-body small{{display:block;color:#60728a;font-weight:700}}
+          .ren-status{{display:inline-flex;align-items:center;justify-content:center;border-radius:12px;padding:8px 10px;font-weight:900;font-size:12px;white-space:nowrap}}
+          .ren-status.ok{{background:#dcfce7;color:#166534;border:1px solid #86efac}}
+          .ren-status.warn{{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}}
+          .ren-status.pend{{background:#e0f2fe;color:#075985;border:1px solid #7dd3fc}}
+          .ren-count{{background:#10b981;color:#fff;border-radius:12px;padding:8px 14px;font-size:22px;font-weight:900}}
+          .ren-bulk-row{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0;color:#0b2b4c;font-weight:900}}
+          .ren-main-submit{{width:100%;justify-content:center;font-size:16px;padding:14px}}
+          .ren-rule-mini{{margin-top:12px;background:#f1f5f9;border-radius:14px;padding:12px;color:#475569;font-weight:700}}
+          .table-section{{padding:0;overflow:hidden}}
+          .table-section .ren-section-head{{padding:18px 20px 0}}
+          .ren-scroll{{max-height:420px;overflow:auto;border-top:1px solid #dbe9f3}}
+          .ren-scroll .c-table th{{position:sticky;top:0;z-index:2;background:#eef4fa}}
+          .ren-row-actions{{display:flex;gap:8px;align-items:center}}
+          .mini-action.disabled{{opacity:.35;pointer-events:none}}
+          .ren-auto-flow{{padding:18px 20px}}
+          .flow-steps{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}
+          .flow-steps div{{background:#f8fafc;border:1px solid #dbe9f3;border-radius:16px;padding:14px;display:flex;gap:10px;align-items:center;font-weight:900;color:#0b2b4c}}
+          .flow-steps b{{display:inline-flex;width:32px;height:32px;border-radius:50%;background:#10b981;color:white;align-items:center;justify-content:center}}
+          @media(max-width:1100px){{.ren-sign-layout,.ren-kpi-grid,.flow-steps{{grid-template-columns:1fr}}.firma-ren-hero{{flex-direction:column;align-items:flex-start}}}}
+        </style>
         """)
     elif sec=='renovacion':
         content=wrap(f"""
