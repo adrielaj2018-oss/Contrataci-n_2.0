@@ -3315,9 +3315,7 @@ def sidebar(active):
             <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
             <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Doc. Postulantes</span></a>
             <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
-            <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
             <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
-            <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><i class='bi bi-bar-chart-line'></i><span class='label'>Reportes</span></a>
             <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
               <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
@@ -3328,14 +3326,14 @@ def sidebar(active):
                 <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><i class='bi bi-briefcase'></i><span class='label'>Cargo</span></a>
                 <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><i class='bi bi-arrow-repeat'></i><span class='label'>Actualizar Trabajador</span></a>
                 <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
-                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Centro de Descargas</span></a>
+                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Centro de Descargas y Reportes</span></a>
                 <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-database-check'></i><span class='label'>Base Central / Integración</span></a>
                 <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
+                <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
                 <div id='grp_config_doc_maestros' data-group='config_doc_maestros' class='menu-group nested force-open'>
                   <button type='button' class='menu-title' onclick="toggleGroup('grp_config_doc_maestros')"><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span><span class='chev'>∨</span></button>
                   <div class='submenu'>
-                    <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantillas Contratación</span></a>
-                    <a class='{cls('plantillas_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas_renovacion'><i class='bi bi-arrow-repeat'></i><span class='label'>Plantillas Renovación</span></a>
+                    <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantillas Documentales</span></a>
                     <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><i class='bi bi-tags'></i><span class='label'>Tipos por Etapa</span></a>
                     <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><i class='bi bi-card-checklist'></i><span class='label'>Tipo Documento Empleado</span></a>
                   </div>
@@ -5780,6 +5778,10 @@ def admin_contratacion():
     # Se integra al motor único Firma / Facial / Digital, filtrado por Renovación.
     if sec == 'firma_renovacion':
         return redirect(url_for('admin_contratacion', sec='firma', scope='renovacion'))
+    # PRO: Plantillas Documentales y Plantillas Documentales se unifican en
+    # Configuración Documentaria → Plantillas Documentales.
+    if sec == 'plantillas_renovacion':
+        return redirect(url_for('admin_contratacion', sec='plantillas', f_proceso='RENOVACIÓN'))
     if request.method=='POST':
         accion = request.form.get('accion','doc')
         # Acciones operativas de renovación: Renovación Masiva genera/envía; Aprobaciones aprueba/rechaza/archiva.
@@ -6798,6 +6800,7 @@ def admin_contratacion():
         f_tipo = clean(request.args.get('f_tipo'))
         f_esquema = clean(request.args.get('f_esquema'))
         f_condicion = clean(request.args.get('f_condicion'))
+        f_proceso = clean(request.args.get('f_proceso'))
         where_pl, params_pl = [], []
         if f_nombre:
             where_pl.append('(nombre_plantilla LIKE ? OR descripcion LIKE ? OR archivo_nombre LIKE ?)')
@@ -6811,6 +6814,12 @@ def admin_contratacion():
         if f_condicion:
             where_pl.append('condicion LIKE ?')
             params_pl.append(f'%{f_condicion}%')
+        if f_proceso:
+            fp = f_proceso.upper()
+            if 'RENOV' in fp or 'ADENDA' in fp:
+                where_pl.append("(UPPER(COALESCE(tipo_documento,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_documento,'')) LIKE '%ADENDA%' OR UPPER(COALESCE(nombre_plantilla,'')) LIKE '%RENOV%' OR UPPER(COALESCE(nombre_plantilla,'')) LIKE '%ADENDA%')")
+            elif 'CONTRAT' in fp or 'INCORP' in fp:
+                where_pl.append("(UPPER(COALESCE(tipo_documento,'')) NOT LIKE '%RENOV%' AND UPPER(COALESCE(tipo_documento,'')) NOT LIKE '%ADENDA%' AND UPPER(COALESCE(nombre_plantilla,'')) NOT LIKE '%RENOV%' AND UPPER(COALESCE(nombre_plantilla,'')) NOT LIKE '%ADENDA%')")
         sql_pl = 'SELECT * FROM contratacion_plantillas'
         if where_pl:
             sql_pl += ' WHERE ' + ' AND '.join(where_pl)
@@ -6985,6 +6994,7 @@ def admin_contratacion():
             </form>
           </td>
           <td class='cell-visible'><form method='post' class='state-form'><input type='hidden' name='accion' value='estado_plantilla'><input type='hidden' name='plantilla_id' value='{r['id']}'><select name='activo' class='state-select {'inactive' if not r['activo'] else ''}' onchange='this.form.submit()'><option value='1' {'selected' if r['activo'] else ''}>Activo</option><option value='0' {'selected' if not r['activo'] else ''}>Inactivo</option></select></form></td>
+          <td class='cell-visible'><span class='status-pill {'warn' if ('RENOV' in (r['tipo_documento'] or '').upper() or 'ADENDA' in (r['tipo_documento'] or '').upper() or 'RENOV' in (r['nombre_plantilla'] or '').upper() or 'ADENDA' in (r['nombre_plantilla'] or '').upper()) else 'ok'}'>{'RENOVACIÓN' if ('RENOV' in (r['tipo_documento'] or '').upper() or 'ADENDA' in (r['tipo_documento'] or '').upper() or 'RENOV' in (r['nombre_plantilla'] or '').upper() or 'ADENDA' in (r['nombre_plantilla'] or '').upper()) else 'CONTRATACIÓN'}</span></td>
           <td class='cell-visible'><a class='tpl-link' href='{url_for('contratacion_plantilla_detalle', pid=r['id'])}'>{h(r['nombre_plantilla'])}</a></td>
           <td class='cell-visible'>{h(r['tipo_documento'])}</td><td class='cell-visible'>{h(r['esquema'])}</td><td class='cell-visible'>{h(r['descripcion'])}</td><td class='cell-visible'>{h(r['version'])}</td><td class='cell-visible'>{h(r['condicion'])}</td><td class='cell-visible'>{h(r['archivo_nombre'])}</td>
         </tr>""" for r in plantillas])
@@ -7260,7 +7270,7 @@ html,body{overflow-x:hidden!important;}
         <h2 class='c-title'>Base Central / Integración</h2>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Base Central de Contratación</h1><p class='muted2'>Almacén interno temporal de todo el proceso: requerimientos, postulantes, ficha, evaluación médica, documentos, firma, indumentaria, fotocheck y lotes. Hoy trabaja con SQLite/archivos internos; mañana será el puente hacia SQL Server o API NISIRA.</p></div><span class='status-pill ok'>Modo interno + futuro SQL/API</span></div>
         <div class='dash-kpis'><div class='dash-card'><small>Trabajadores base</small><b>{total_trab}</b></div><div class='dash-card'><small>Postulantes/ingresos</small><b>{total_ingresos}</b></div><div class='dash-card'><small>Requerimientos</small><b>{total_req_bc}</b></div><div class='dash-card'><small>Documentos</small><b>{total_docs_bc}</b></div><div class='dash-card'><small>Firmas</small><b>{total_firmas_bc}</b></div><div class='dash-card'><small>Médicos</small><b>{total_med_bc}</b></div><div class='dash-card'><small>Indumentaria</small><b>{total_ind_bc}</b></div><div class='dash-card'><small>Lotes integración</small><b>{total_lotes_bc}</b></div></div>
-        <div class='c-card' style='padding:18px;margin-top:16px'><h2>Acciones rápidas</h2><p class='muted2'>Descarga respaldos internos para auditoría o migración futura.</p><div class='download-grid'><a class='download-card' href='/admin/contratacion/base-central/export/general'><i class='bi bi-file-earmark-spreadsheet'></i><b>Excel general</b><small>Consolidado completo</small></a><a class='download-card' href='/admin/contratacion/base-central/export/zip'><i class='bi bi-file-zip'></i><b>Respaldo ZIP</b><small>Excel + archivos clave</small></a><a class='download-card' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><b>Centro de Descargas</b><small>Plantillas y reportes</small></a><a class='download-card' href='/admin/contratacion/plantilla_nisira'><i class='bi bi-link-45deg'></i><b>Plantilla NISIRA</b><small>Mapeo futuro</small></a></div></div>
+        <div class='c-card' style='padding:18px;margin-top:16px'><h2>Acciones rápidas</h2><p class='muted2'>Descarga respaldos internos para auditoría o migración futura.</p><div class='download-grid'><a class='download-card' href='/admin/contratacion/base-central/export/general'><i class='bi bi-file-earmark-spreadsheet'></i><b>Excel general</b><small>Consolidado completo</small></a><a class='download-card' href='/admin/contratacion/base-central/export/zip'><i class='bi bi-file-zip'></i><b>Respaldo ZIP</b><small>Excel + archivos clave</small></a><a class='download-card' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><b>Centro de Descargas y Reportes</b><small>Plantillas, reportes y respaldos</small></a><a class='download-card' href='/admin/contratacion/plantilla_nisira'><i class='bi bi-link-45deg'></i><b>Plantilla NISIRA</b><small>Mapeo futuro</small></a></div></div>
         <form method='post' class='c-card c-form' style='padding:20px;margin-top:16px'><input type='hidden' name='accion' value='guardar_base_central_config'><b>Destino futuro</b><select name='destino'><option>SQL SERVER</option><option>NISIRA API</option><option>SQL SERVER + NISIRA API</option><option>OTRO ERP</option></select><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>EN DISEÑO</option><option>EN PRUEBA</option><option>LISTO PARA CONEXIÓN</option></select><b>Servidor SQL / host</b><input name='servidor' placeholder='Ej. SRV-SQL-RRHH / 10.0.0.5'><b>Base de datos</b><input name='base_datos' placeholder='Ej. RRHH_Contratacion'><b>Endpoint API</b><input name='endpoint' placeholder='Ej. https://servidor-nisira/api/trabajadores'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle técnico, responsable TI, credenciales pendientes, etc.'></textarea><span></span><button class='c-btn'>💾 Guardar preparación de integración</button></form>
         <div class='c-card table-wrap' style='margin-top:16px'><h2>Últimos postulantes almacenados</h2><input oninput="filtrarTabla(this,'tabla_base_central')" placeholder='Buscar DNI, trabajador, requerimiento, estado...'><table id='tabla_base_central' class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Requerimiento</th><th>Cargo</th><th>Área</th><th>General</th><th>Médico</th><th>Docs</th><th>Indum.</th><th>Integración</th><th>Fecha</th></tr>{rows_trab}</table></div>
         <div class='c-card table-wrap' style='margin-top:16px'><h2>Requerimientos consolidados</h2><table class='c-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Actividad</th><th>Cantidad</th><th>Estado</th><th>Ingreso</th><th>Registro</th></tr>{rows_req}</table></div>
@@ -7453,7 +7463,7 @@ html,body{overflow-x:hidden!important;}
         <script>function abrirCargaModal(t){{cerrarCargaModal();document.getElementById(t==='baja'?'modalBaja':'modalActualizar').classList.add('show');}}function cerrarCargaModal(){{document.querySelectorAll('.obs-modal').forEach(m=>m.classList.remove('show'));}}</script>
         """)
     elif sec=='reportes':
-        content=wrap(f"<h2 class='c-title'>Reportes</h2><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th>Código</th><th>Nombre</th><th>Nombre</th><th>Componente</th><th>Creado por</th></tr>{report_rows}</table></div>")
+        return redirect(url_for('admin_contratacion', sec='descargas'))
     elif sec=='actualizar':
         content=wrap(f"<h2 class='c-title'>Actualizar Trabajador / Estado laboral</h2><div class='c-card' style='padding:16px'><p class='muted2'>Aquí se controla la base de trabajadores activos. Al cesar se cambia el estado a inactivo, pero NO se elimina ningún documento ni contrato archivado.</p><div class='c-filter' style='grid-template-columns:1fr 1fr'><input placeholder='Buscar por DNI o apellidos'><button class='c-btn'>⌕ Buscar</button></div></div><div class='c-card table-wrap'><table class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Cargo</th><th>Estado</th><th>Acción</th></tr>{trabajadores_estado_rows}</table></div>")
     elif sec=='tipos_etapa':
@@ -7670,7 +7680,7 @@ html,body{overflow-x:hidden!important;}
         <section class='dashboard-contratacion dashboard-renovacion-pro'>
           <div class='dash-hero'>
             <div><h1>Centro de Control - Gestión Renovación</h1><p class='muted2'>Módulo principal para contratos por vencer: selección masiva, generación de adendas/renovaciones, envío a firma, archivado y actualización de ficha.</p></div>
-            <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=renovacion'>Renovar contratos</a><a class='c-btn gray' href='/admin/contratacion?sec=plantillas_renovacion'>Plantillas renovación</a></div>
+            <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=renovacion'>Renovar contratos</a><a class='c-btn gray' href='/admin/contratacion?sec=plantillas&f_proceso=RENOVACIÓN'>Plantillas documentales</a></div>
           </div>
           <div class='dash-kpis'>
             <div class='dash-card'><small>Trabajadores activos</small><b>{total_activos}</b></div>
@@ -7687,11 +7697,11 @@ html,body{overflow-x:hidden!important;}
         """)
     elif sec=='plantillas_renovacion':
         content=wrap("""
-        <h2 class='c-title'>Configuración Documentaria / Plantillas Renovación</h2>
-        <div class='dash-hero'><div><h1>Plantillas para adendas y renovaciones</h1><p class='muted2'>Esta opción ahora pertenece a <b>Datos Maestros → Configuración Documentaria</b>. Usa las mismas funcionalidades de plantillas Word/PDF, campos dinámicos, condiciones y mapeo, pero orientadas a la etapa <b>Renovación</b>.</p></div><a class='c-btn' href='/admin/contratacion?sec=plantillas'>Ir a Plantillas Contratación</a></div>
+        <h2 class='c-title'>Configuración Documentaria / Plantillas Documentales</h2>
+        <div class='dash-hero'><div><h1>Plantillas documentales</h1><p class='muted2'>Esta opción ahora pertenece a <b>Datos Maestros → Configuración Documentaria</b>. Usa las mismas funcionalidades de plantillas Word/PDF, campos dinámicos, condiciones y mapeo, pero orientadas a la etapa <b>Renovación</b>.</p></div><a class='c-btn' href='/admin/contratacion?sec=plantillas'>Ir a Plantillas Documentales</a></div>
         <div class='c-card' style='padding:14px 18px;margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center'>
           <b>Accesos:</b>
-          <a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas'>Plantillas Contratación</a>
+          <a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas'>Plantillas Documentales</a>
           <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipos_etapa'>Tipos por Etapa</a>
           <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=renovacion'>Volver a Renovación Masiva</a>
         </div>
@@ -7716,7 +7726,7 @@ html,body{overflow-x:hidden!important;}
         </div>
         <div class='c-card table-wrap'><table class='c-table'>
           <tr><th>DNI</th><th>Documento</th><th>Estado</th><th>Acción</th></tr>
-          <tr><td>{h(dni_doc)}</td><td>Adenda / Renovación de contrato</td><td>{_estado_pill('PENDIENTE GENERACIÓN')}</td><td><a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas_renovacion'>Generar desde plantilla</a></td></tr>
+          <tr><td>{h(dni_doc)}</td><td>Adenda / Renovación de contrato</td><td>{_estado_pill('PENDIENTE GENERACIÓN')}</td><td><a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas&f_proceso=RENOVACIÓN'>Generar desde plantilla</a></td></tr>
         </table></div>
         """)
     elif sec=='firma_renovacion':
@@ -8107,17 +8117,19 @@ html,body{overflow-x:hidden!important;}
         f_tipo_v = html.escape(clean(request.args.get('f_tipo')))
         f_esquema_v = html.escape(clean(request.args.get('f_esquema')))
         f_cond_v = html.escape(clean(request.args.get('f_condicion')))
+        f_proceso_v = html.escape(clean(request.args.get('f_proceso')))
         base_excel_rows = ''.join([f"<tr><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in trabajadores_proceso_mostrar[:12]]) or "<tr><td colspan='7'>Aún no hay base Excel cargada desde este módulo.</td></tr>"
         content=wrap(f"""
         <style>.config-contratos-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:10px 0 18px}}.config-contract-card{{padding:20px!important;min-height:210px}}.config-contract-card h2{{margin:4px 0 8px;color:#0f2b46}}.config-icon{{width:54px;height:54px;border-radius:16px;background:#ecfdf5;display:grid;place-items:center;font-size:28px;margin-bottom:10px}}.base-excel-form{{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:12px 0}}.quick-grid{{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}}.quick-grid a{{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:999px;padding:9px 13px;color:#047857!important;font-weight:800;text-decoration:none}}@media(max-width:900px){{.config-contratos-grid{{grid-template-columns:1fr}}.base-excel-form{{grid-template-columns:1fr}}.base-excel-form .c-btn{{width:100%}}}}</style>
         <div class='plantilla-top'>
-          <div><h1 class='c-title plantillas-title-pro'>Configuración Documentaria</h1><p class='muted2'>Módulo ubicado en <b>Datos Maestros</b>. Desde aquí se gobiernan plantillas de contratación, plantillas de renovación, campos dinámicos, condiciones y tipos documentarios.</p></div>
+          <div><h1 class='c-title plantillas-title-pro'>Configuración Documentaria</h1><p class='muted2'>Módulo ubicado en <b>Datos Maestros</b>. Desde aquí se gobiernan en una sola bandeja las plantillas de contratación, renovación/adendas, documentos de entrega, campos dinámicos, condiciones y tipos documentarios.</p></div>
           <a class='c-btn crear-btn' href='#crearPlantilla'>+ Crear Plantilla Word/PDF</a>
         </div>
         <div class='c-card' style='padding:14px 18px;margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center'>
           <b>Configuración Documentaria:</b>
-          <a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas'>Plantillas Contratación</a>
-          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=plantillas_renovacion'>Plantillas Renovación</a>
+          <a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas'>Plantillas Documentales</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=plantillas&f_proceso=CONTRATACIÓN'>Filtro Contratación</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=plantillas&f_proceso=RENOVACIÓN'>Filtro Renovación</a>
           <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipos_etapa'>Tipos por Etapa</a>
           <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipo_empleado'>Tipo Documento Empleado</a>
         </div>
@@ -8165,6 +8177,7 @@ html,body{overflow-x:hidden!important;}
         <div class='c-card filter-card' style='padding:18px'>
           <form method='get' action='/admin/contratacion' class='plantilla-filter'>
             <input type='hidden' name='sec' value='plantillas'>
+            <b>Proceso:</b><select name='f_proceso'><option value='' {'selected' if not f_proceso_v else ''}>TODOS</option><option value='CONTRATACIÓN' {'selected' if f_proceso_v=='CONTRATACIÓN' else ''}>CONTRATACIÓN</option><option value='RENOVACIÓN' {'selected' if f_proceso_v=='RENOVACIÓN' else ''}>RENOVACIÓN / ADENDA</option></select>
             <b>Nombre Plantilla:</b><input name='f_nombre' value='{f_nombre_v}'>
             <b>Tipo Documento:</b><input name='f_tipo' value='{f_tipo_v}' list='tipos_doc_list_filter'><datalist id='tipos_doc_list_filter'>{opt_tipo}</datalist>
             <b>Esquema:</b><select name='f_esquema'><option value=''></option><option {'selected' if f_esquema_v=='Trabajador Contrato Laboral' else ''}>Trabajador Contrato Laboral</option><option {'selected' if f_esquema_v=='Trabajador Datos Laborales' else ''}>Trabajador Datos Laborales</option><option {'selected' if f_esquema_v=='Esquema Trabajador Datos Laborales GR' else ''}>Esquema Trabajador Datos Laborales GR</option><option {'selected' if f_esquema_v=='Trabajador Declaración Jurada Datos Personales' else ''}>Trabajador Declaración Jurada Datos Personales</option><option {'selected' if f_esquema_v=='Trabajador Declaración Jurada Parentesco' else ''}>Trabajador Declaración Jurada Parentesco</option></select>
@@ -8230,7 +8243,7 @@ html,body{overflow-x:hidden!important;}
             </div>
           </div>
         </div>
-        <div class='c-card table-wrap plantillas-pro-visible'><table class='c-table plantilla-table plantillas-pro-table'><tr><th>Proceso</th><th>Estado</th><th>Nombre Plantilla</th><th>Tipo Documento</th><th>Esquema</th><th>Descripción</th><th>Versión</th><th>Condición</th><th>Nombre Archivo</th></tr>{plantillas_rows or '<tr><td colspan=9>No hay plantillas registradas.</td></tr>'}</table></div>
+        <div class='c-card' style='padding:13px 18px;margin:12px 0;background:#f0fdf4;border:1px solid #bbf7d0'><b>Plantillas Documentales unificadas:</b> usa el campo <b>Proceso</b> para diferenciar contratación, renovación/adenda u otros documentos. Gestión Contratación y Gestión Renovación consumirán esta misma bandeja filtrando automáticamente.</div><div class='c-card table-wrap plantillas-pro-visible'><table class='c-table plantilla-table plantillas-pro-table'><tr><th>Acciones</th><th>Proceso</th><th>Estado</th><th>Nombre Plantilla</th><th>Tipo Documento</th><th>Esquema</th><th>Descripción</th><th>Versión</th><th>Condición</th><th>Nombre Archivo</th></tr>{plantillas_rows or '<tr><td colspan=10>No hay plantillas registradas.</td></tr>'}</table></div>
         """)
     elif sec=='firma':
         opt_docs = ''.join([f"<option value='{d['id']}' data-dni='{h(d['dni'])}' data-trabajador='{h(d['trabajador'])}' data-tipo='{h(d['tipo_doc'])}'>ID {d['id']} - {h(d['dni'])} - {h(d['trabajador'])} - {h(d['tipo_doc'])}</option>" for d in docs])
@@ -8574,8 +8587,8 @@ html,body{overflow-x:hidden!important;}
         </style>
         <div class='download-hero c-card' style='padding:26px'>
           <div>
-            <h2 class='c-title' style='margin-bottom:8px'>Centro de Descargas</h2>
-            <p class='muted2'>Descarga plantillas Excel, reportes de contratación y renovación, documentos generados y expedientes completos por trabajador. Este módulo queda dentro de Datos Maestros para centralizar formatos, respaldos y auditoría.</p>
+            <h2 class='c-title' style='margin-bottom:8px'>Centro de Descargas y Reportes</h2>
+            <p class='muted2'>Centro único para plantillas Excel, reportes de contratación, reportes de renovación, bajas, firmas, documentos generados, ZIP de expedientes y respaldos. Reemplaza al antiguo módulo Reportes para evitar duplicidad.</p>
           </div>
           <a class='c-btn' href='{url_for('admin_contratacion', sec='maestros')}'>← Volver a Datos Maestros</a>
         </div>
@@ -8625,7 +8638,7 @@ html,body{overflow-x:hidden!important;}
             <div class='download-actions'>
               <a class='c-btn gray' href='{url_for('admin_contratacion', sec='renovacion_dashboard')}'>📊 Dashboard renovación</a>
               <a class='c-btn gray' href='{url_for('admin_contratacion', sec='renovacion')}'>🔁 Renovación masiva</a>
-              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='plantillas_renovacion')}'>📄 Plantillas renovación</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='plantillas', f_proceso='RENOVACIÓN')}'>📄 Plantillas documentales</a>
               <a class='c-btn gray' href='{url_for('admin_contratacion', sec='firma', scope='renovacion')}'>✍ Firmas renovación</a>
               <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovaciones')}'>⬇ Reporte renovaciones</a>
               <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovacion_firmas')}'>⬇ Reporte firmas renovación</a>
@@ -8651,7 +8664,110 @@ html,body{overflow-x:hidden!important;}
         </div>
         """)
     else:
-        content=wrap(f"<h2 class='c-title'>Archivos Trabajador</h2><div class='toolbar'>🔎 Filtros &nbsp; ⚙ Acción ▾ &nbsp; ⬇ Descargar ▾</div><form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:18px'><b>Trabajador</b><input name='dni' list='trabajadores_list' required><datalist id='trabajadores_list'>{opt_trab}</datalist><b>Etapa</b><select name='etapa'><option>Incorporación</option><option>Renovación</option><option>Cese</option></select><b>Tipo documento</b><select name='tipo_doc'>{opt_tipo}</select><b>Archivo</b><input type='file' name='archivo' required><span></span><button class='c-btn'>⬆ Subir Docs Individual</button></form><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th></tr>{docs_rows or '<tr><td colspan=7>No hay archivos.</td></tr>'}</table></div>")
+        # Archivos Trabajador queda como expediente documental central del trabajador.
+        # No pertenece solo a Contratación: recibe documentos de contratación, renovación,
+        # firma, fotocheck, indumentaria, evaluación médica e inducción.
+        total_docs_arch = 0
+        docs_firmados_arch = 0
+        docs_renov_arch = 0
+        docs_med_arch = 0
+        try:
+            with db() as con_arch:
+                total_docs_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs").fetchone()[0]
+                docs_firmados_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(estado,'')) LIKE '%FIRM%'").fetchone()[0]
+                docs_renov_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'").fetchone()[0]
+                docs_med_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_medica WHERE COALESCE(ruta_archivo,'')<>'' OR COALESCE(archivo_nombre,'')<>''").fetchone()[0]
+        except Exception:
+            pass
+        content=wrap(f"""
+        <style>
+          .archivo-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}}
+          .archivo-kpis{{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:14px;margin-bottom:18px}}
+          .archivo-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:18px;padding:18px;box-shadow:0 10px 24px #0f172a0d}}
+          .archivo-kpi small{{color:#64748b;font-weight:800}}
+          .archivo-kpi b{{display:block;font-size:30px;color:#0b2742;margin-top:8px}}
+          .archivo-layout{{display:grid;grid-template-columns:1.05fr 1.4fr;gap:18px;align-items:start}}
+          .archivo-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:20px;box-shadow:0 14px 32px #0f172a0d}}
+          .archivo-card h3{{margin:0 0 12px;color:#0b2742;font-size:22px}}
+          .archivo-grid{{display:grid;grid-template-columns:180px 1fr;gap:12px;align-items:center}}
+          .archivo-grid b{{background:#edf3f7;border-radius:12px;padding:12px;text-align:right}}
+          .archivo-grid input,.archivo-grid select{{width:100%;border:1px solid #d6e3ef;border-radius:12px;padding:12px;font-weight:800}}
+          .archivo-actions{{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}}
+          .archivo-note{{background:#f1f5f9;border-radius:16px;padding:14px;color:#475569;margin-top:14px;line-height:1.45}}
+          .archivo-scroll{{max-height:480px;overflow:auto;border-radius:18px;border:1px solid #dbe7ef}}
+          .archivo-scroll .c-table th{{position:sticky;top:0;background:#edf3f7;z-index:2}}
+          @media(max-width:1000px){{.archivo-kpis,.archivo-layout{{grid-template-columns:1fr}}.archivo-grid{{grid-template-columns:1fr}}.archivo-grid b{{text-align:left}}.archivo-hero{{display:block}}}}
+        </style>
+
+        <div class='archivo-hero c-card' style='padding:26px'>
+          <div>
+            <h2 class='c-title' style='margin-bottom:8px'>Archivos Trabajador</h2>
+            <p class='muted2'>Expediente documental central. Aquí se almacenan contratos, renovaciones, documentos firmados, fotocheck, indumentaria, evaluación médica, inducción y anexos. Este módulo pertenece a <b>Datos Maestros / Base Central</b>.</p>
+          </div>
+          <div class='archivo-actions'>
+            <a class='c-btn gray' href='{url_for('admin_contratacion', sec='ficha')}'>Ver Ficha Trabajador</a>
+            <a class='c-btn' href='{url_for('admin_contratacion', sec='integracion_nisira')}'>Base Central</a>
+          </div>
+        </div>
+
+        <div class='archivo-kpis'>
+          <div class='archivo-kpi'><small>Total documentos</small><b>{total_docs_arch}</b></div>
+          <div class='archivo-kpi'><small>Firmados</small><b>{docs_firmados_arch}</b></div>
+          <div class='archivo-kpi'><small>Renovaciones / adendas</small><b>{docs_renov_arch}</b></div>
+          <div class='archivo-kpi'><small>Médicos adjuntos</small><b>{docs_med_arch}</b></div>
+        </div>
+
+        <div class='archivo-layout'>
+          <div class='archivo-card'>
+            <h3>Subida documental controlada</h3>
+            <form method='post' enctype='multipart/form-data'>
+              <div class='archivo-grid'>
+                <b>Trabajador / DNI</b>
+                <input name='dni' list='trabajadores_list' placeholder='Buscar por DNI o nombre' required>
+                <datalist id='trabajadores_list'>{opt_trab}</datalist>
+
+                <b>Etapa</b>
+                <select name='etapa'>
+                  <option>Incorporación</option>
+                  <option>Renovación</option>
+                  <option>Evaluación Médica</option>
+                  <option>Indumentaria</option>
+                  <option>Fotocheck</option>
+                  <option>Inducción</option>
+                  <option>Cese</option>
+                  <option>Otros</option>
+                </select>
+
+                <b>Tipo documento</b>
+                <select name='tipo_doc'>{opt_tipo}</select>
+
+                <b>Archivo</b>
+                <input type='file' name='archivo' required>
+              </div>
+              <div class='archivo-actions'>
+                <button class='c-btn'>⬆ Guardar en expediente</button>
+                <a class='c-btn gray' href='{url_for('admin_contratacion', sec='descargas')}'>⬇ Centro de Descargas y Reportes</a>
+              </div>
+            </form>
+            <div class='archivo-note'>
+              <b>Regla PRO:</b> los módulos de Contratación, Renovación, Firma, Médico, Fotocheck e Indumentaria deben guardar automáticamente sus documentos aquí. La carga manual queda solo para anexos o regularizaciones.
+            </div>
+          </div>
+
+          <div class='archivo-card'>
+            <h3>Repositorio documental</h3>
+            <div class='toolbar' style='margin-bottom:10px'>🔎 Filtros &nbsp; ⚙ Acción ▾ &nbsp; ⬇ Descargar ▾</div>
+            <div class='archivo-scroll'>
+              <table class='c-table'>
+                <tr>
+                  <th></th><th></th><th>Código/DNI</th><th>Trabajador</th><th>Etapa</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th>
+                </tr>
+                {docs_rows or '<tr><td colspan=8>No hay archivos.</td></tr>'}
+              </table>
+            </div>
+          </div>
+        </div>
+        """)
     return render_page(content, active=f'Gestion Contratacion:{sec}')
 
 
