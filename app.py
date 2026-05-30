@@ -3321,8 +3321,6 @@ def sidebar(active):
               <div class='submenu'>
                 <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><i class='bi bi-grid'></i><span class='label'>Mantenedor General</span></a>
                 <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><i class='bi bi-people'></i><span class='label'>Trabajadores Obs.</span></a>
-                <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><i class='bi bi-tags'></i><span class='label'>Tipos por Etapa</span></a>
-                <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><i class='bi bi-card-checklist'></i><span class='label'>Tipo Documento Empleado</span></a>
                 <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><i class='bi bi-briefcase'></i><span class='label'>Cargo</span></a>
                 <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><i class='bi bi-arrow-repeat'></i><span class='label'>Actualizar Trabajador</span></a>
                 <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
@@ -8768,6 +8766,43 @@ html,body{overflow-x:hidden!important;}
           </div>
         </div>
         """)
+    # PRO UI: Unificación documentaria.
+    # "Tipos por Etapa" y "Tipo Documento Empleado" ya no se muestran duplicados en Datos Maestros;
+    # quedan como pestañas internas de Configuración Documentaria / Plantillas Documentales.
+    if sec in {'plantillas', 'tipos_etapa', 'tipo_empleado'}:
+        def _doc_tab(s, label, icon):
+            active_cls = 'active' if sec == s else ''
+            return f"<a class='doc-config-tab {active_cls}' href='{url_for('admin_contratacion', sec=s)}'>{icon} {label}</a>"
+        doc_config_nav = f"""
+        <style>
+          .doc-config-wrap{{background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:14px 16px;margin:0 0 16px;box-shadow:0 10px 24px rgba(15,23,42,.05)}}
+          .doc-config-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}}
+          .doc-config-head h2{{margin:0;color:#0f172a;font-size:20px;font-weight:800}}
+          .doc-config-head p{{margin:4px 0 0;color:#64748b;font-size:13px}}
+          .doc-config-tabs{{display:flex;gap:10px;flex-wrap:wrap}}
+          .doc-config-tab{{display:inline-flex;align-items:center;gap:7px;text-decoration:none;background:#fff;border:1px solid #dbeafe;color:#0f172a;border-radius:999px;padding:9px 13px;font-weight:800;font-size:13px}}
+          .doc-config-tab.active{{background:#0f766e;color:#fff;border-color:#0f766e;box-shadow:0 8px 18px rgba(15,118,110,.18)}}
+          @media(max-width:720px){{.doc-config-tab{{width:100%;justify-content:center}}}}
+        </style>
+        <div class="doc-config-wrap">
+          <div class="doc-config-head">
+            <div>
+              <h2>Configuración Documentaria</h2>
+              <p>Gestión única de plantillas, tipos por etapa y documentos de empleado para contratación, renovación y documentos a entregar.</p>
+            </div>
+          </div>
+          <div class="doc-config-tabs">
+            {_doc_tab('plantillas','Plantillas Documentales','📄')}
+            {_doc_tab('tipos_etapa','Tipos por Etapa','🏷️')}
+            {_doc_tab('tipo_empleado','Tipo Documento Empleado','🧾')}
+          </div>
+        </div>
+        """
+        if content.startswith('<style'):
+            content = content.replace('</style>', '</style>' + doc_config_nav, 1)
+        else:
+            content = doc_config_nav + content
+
     return render_page(content, active=f'Gestion Contratacion:{sec}')
 
 
