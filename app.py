@@ -3298,7 +3298,7 @@ def sidebar(active):
             pass
         def cls(sec):
             return 'menu-item sub-mini active' if active_sub == sec else 'menu-item sub-mini'
-        renovacion_secs = {'renovacion_dashboard','renovacion','plantillas_renovacion','documentaria_renovacion','firma_renovacion'}
+        renovacion_secs = {'renovacion_dashboard','renovacion','plantillas_renovacion','documentaria_renovacion','firma_renovacion','flujo'}
         con_group_cls = 'menu-group force-open' + ('' if active_sub in renovacion_secs else ' active-main')
         ren_group_cls = 'menu-group force-open' + (' active-main' if active_sub in renovacion_secs else '')
         con_title_cls = 'menu-title active' if active_sub not in renovacion_secs else 'menu-title'
@@ -3319,7 +3319,6 @@ def sidebar(active):
             <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
             <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
             <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
-            <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><i class='bi bi-signpost-split'></i><span class='label'>Flujos de aprobación</span></a>
             <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><i class='bi bi-bar-chart-line'></i><span class='label'>Reportes</span></a>
             <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
               <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
@@ -3346,6 +3345,7 @@ def sidebar(active):
             <a class='{cls('plantillas_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas_renovacion'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantillas Renovación</span></a>
             <a class='{cls('documentaria_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria_renovacion'><i class='bi bi-folder2-open'></i><span class='label'>Documentos Renovación</span></a>
             <a class='{cls('firma_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma_renovacion'><i class='bi bi-pen'></i><span class='label'>Firma Renovación</span></a>
+            <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><i class='bi bi-signpost-split'></i><span class='label'>Aprobaciones</span></a>
             <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
           </div>
         </div>"""
@@ -7231,8 +7231,69 @@ html,body{overflow-x:hidden!important;}
             <div class='c-card table-wrap' style='margin-top:18px'><h2>Contratos / documentos generados</h2><table class='c-table'><tr><th>Fecha</th><th>Documento</th><th>Etapa</th><th>Estado</th><th>Archivo</th></tr>{docs_rows}</table></div>
             """)
     elif sec=='flujo':
-        rows=''.join([f"<tr class='{ 'selected' if i==0 else ''}'><td><input type='checkbox' {'checked' if i==0 else ''}></td><td>🔍 📄</td><td>{232105-i}</td><td><span class='c-badge green'>APROBADO</span></td><td>{'Eliminar Contrato' if i%2==0 else 'Eliminar Alta Trabajador'}</td><td>{now_txt()}</td><td>{now_txt()}</td><td>{(trabajadores[i]['nombre'] if i < len(trabajadores) else 'TRABAJADOR DEMO')}</td></tr>" for i in range(10)])
-        content=wrap(f"<h2 class='c-title'>Eventos</h2><div class='c-filter'><b>Tipos de Evento:</b><select><option>Renovar Contrato</option><option>Eliminar Contrato</option></select><b>Estados:</b><select><option></option><option>Aprobado</option><option>Pendiente</option></select><b>Código Trabajador</b><input><span></span><span><button class='c-btn'>⌕ Buscar</button> <button class='c-btn gray'>Limpiar</button></span></div><div class='toolbar'>⚙ Acción ▾</div><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th></th><th>No.Operación</th><th>Estado</th><th>Tipo de Evento</th><th>Fecha Registro</th><th>Fecha último Estado</th><th>Trabajador</th></tr>{rows}</table></div>")
+        # Aprobaciones integradas a Gestión Renovación.
+        # Este tablero recibe las renovaciones firmadas por el trabajador y permite filtrar
+        # por estado antes de archivar el documento en Ficha/Archivos Trabajador.
+        estado_filtro = clean(request.args.get('estado','')).upper()
+        if estado_filtro not in {'','PENDIENTE','APROBADO','RECHAZADO'}:
+            estado_filtro = ''
+        eventos_demo = []
+        for i in range(10):
+            estado_demo = ['PENDIENTE','APROBADO','RECHAZADO'][i % 3]
+            eventos_demo.append({
+                'op': 232105-i,
+                'estado': estado_demo,
+                'tipo': 'Renovación de contrato',
+                'fecha': now_txt(),
+                'trabajador': (trabajadores[i]['nombre'] if i < len(trabajadores) else 'TRABAJADOR DEMO'),
+                'dni': (trabajadores[i]['dni'] if i < len(trabajadores) and 'dni' in trabajadores[i].keys() else '')
+            })
+        eventos_filtrados = [e for e in eventos_demo if not estado_filtro or e['estado'] == estado_filtro]
+        def badge_estado_aprobacion(est):
+            cls_badge = 'green' if est == 'APROBADO' else ('red' if est == 'RECHAZADO' else 'yellow')
+            return f"<span class='c-badge {cls_badge}'>{est}</span>"
+        rows=''.join([f"<tr class='{ 'selected' if i==0 else ''}'><td><input type='checkbox' {'checked' if i==0 else ''}></td><td>🔍 📄</td><td>{e['op']}</td><td>{badge_estado_aprobacion(e['estado'])}</td><td>{e['tipo']}</td><td>{e['fecha']}</td><td>{e['fecha']}</td><td>{e['trabajador']}</td><td>{e['dni']}</td></tr>" for i,e in enumerate(eventos_filtrados)])
+        if not rows:
+            rows = "<tr><td colspan='9' class='muted2'>No hay aprobaciones con el estado seleccionado.</td></tr>"
+        content=wrap(f"""
+        <h2 class='c-title'>Aprobaciones de Renovación</h2>
+        <div class='dash-hero' style='margin-bottom:18px'>
+          <div>
+            <h1>Flujo de aprobación</h1>
+            <p class='muted2'>Módulo integrado a Gestión Renovación. Aquí se revisan renovaciones firmadas por el trabajador, se aprueban/rechazan y luego pasan a Ficha Trabajador y Archivos Trabajador.</p>
+          </div>
+          <a class='c-btn' href='/admin/contratacion?sec=renovacion'>Ir a Renovación Masiva</a>
+        </div>
+        <form method='get' action='/admin/contratacion' class='c-filter'>
+          <input type='hidden' name='sec' value='flujo'>
+          <b>Tipo de evento:</b>
+          <select name='tipo_evento'>
+            <option>Renovación de contrato</option>
+            <option>Adenda de renovación</option>
+            <option>Archivado de renovación</option>
+          </select>
+          <b>Estados:</b>
+          <select name='estado'>
+            <option value='' {'selected' if estado_filtro=='' else ''}>TODOS</option>
+            <option value='PENDIENTE' {'selected' if estado_filtro=='PENDIENTE' else ''}>PENDIENTE</option>
+            <option value='APROBADO' {'selected' if estado_filtro=='APROBADO' else ''}>APROBADO</option>
+            <option value='RECHAZADO' {'selected' if estado_filtro=='RECHAZADO' else ''}>RECHAZADO</option>
+          </select>
+          <b>Código/DNI Trabajador:</b>
+          <input name='dni' placeholder='DNI o código'>
+          <span></span>
+          <span><button class='c-btn'>⌕ Buscar</button> <a class='c-btn gray' href='/admin/contratacion?sec=flujo'>Limpiar</a></span>
+        </form>
+        <div class='toolbar'>⚙ Acción ▾ &nbsp; | &nbsp; Aprobar seleccionados &nbsp; | &nbsp; Rechazar &nbsp; | &nbsp; Archivar</div>
+        <div class='c-card table-wrap'><table class='c-table'>
+          <tr><th></th><th></th><th>No.Operación</th><th>Estado</th><th>Tipo de Evento</th><th>Fecha Registro</th><th>Fecha último Estado</th><th>Trabajador</th><th>DNI</th></tr>
+          {rows}
+        </table></div>
+        <div class='c-card' style='padding:18px;margin-top:18px'>
+          <h2>Regla de negocio</h2>
+          <p class='muted2'>Cuando la renovación sea <b>APROBADA</b>, el documento queda listo para archivarse en el expediente del trabajador. Si queda <b>PENDIENTE</b>, no debe pasar a archivo final. Si queda <b>RECHAZADO</b>, vuelve a revisión de documentos/firma.</p>
+        </div>
+        """)
     elif sec=='carga':
         emp_opts = "<option>AQUANQA</option><option>AQUANCA II</option>"
         content=wrap(f"""
