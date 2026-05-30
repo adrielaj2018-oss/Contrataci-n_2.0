@@ -7040,12 +7040,49 @@ def admin_contratacion():
             return redirect(url_for('admin_contratacion', sec='observados'))
         if accion == 'estado_observado':
             oid = request.form.get('observado_id')
-            estado = 'Inactive' if request.form.get('estado') == 'Inactive' else 'Active'
+            estado_map = {
+                'ACTIVO': 'Active',
+                'LEVANTADO': 'Levantado',
+                'ANULADO': 'Anulado',
+                'AUTORIZADO': 'Autorizado con excepción',
+                'Inactive': 'Levantado',
+                'Active': 'Active'
+            }
+            estado = estado_map.get(clean(request.form.get('estado')), 'Active')
             with db() as con:
-                con.execute('UPDATE trabajadores_observados SET estado=?, editor_por=?, fecha_edicion=? WHERE id=?', (estado, marca_carga(session.get('admin_user','admin')), now_txt(), oid)); con.commit()
-            flash('Estado de trabajador observado actualizado.', 'ok')
+                obs = con.execute('SELECT * FROM trabajadores_observados WHERE id=?', (oid,)).fetchone()
+                con.execute('UPDATE trabajadores_observados SET estado=?, editor_por=?, fecha_edicion=? WHERE id=?', (estado, marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                if obs:
+                    con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'ALERTAS Y TRABAJADORES OBSERVADOS', 'CAMBIO DE ESTADO', estado, session.get('admin_user','admin'), now_txt()))
+                con.commit()
+            flash('Estado de alerta actualizado.', 'ok')
             return redirect(url_for('admin_contratacion', sec='observados'))
-        if accion in {'solicitar_autorizacion_observado','aprobar_excepcion_observado','levantar_observacion'}:
+        if accion == 'editar_observado':
+            oid = request.form.get('observado_id')
+            motivo_lista = clean(request.form.get('motivo'))
+            motivo_otro = clean(request.form.get('motivo_otro'))
+            motivo = (motivo_otro or motivo_lista).upper()
+            nivel = clean(request.form.get('nivel_restriccion')) or 'NIVEL 3'
+            comentario = clean(request.form.get('comentario')).upper()
+            ultima_empresa = clean(request.form.get('ultima_empresa')).upper()
+            cargo_obs = clean(request.form.get('cargo')).upper()
+            area_obs = clean(request.form.get('area')).upper()
+            fecha_obs = fecha_sin_hora(request.form.get('fecha_observacion')) or fecha_sin_hora(hoy_iso())
+            estado = clean(request.form.get('estado')) or 'Active'
+            estado = {'ACTIVO':'Active','LEVANTADO':'Levantado','ANULADO':'Anulado','AUTORIZADO':'Autorizado con excepción'}.get(estado, estado)
+            with db() as con:
+                obs = con.execute('SELECT * FROM trabajadores_observados WHERE id=?', (oid,)).fetchone()
+                if not obs:
+                    flash('No se encontró la alerta para editar.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='observados'))
+                con.execute('''UPDATE trabajadores_observados
+                               SET motivo=?, nivel_restriccion=?, comentario=?, ultima_empresa=?, cargo=?, area=?, fecha_observacion=?, estado=?, editor_por=?, fecha_edicion=?
+                               WHERE id=?''', (motivo, nivel, comentario, ultima_empresa, cargo_obs, area_obs, fecha_obs, estado, marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'ALERTAS Y TRABAJADORES OBSERVADOS', 'EDICIÓN DE ALERTA', f'{motivo} | {nivel} | {comentario}', session.get('admin_user','admin'), now_txt()))
+                con.commit()
+            flash('Alerta preventiva editada correctamente.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='observados'))
+        if accion in {'continuar_advertencia_observado','solicitar_autorizacion_observado','aprobar_excepcion_observado','levantar_observacion'}:
             oid = request.form.get('observado_id')
             comentario_acc = clean(request.form.get('comentario_accion'))
             with db() as con:
@@ -7053,7 +7090,9 @@ def admin_contratacion():
                 if not obs:
                     flash('No se encontró la observación.', 'error')
                     return redirect(url_for('admin_contratacion', sec='observados'))
-                if accion == 'solicitar_autorizacion_observado':
+                if accion == 'continuar_advertencia_observado':
+                    evento='CONTINUÓ CON ADVERTENCIA'; msg='Advertencia registrada. El flujo puede continuar con trazabilidad.'
+                elif accion == 'solicitar_autorizacion_observado':
                     con.execute("INSERT INTO trabajadores_observados_autorizaciones(observado_id,numero_documento,tipo,estado,motivo_solicitud,solicitado_por,fecha_solicitud) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'EXCEPCIÓN', 'SOLICITADO', comentario_acc, session.get('admin_user','admin'), now_txt()))
                     con.execute("UPDATE trabajadores_observados SET estado_autorizacion='SOLICITADO', editor_por=?, fecha_edicion=? WHERE id=?", (marca_carga(session.get('admin_user','admin')), now_txt(), oid))
                     evento='SOLICITUD DE AUTORIZACIÓN'; msg='Solicitud de autorización registrada.'
@@ -7068,11 +7107,16 @@ def admin_contratacion():
                 con.commit()
             flash(msg, 'ok')
             return redirect(url_for('admin_contratacion', sec='observados'))
-        if accion == 'eliminar_observado':
+        if accion in {'eliminar_observado','anular_observado'}:
             oid = request.form.get('observado_id')
+            comentario_acc = clean(request.form.get('comentario_accion')) or 'Registro anulado desde módulo de alertas.'
             with db() as con:
-                con.execute('DELETE FROM trabajadores_observados WHERE id=?', (oid,)); con.commit()
-            flash('Registro observado eliminado.', 'ok')
+                obs = con.execute('SELECT * FROM trabajadores_observados WHERE id=?', (oid,)).fetchone()
+                if obs:
+                    con.execute("UPDATE trabajadores_observados SET estado='Anulado', comentario_levantamiento=?, editor_por=?, fecha_edicion=?, estado_autorizacion='ANULADO' WHERE id=?", (comentario_acc, marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                    con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'ALERTAS Y TRABAJADORES OBSERVADOS', 'ANULACIÓN DE ALERTA', comentario_acc, session.get('admin_user','admin'), now_txt()))
+                    con.commit()
+            flash('Alerta anulada. No se eliminó físicamente; queda en historial.', 'ok')
             return redirect(url_for('admin_contratacion', sec='observados'))
         if accion == 'estado_plantilla':
             pid_estado = request.form.get('plantilla_id')
@@ -7469,18 +7513,101 @@ def admin_contratacion():
           <td class='cell-visible'>{h(r['tipo_documento'])}</td><td class='cell-visible'>{h(r['esquema'])}</td><td class='cell-visible'>{h(r['descripcion'])}</td><td class='cell-visible'>{h(r['version'])}</td><td class='cell-visible'>{h(r['condicion'])}</td><td class='cell-visible'>{h(r['archivo_nombre'])}</td>
         </tr>""" for r in plantillas])
     if not observados:
-        with db() as con:
-            for t in trabajadores[:10]:
-                con.execute('''INSERT INTO trabajadores_observados(tipo_persona,tipo_documento,numero_documento,nombre,motivo,nivel_restriccion,comentario,estado,creado_por,fecha_creacion,fecha_edicion)
-                               VALUES(?,?,?,?,?,?,?,?,?,?,?)''', ('Trabajador','DNI',t['dni'],t['nombre'],'SINDICALISTA','NIVEL 3','SINDICALISTA','Active','Sistema',now_txt(),''))
-            con.commit()
-            observados=con.execute('SELECT * FROM trabajadores_observados ORDER BY id DESC LIMIT 500').fetchall()
-    obs_activos=[r for r in observados if (r['estado'] or 'Active') == 'Active']
-    obs_inactivos=[r for r in observados if (r['estado'] or 'Active') != 'Active']
+        # Se deja vacío por defecto. El módulo debe mostrar información real, no datos demo.
+        observados=[]
+
+    def obs_estado_label(v):
+        vv = clean(v or 'Active')
+        up = vv.upper()
+        if up in ('ACTIVE','ACTIVO'):
+            return 'Activo'
+        if 'LEVANT' in up or up == 'INACTIVE':
+            return 'Levantado'
+        if 'ANUL' in up:
+            return 'Anulado'
+        if 'AUTORIZ' in up or 'EXCEPC' in up:
+            return 'Autorizado con excepción'
+        return vv or 'Activo'
+
+    def obs_estado_css(v):
+        lab = obs_estado_label(v).upper()
+        if 'ACTIVO' in lab:
+            return 'ok'
+        if 'AUTORIZ' in lab:
+            return 'mid'
+        if 'LEVANT' in lab:
+            return 'warn'
+        return 'bad'
+
+    obs_activos=[r for r in observados if obs_estado_label(r['estado']).upper() == 'ACTIVO']
+    obs_inactivos=[r for r in observados if obs_estado_label(r['estado']).upper() != 'ACTIVO']
+    with db() as con_obs:
+        obs_historial=con_obs.execute('SELECT * FROM trabajadores_observados_historial ORDER BY id DESC LIMIT 1000').fetchall()
+        obs_autorizaciones=con_obs.execute('SELECT * FROM trabajadores_observados_autorizaciones ORDER BY id DESC LIMIT 500').fetchall()
+
     def estado_observado_form(r):
-        return f"<form method='post' class='state-form'><input type='hidden' name='accion' value='estado_observado'><input type='hidden' name='observado_id' value='{r['id']}'><select name='estado' class='state-select {'inactive' if (r['estado'] or '')!='Active' else ''}' onchange='this.form.submit()'><option value='Active' {'selected' if (r['estado'] or '')=='Active' else ''}>🟢 Active</option><option value='Inactive' {'selected' if (r['estado'] or '')=='Inactive' else ''}>🔴 Inactive</option></select></form>"
-    obs_rows=''.join([f"<tr><td><input type='checkbox'></td><td class='tpl-actions'><a class='icon-btn' title='Log'>🔗</a><a class='icon-btn' title='Editar'>✎</a><form method='post' style='display:inline' onsubmit=\"return confirm('¿Eliminar registro observado?');\"><input type='hidden' name='accion' value='eliminar_observado'><input type='hidden' name='observado_id' value='{r['id']}'><button class='icon-btn' type='submit'>🗑</button></form></td><td>{estado_observado_form(r)}</td><td>{h(r['tipo_documento'] or 'DNI')}</td><td>{h(r['numero_documento'])}</td><td>{h(r['nombre'])}</td><td>{h(r['motivo'])}</td><td>{h(r['nivel_restriccion'])}</td><td>{h(r['comentario'])}</td><td>{h(r['creado_por'])}</td><td>{h(r['fecha_creacion'])}</td><td>{h(r['editor_por'])}</td><td>{h(r['fecha_edicion'])}</td></tr>" for r in obs_activos]) or "<tr><td colspan='13'>No hay trabajadores observados activos.</td></tr>"
-    obs_anulados_rows=''.join([f"<tr><td>🔗</td><td>{h(r['tipo_documento'] or 'DNI')}</td><td>{h(r['numero_documento'])}</td><td>{h(r['nombre'])}</td><td>{h(r['motivo'])}</td><td>{h(r['nivel_restriccion'])}</td><td>{h(r['comentario'])}</td><td>{h(r['creado_por'])}</td><td>{h(r['fecha_creacion'])}</td><td>{h(r['editor_por'])}</td><td>{h(r['fecha_edicion'])}</td></tr>" for r in obs_inactivos]) or "<tr><td colspan='11'>No hay registros anulados/inactivos.</td></tr>"
+        actual = obs_estado_label(r['estado'])
+        opts = [('ACTIVO','Activo'),('LEVANTADO','Levantado'),('ANULADO','Anulado'),('AUTORIZADO','Autorizado con excepción')]
+        html_opts = ''.join([f"<option value='{v}' {'selected' if actual==label else ''}>{label}</option>" for v,label in opts])
+        return f"<form method='post' class='state-form'><input type='hidden' name='accion' value='estado_observado'><input type='hidden' name='observado_id' value='{r['id']}'><select name='estado' class='state-select {obs_estado_css(r['estado'])}' onchange='this.form.submit()'>{html_opts}</select></form>"
+
+    def acciones_nivel(r):
+        nivel = clean(r['nivel_restriccion'] or 'NIVEL 3').upper()
+        oid = r['id']
+        if '1' in nivel:
+            return f"<form method='post' class='inline-form'><input type='hidden' name='accion' value='continuar_advertencia_observado'><input type='hidden' name='observado_id' value='{oid}'><input type='hidden' name='comentario_accion' value='Continuar con advertencia preventiva'><button class='mini-btn warn' title='Registra advertencia sin bloquear'>Continuar con advertencia</button></form>"
+        if '2' in nivel:
+            return f"<form method='post' class='inline-form'><input type='hidden' name='accion' value='solicitar_autorizacion_observado'><input type='hidden' name='observado_id' value='{oid}'><input name='comentario_accion' class='mini-input' placeholder='Motivo validación RR.HH.'><button class='mini-btn mid'>Solicitar validación RR.HH.</button></form>"
+        return f"<form method='post' class='inline-form'><input type='hidden' name='accion' value='solicitar_autorizacion_observado'><input type='hidden' name='observado_id' value='{oid}'><input name='comentario_accion' class='mini-input' placeholder='Motivo autorización'><button class='mini-btn bad'>Bloqueado / solicitar autorización</button></form>"
+
+    def obs_edit_btn(r):
+        return (f"<button type='button' class='mini-btn gray' onclick=\"editarObsModal('{r['id']}','{escjs(r['numero_documento'])}','{escjs(r['nombre'])}','{escjs(r['motivo'])}','{escjs(r['nivel_restriccion'])}','{escjs(r['comentario'])}','{escjs(_row_get_safe(r,'ultima_empresa',''))}','{escjs(_row_get_safe(r,'cargo',''))}','{escjs(_row_get_safe(r,'area',''))}','{escjs(_row_get_safe(r,'fecha_observacion',''))}','{escjs(obs_estado_label(r['estado']))}')\">Editar alerta</button>")
+
+    def obs_hist_btn(r):
+        return f"<button type='button' class='mini-btn gray' onclick='showObsTab(\"historial\",document.getElementById(\"tabBtnHistorial\"));filtrarHistorialObs(\"{r['numero_documento']}\")'>Ver historial</button>"
+
+    def obs_anular_btn(r):
+        return f"<form method='post' class='inline-form' onsubmit=\"return confirm('¿Anular esta alerta? Quedará en historial, no se eliminará físicamente.');\"><input type='hidden' name='accion' value='anular_observado'><input type='hidden' name='observado_id' value='{r['id']}'><input type='hidden' name='comentario_accion' value='Anulado desde tabla principal'><button class='mini-btn bad' type='submit'>Anular</button></form>"
+
+    obs_rows=''.join([f"""
+      <tr data-dni='{h(r['numero_documento'])}'>
+        <td>{estado_observado_form(r)}</td>
+        <td><div class='obs-action-stack'>{obs_hist_btn(r)}{obs_edit_btn(r)}{obs_anular_btn(r)}</div></td>
+        <td>{acciones_nivel(r)}</td>
+        <td>{h(r['tipo_documento'] or 'DNI')}</td>
+        <td>{h(r['numero_documento'])}</td>
+        <td><b>{h(r['nombre'])}</b></td>
+        <td>{h(r['motivo'])}</td>
+        <td><span class='nivel-pill {obs_estado_css(r['estado'])}'>{h(r['nivel_restriccion'])}</span></td>
+        <td>{h(_row_get_safe(r,'ultima_empresa',''))}</td>
+        <td>{h(_row_get_safe(r,'cargo',''))}</td>
+        <td>{h(_row_get_safe(r,'area',''))}</td>
+        <td>{h(_row_get_safe(r,'fecha_observacion',''))}</td>
+        <td>{h(r['comentario'])}</td>
+        <td>{h(r['creado_por'])}</td>
+        <td>{h(r['fecha_creacion'])}</td>
+      </tr>""" for r in obs_activos]) or "<tr><td colspan='15'>No hay trabajadores observados activos.</td></tr>"
+
+    obs_anulados_rows=''.join([f"""
+      <tr data-dni='{h(r['numero_documento'])}'>
+        <td><span class='status-chip {obs_estado_css(r['estado'])}'>{obs_estado_label(r['estado'])}</span></td>
+        <td>{obs_hist_btn(r)}</td>
+        <td>{h(r['tipo_documento'] or 'DNI')}</td><td>{h(r['numero_documento'])}</td><td><b>{h(r['nombre'])}</b></td>
+        <td>{h(r['motivo'])}</td><td>{h(r['nivel_restriccion'])}</td><td>{h(r['comentario'])}</td>
+        <td>{h(_row_get_safe(r,'comentario_levantamiento',''))}</td><td>{h(_row_get_safe(r,'levantado_por','') or r['editor_por'])}</td><td>{h(_row_get_safe(r,'fecha_levantamiento','') or r['fecha_edicion'])}</td>
+      </tr>""" for r in obs_inactivos]) or "<tr><td colspan='11'>No hay alertas levantadas/anuladas.</td></tr>"
+
+    obs_hist_rows=''.join([f"""
+      <tr data-dni='{h(x['numero_documento'])}'>
+        <td>{h(x['fecha'])}</td><td>{h(x['numero_documento'])}</td><td>{h(x['modulo'])}</td><td><b>{h(x['accion'])}</b></td><td>{h(x['detalle'])}</td><td>{h(x['usuario'])}</td>
+      </tr>""" for x in obs_historial]) or "<tr><td colspan='6'>Sin historial registrado.</td></tr>"
+
+    obs_aut_rows=''.join([f"""
+      <tr data-dni='{h(x['numero_documento'])}'>
+        <td><span class='status-chip {'ok' if x['estado']=='APROBADO' else 'warn'}'>{h(x['estado'])}</span></td><td>{h(x['numero_documento'])}</td><td>{h(x['tipo'])}</td>
+        <td>{h(x['motivo_solicitud'])}</td><td>{h(x['solicitado_por'])}</td><td>{h(x['fecha_solicitud'])}</td><td>{h(x['comentario_aprobacion'])}</td><td>{h(x['aprobado_por'])}</td><td>{h(x['fecha_aprobacion'])}</td>
+      </tr>""" for x in obs_autorizaciones]) or "<tr><td colspan='9'>No hay autorizaciones registradas.</td></tr>"
+
     motivo_options=''.join([f"<option value='{h(x)}'>{h(x)}</option>" for x in MOTIVOS_TRABAJADOR_OBSERVADO])
     nivel_options=''.join([f"<option value='{h(x)}'>{h(x)}</option>" for x in NIVELES_RESTRICCION_OBSERVADO])
 
@@ -8399,7 +8526,7 @@ html,body{overflow-x:hidden!important;}
         <div class='c-card table-wrap'><table id='tablaTipoEmpleado' class='c-table'><tr><th>Acción</th><th>Estado</th><th>Código</th><th>Descripción</th><th>ShortName</th><th>Grupo</th></tr>__ROWS__</table></div>
         <div id='tipoEmpleadoModal' class='obs-modal'>
           <div class='obs-box tipo-box'><div class='obs-head'><h2 id='tipoEmpleadoTitulo'>Crear tipo documento de empleado</h2><button type='button' onclick='cerrarTipoEmpleado()'>×</button></div>
-            <form method='post' class='obs-form'>
+            <form method='post' id='obsForm' class='obs-form' enctype='multipart/form-data'>
               <input type='hidden' name='accion' value='guardar_tipo_empleado'><input type='hidden' name='doc_emp_id' id='doc_emp_id'>
               <label>Code</label><input name='codigo' id='doc_emp_codigo'>
               <label>Descripción</label><input name='descripcion' id='doc_emp_desc' required>
@@ -8514,44 +8641,47 @@ html,body{overflow-x:hidden!important;}
           </div>
           <button type='button' class='c-btn' onclick='abrirObsModal()'>+ Crear alerta / trabajador observado</button>
         </div>
-        <div class='toolbar'>⚙ Acción ▾ &nbsp; ⬇ Descargar ▾</div>
-
         <div id='obsModal' class='obs-modal'>
           <div class='obs-box'>
             <div class='obs-head'><h2>Crear alerta preventiva</h2><button type='button' onclick='cerrarObsModal()'>×</button></div>
             <form method='post' class='obs-form'>
-              <input type='hidden' name='accion' value='crear_observado'>
+              <input type='hidden' id='obsAccion' name='accion' value='crear_observado'><input type='hidden' id='obsId' name='observado_id' value=''>
               <label>Tipo Persona:</label><div class='radio-line'><label><input type='radio' name='tipo_persona' value='Trabajador' checked onchange='toggleObsTipo()'> Trabajador</label><label><input type='radio' name='tipo_persona' value='Externo' onchange='toggleObsTipo()'> Externo</label></div>
               <label>Trabajador:</label><input name='trabajador_sel' id='obsTrabajador' list='obsTrabajadores' placeholder='Buscar trabajador / DNI' oninput='copiarDniObs(this.value)'><datalist id='obsTrabajadores'>{opt_trab}</datalist>
               <label>DNI / Documento:</label><input name='numero_documento' id='obsDni' placeholder='DNI obligatorio'>
               <label>Nombre:</label><input name='nombre_externo' id='obsNombre' placeholder='Nombre externo o se toma de trabajador'>
               <label>Motivo:</label><select name='motivo' id='obsMotivo'><option value=''>Motivos</option>{motivo_options}</select>
               <label>Motivo digitado:</label><input name='motivo_otro' placeholder='Opcional: digitar motivo personalizado'>
-              <label>Última empresa:</label><input name='ultima_empresa' placeholder='Última empresa donde laboró'>
-              <label>Cargo:</label><input name='cargo' placeholder='Cargo observado'>
-              <label>Área:</label><input name='area' placeholder='Área'>
-              <label>Fecha observación:</label><input type='date' name='fecha_observacion' value='{hoy_iso()}'>
-              <label>Nivel Restricción:</label><select name='nivel_restriccion'><option value='NIVEL 1'>Nivel 1 - Advertencia</option><option value='NIVEL 2'>Nivel 2 - Validación RR.HH./Jefatura</option><option value='NIVEL 3'>Nivel 3 - Bloqueo preventivo</option></select>
+              <label>Última empresa:</label><input name='ultima_empresa' id='obsUltimaEmpresa' placeholder='Última empresa donde laboró'>
+              <label>Cargo:</label><input name='cargo' id='obsCargo' placeholder='Cargo observado'>
+              <label>Área:</label><input name='area' id='obsArea' placeholder='Área'>
+              <label>Fecha observación:</label><input type='date' id='obsFecha' name='fecha_observacion' value='{hoy_iso()}'>
+              <label>Nivel Restricción:</label><select name='nivel_restriccion' id='obsNivel'><option value='NIVEL 1'>Nivel 1 - Advertencia</option><option value='NIVEL 2'>Nivel 2 - Validación RR.HH./Jefatura</option><option value='NIVEL 3'>Nivel 3 - Bloqueo preventivo</option></select>
               <label>Evidencia:</label><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.doc,.docx'>
-              <label>Comentario:</label><input name='comentario' placeholder='Comentario / detalle'>
+              <label>Comentario:</label><input name='comentario' id='obsComentario' placeholder='Comentario / detalle'>
               <div></div><div class='obs-actions'><button class='c-btn'>Guardar</button><button type='reset' class='c-btn gray'>Limpiar</button><button type='button' onclick='cerrarObsModal()' class='c-btn gray'>Cerrar</button></div>
             </form>
           </div>
         </div>
 
         <div class='c-card'>
-          <div class='tabs'><div class='tab active' onclick='showObsTab("activos",this)'>Trabajadores observados</div><div class='tab' onclick='showObsTab("anulados",this)'>Lista de anulados</div></div>
-          <div id='tabObsActivos' class='table-wrap obs-tab'><table id='tablaObs' class='c-table'><tr><th></th><th>Acción</th><th>Estado</th><th>Tipo Documento</th><th>Número Documento</th><th>Nombre</th><th>Motivo</th><th>Nivel Restricción</th><th>Comentario</th><th>Creado Por</th><th>Fecha/Hora Creación</th><th>Editor Por</th><th>Fecha/Hora Edición</th></tr>{obs_rows}</table></div>
-          <div id='tabObsAnulados' class='table-wrap obs-tab' style='display:none'><table class='c-table'><tr><th>Log</th><th>Tipo Documento</th><th>Número Documento</th><th>Nombre</th><th>Motivo</th><th>Nivel Restricción</th><th>Comentario</th><th>Creado Por</th><th>Fecha/Hora Creación</th><th>Editor Por</th><th>Fecha/Hora Edición</th></tr>{obs_anulados_rows}</table></div>
+          <div class='tabs'><div class='tab active' onclick='showObsTab("activos",this)'>Trabajadores observados</div><div class='tab' onclick='showObsTab("anulados",this)'>Alertas levantadas / anuladas</div><div class='tab' id='tabBtnHistorial' onclick='showObsTab("historial",this)'>Historial</div><div class='tab' onclick='showObsTab("autorizaciones",this)'>Autorizaciones</div></div>
+          <div id='tabObsActivos' class='table-wrap obs-tab'><table id='tablaObs' class='c-table'><tr><th>Estado</th><th>Acciones</th><th>Acción preventiva</th><th>Tipo Documento</th><th>Número Documento</th><th>Nombre</th><th>Motivo</th><th>Nivel</th><th>Última empresa</th><th>Cargo</th><th>Área</th><th>Fecha observación</th><th>Comentario</th><th>Creado Por</th><th>Fecha/Hora Creación</th></tr>{obs_rows}</table></div>
+          <div id='tabObsAnulados' class='table-wrap obs-tab' style='display:none'><table class='c-table'><tr><th>Estado</th><th>Acción</th><th>Tipo Documento</th><th>Número Documento</th><th>Nombre</th><th>Motivo</th><th>Nivel</th><th>Comentario</th><th>Comentario cierre</th><th>Usuario cierre</th><th>Fecha cierre</th></tr>{obs_anulados_rows}</table></div>
+          <div id='tabObsHistorial' class='table-wrap obs-tab' style='display:none'><table id='tablaObsHistorial' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Módulo</th><th>Acción</th><th>Detalle</th><th>Usuario</th></tr>{obs_hist_rows}</table></div>
+          <div id='tabObsAutorizaciones' class='table-wrap obs-tab' style='display:none'><table class='c-table'><tr><th>Estado</th><th>DNI</th><th>Tipo</th><th>Motivo solicitud</th><th>Solicitado por</th><th>Fecha solicitud</th><th>Comentario aprobación</th><th>Aprobado por</th><th>Fecha aprobación</th></tr>{obs_aut_rows}</table></div>
         </div>
-        <style>.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(760px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:190px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input,.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.radio-line{{display:flex;gap:24px}}.radio-line label{{text-align:left!important;font-weight:500!important}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}</style>
+        <style>.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(760px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:190px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input,.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.radio-line{{display:flex;gap:24px}}.radio-line label{{text-align:left!important;font-weight:500!important}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}.obs-action-stack{display:grid;grid-template-columns:1fr;gap:7px;min-width:170px}.inline-form{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:0}.mini-input{min-height:36px!important;padding:8px 10px!important;border-radius:10px!important;border:1px solid #cbd5e1!important;background:#fff!important;color:#111827!important;max-width:190px}.mini-btn{border:0;border-radius:999px;padding:8px 12px;font-weight:950;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;font-size:12px}.mini-btn.gray{background:#eef2f7;color:#0f172a;border:1px solid #d7dee8}.mini-btn.warn{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}.mini-btn.mid{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}.mini-btn.bad{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}.status-chip,.nivel-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:7px 11px;font-weight:950;white-space:nowrap}.status-chip.ok,.nivel-pill.ok{background:#ecfdf5;color:#047857;border:1px solid #bbf7d0}.status-chip.mid,.nivel-pill.mid{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}.status-chip.warn,.nivel-pill.warn{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}.status-chip.bad,.nivel-pill.bad{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}.state-select.ok{color:#047857!important}.state-select.mid{color:#1d4ed8!important}.state-select.warn{color:#9a3412!important}.state-select.bad{color:#b91c1c!important}
+</style>
         <script>
-        function abrirObsModal(){{document.getElementById('obsModal').classList.add('show');}}
+        function abrirObsModal(){{document.getElementById('obsForm').reset();document.getElementById('obsAccion').value='crear_observado';document.getElementById('obsId').value='';document.querySelector('#obsModal .obs-head h2').innerText='Crear alerta preventiva';document.getElementById('obsModal').classList.add('show');}}
         function cerrarObsModal(){{document.getElementById('obsModal').classList.remove('show');}}
-        function showObsTab(tipo,el){{document.getElementById('tabObsActivos').style.display=tipo==='activos'?'block':'none';document.getElementById('tabObsAnulados').style.display=tipo==='anulados'?'block':'none';document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');}}
+        function editarObsModal(id,dni,nombre,motivo,nivel,comentario,empresa,cargo,area,fecha,estado){{abrirObsModal();document.getElementById('obsAccion').value='editar_observado';document.getElementById('obsId').value=id;document.querySelector('#obsModal .obs-head h2').innerText='Editar alerta preventiva';document.getElementById('obsDni').value=dni||'';document.getElementById('obsNombre').value=nombre||'';document.getElementById('obsMotivo').value=motivo||'';document.getElementById('obsNivel').value=nivel||'NIVEL 3';document.getElementById('obsComentario').value=comentario||'';document.getElementById('obsUltimaEmpresa').value=empresa||'';document.getElementById('obsCargo').value=cargo||'';document.getElementById('obsArea').value=area||'';document.getElementById('obsFecha').value=(fecha||'').includes('/')?'':(fecha||'');}}
+        function showObsTab(tipo,el){{['Activos','Anulados','Historial','Autorizaciones'].forEach(x=>{{const n=document.getElementById('tabObs'+x);if(n)n.style.display='none';}});const mapa={{activos:'tabObsActivos',anulados:'tabObsAnulados',historial:'tabObsHistorial',autorizaciones:'tabObsAutorizaciones'}};document.getElementById(mapa[tipo]).style.display='block';document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');}}
         function copiarDniObs(v){{const m=(v||'').match(/(\d{{8}})/); if(m) document.getElementById('obsDni').value=m[1];}}
         function toggleObsTipo(){{const tipo=document.querySelector('input[name=tipo_persona]:checked').value;document.getElementById('obsTrabajador').disabled=(tipo==='Externo');}}
         function filtrarObs(q){{q=(q||'').toLowerCase();document.querySelectorAll('#tablaObs tr').forEach((tr,i)=>{{if(i===0)return;tr.style.display=tr.innerText.toLowerCase().includes(q)?'':'none';}});}}
+        function filtrarHistorialObs(dni){{document.querySelectorAll('#tablaObsHistorial tr').forEach((tr,i)=>{{if(i===0)return;tr.style.display=(!dni || tr.dataset.dni===dni)?'':'none';}});}}
         </script>
         """)
     elif sec=='anuncios':
