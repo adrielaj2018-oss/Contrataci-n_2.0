@@ -3319,8 +3319,6 @@ def sidebar(active):
             <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
             <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
             <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
-            <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Centro de Descargas</span></a>
-            <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-database-check'></i><span class='label'>Base Central / Integración</span></a>
             <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><i class='bi bi-signpost-split'></i><span class='label'>Flujos de aprobación</span></a>
             <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
             <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><i class='bi bi-bar-chart-line'></i><span class='label'>Reportes</span></a>
@@ -3333,6 +3331,8 @@ def sidebar(active):
                 <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><i class='bi bi-card-checklist'></i><span class='label'>Tipo Documento Empleado</span></a>
                 <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><i class='bi bi-briefcase'></i><span class='label'>Cargo</span></a>
                 <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><i class='bi bi-arrow-repeat'></i><span class='label'>Actualizar Trabajador</span></a>
+                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Centro de Descargas</span></a>
+                <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-database-check'></i><span class='label'>Base Central / Integración</span></a>
               </div>
             </div>
             <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><i class='bi bi-megaphone'></i><span class='label'>Anuncios</span></a>
@@ -3347,7 +3347,6 @@ def sidebar(active):
             <a class='{cls('documentaria_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria_renovacion'><i class='bi bi-folder2-open'></i><span class='label'>Documentos Renovación</span></a>
             <a class='{cls('firma_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma_renovacion'><i class='bi bi-pen'></i><span class='label'>Firma Renovación</span></a>
             <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
-            <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Descargas Renovación</span></a>
           </div>
         </div>"""
         return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div></nav>"""
@@ -5615,6 +5614,9 @@ def contratacion_descarga_plantilla(tipo):
         'indumentaria': ('PLANTILLA_INDUMENTARIA','INDUMENTARIA',
             ['REQUERIMIENTO','DNI','TRABAJADOR','POLO','PANTALON','BOTAS','CASACA','GORRO','LENTES','GUANTES','FOTOCHECK','OTROS','ESTADO','FECHA ENTREGA','OBSERVACION'],
             [['REQ-0001','12345678','APELLIDOS Y NOMBRES','M','32','40','M','SI','SI','SI','PENDIENTE','','PENDIENTE',hoy_iso(),'']]),
+        'renovacion': ('PLANTILLA_RENOVACION_CONTRATOS','RENOVACION',
+            ['DNI','TRABAJADOR','EMPRESA','AREA','CARGO','FECHA INICIO CONTRATO','FECHA FIN ACTUAL','RENOVAR POR','MESES','NUEVA FECHA FIN','TIPO DOCUMENTO','OBSERVACION'],
+            [['12345678','APELLIDOS Y NOMBRES','AQUANQA I','Campo','Obrero de Campo','2026-01-01','2026-06-30','MESES','3','2026-09-30','ADENDA / RENOVACION','Renovación campaña']]),
     }
     if tipo not in plantillas:
         abort(404)
@@ -5670,6 +5672,34 @@ def contratacion_descarga_reporte(tipo):
             headers = ['REQUERIMIENTO','DNI','TRABAJADOR','ESTADO','APTITUD','FECHA PROGRAMADA','FECHA RESULTADO','VENCIMIENTO','CLINICA','OBSERVACION']
             filas = [[row_get(r,'requerimiento'),row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'estado'),row_get(r,'aptitud'),row_get(r,'fecha_programada'),row_get(r,'fecha_resultado'),row_get(r,'fecha_vencimiento'),row_get(r,'clinica'),row_get(r,'observacion')] for r in rows]
             nombre = 'REPORTE_MEDICOS'
+        elif tipo == 'renovaciones':
+            rows = con.execute("""SELECT dni,nombre,empresa,area,cargo,fecha_ingreso,fecha_fin_contrato,tipo_contrato,regimen_laboral,activo,fecha_registro
+                                  FROM trabajadores
+                                  ORDER BY COALESCE(fecha_fin_contrato,''), nombre""").fetchall()
+            headers = ['DNI','TRABAJADOR','EMPRESA','AREA','CARGO','FECHA INGRESO','FECHA FIN ACTUAL','TIPO CONTRATO','REGIMEN','ACTIVO','ESTADO RENOVACION']
+            filas = [[row_get(r,'dni'),row_get(r,'nombre'),row_get(r,'empresa'),row_get(r,'area'),row_get(r,'cargo'),row_get(r,'fecha_ingreso'),row_get(r,'fecha_fin_contrato'),row_get(r,'tipo_contrato'),row_get(r,'regimen_laboral'),row_get(r,'activo'),'PENDIENTE / POR EVALUAR'] for r in rows]
+            nombre = 'REPORTE_RENOVACIONES_POR_VENCER'
+        elif tipo == 'renovacion_documentos':
+            rows = con.execute("""SELECT dni,trabajador,empresa,etapa,tipo_doc,estado,archivo_nombre,fecha_registro,uploaded_by
+                                  FROM contratacion_docs
+                                  WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%'
+                                     OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'
+                                     OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%'
+                                  ORDER BY id DESC""").fetchall()
+            headers = ['DNI','TRABAJADOR','EMPRESA','ETAPA','TIPO DOCUMENTO','ESTADO','ARCHIVO','FECHA','USUARIO']
+            filas = [[row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'empresa'),row_get(r,'etapa'),row_get(r,'tipo_doc'),row_get(r,'estado'),row_get(r,'archivo_nombre'),row_get(r,'fecha_registro'),row_get(r,'uploaded_by')] for r in rows]
+            nombre = 'REPORTE_DOCUMENTOS_RENOVACION'
+        elif tipo == 'renovacion_firmas':
+            rows = con.execute("""SELECT f.dni,f.trabajador,d.etapa,d.tipo_doc,f.metodo,f.estado,f.fecha_envio,f.fecha_firma,f.observacion
+                                  FROM firma_solicitudes f
+                                  LEFT JOIN contratacion_docs d ON d.id=f.documento_id
+                                  WHERE UPPER(COALESCE(d.etapa,'')) LIKE '%RENOV%'
+                                     OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%RENOV%'
+                                     OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%ADENDA%'
+                                  ORDER BY f.id DESC""").fetchall()
+            headers = ['DNI','TRABAJADOR','ETAPA','TIPO DOCUMENTO','METODO','ESTADO FIRMA','FECHA ENVIO','FECHA FIRMA','OBSERVACION']
+            filas = [[row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'etapa'),row_get(r,'tipo_doc'),row_get(r,'metodo'),row_get(r,'estado'),row_get(r,'fecha_envio'),row_get(r,'fecha_firma'),row_get(r,'observacion')] for r in rows]
+            nombre = 'REPORTE_FIRMAS_RENOVACION'
         else:
             abort(404)
     out = _crear_excel_simple(nombre, 'REPORTE', headers, filas)
@@ -7949,9 +7979,9 @@ html,body{overflow-x:hidden!important;}
         <div class='download-hero c-card' style='padding:26px'>
           <div>
             <h2 class='c-title' style='margin-bottom:8px'>Centro de Descargas</h2>
-            <p class='muted2'>Descarga plantillas Excel, reportes del proceso, documentos generados y expedientes completos por trabajador.</p>
+            <p class='muted2'>Descarga plantillas Excel, reportes de contratación y renovación, documentos generados y expedientes completos por trabajador. Este módulo queda dentro de Datos Maestros para centralizar formatos, respaldos y auditoría.</p>
           </div>
-          <a class='c-btn' href='{url_for('admin_contratacion', sec='dashboard')}'>← Volver al dashboard</a>
+          <a class='c-btn' href='{url_for('admin_contratacion', sec='maestros')}'>← Volver a Datos Maestros</a>
         </div>
 
         <div class='download-grid'>
@@ -7963,6 +7993,7 @@ html,body{overflow-x:hidden!important;}
               <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='requerimientos')}'>⬇ Base requerimientos</a>
               <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='medica')}'>⬇ Evaluación médica</a>
               <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='indumentaria')}'>⬇ Indumentaria</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='renovacion')}'>⬇ Renovación contratos</a>
             </div>
           </div>
 
@@ -7975,6 +8006,9 @@ html,body{overflow-x:hidden!important;}
               <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='documentos_pendientes')}'>⬇ Documentos pendientes</a>
               <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='firmas')}'>⬇ Firmas pendientes/completadas</a>
               <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='medicos')}'>⬇ Médicos APTO / NO APTO</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovaciones')}'>⬇ Renovaciones por vencer</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovacion_documentos')}'>⬇ Docs. renovación</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovacion_firmas')}'>⬇ Firmas renovación</a>
             </div>
           </div>
 
@@ -7990,7 +8024,20 @@ html,body{overflow-x:hidden!important;}
           </div>
 
           <div class='download-box'>
-            <h3>4) Expediente trabajador</h3>
+            <h3>4) Descargas de renovación</h3>
+            <p>Controla contratos por vencer, adendas generadas, documentos de renovación, firmas y archivado.</p>
+            <div class='download-actions'>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='renovacion_dashboard')}'>📊 Dashboard renovación</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='renovacion')}'>🔁 Renovación masiva</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='plantillas_renovacion')}'>📄 Plantillas renovación</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='firma_renovacion')}'>✍ Firmas renovación</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovaciones')}'>⬇ Reporte renovaciones</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovacion_firmas')}'>⬇ Reporte firmas renovación</a>
+            </div>
+          </div>
+
+          <div class='download-box'>
+            <h3>5) Expediente trabajador</h3>
             <p>Descarga un ZIP con resumen, documentos, firma, foto, biometría, médico e indumentaria del trabajador.</p>
             <form class='download-actions' method='get' onsubmit="event.preventDefault(); const dni=this.dni.value.trim(); if(dni) location.href='/admin/contratacion/descargas/expediente/'+encodeURIComponent(dni);">
               <input name='dni' placeholder='Ingrese DNI' list='trabajadores_list' style='min-width:220px'>
