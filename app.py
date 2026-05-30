@@ -526,6 +526,96 @@ def db():
     return conn
 
 
+# =============================
+# ZEBRA ZC300 - VALIDACIÓN REAL DE CONFIGURACIÓN
+# =============================
+def es_entorno_render():
+    """Render no puede ver impresoras físicas conectadas a la PC del usuario."""
+    return bool(os.getenv('RENDER')) or '/opt/render' in str(BASE_DIR).lower() or '/opt/render' in str(PERSIST_DIR).lower()
+
+
+def zebra_validar_campos_config(cfg):
+    """Valida requisitos mínimos según tipo de conexión, sin marcar lista la impresora."""
+    if not cfg:
+        return 'NO CONFIGURADA', 'No existe configuración guardada.'
+    def get(k):
+        try:
+            return clean(cfg[k])
+        except Exception:
+            return clean(getattr(cfg, k, ''))
+    impresora = get('impresora_nombre')
+    tipo = get('tipo_conexion').upper()
+    ip = get('ip_impresora')
+    puerto = get('puerto')
+    bt_nombre = get('bluetooth_nombre')
+    bt_mac = get('bluetooth_mac')
+    faltan = []
+    if not impresora:
+        faltan.append('nombre exacto de impresora')
+    if 'RED' in tipo:
+        if not ip: faltan.append('IP de impresora')
+        if not puerto: faltan.append('puerto de red')
+    elif 'BLUETOOTH' in tipo:
+        if not (bt_nombre or bt_mac): faltan.append('nombre Bluetooth o MAC/ID')
+        if not puerto: faltan.append('puerto COM Bluetooth')
+    else:
+        # Cola Windows/USB: requiere nombre exacto; la prueba real solo puede hacerse en la PC local.
+        pass
+    if faltan:
+        return 'CONFIGURACIÓN INCOMPLETA', 'Falta: ' + ', '.join(faltan) + '.'
+    return 'PENDIENTE DE PRUEBA LOCAL', 'Configuración mínima completa. Falta probar en la PC donde está instalada/conectada la Zebra.'
+
+
+def zebra_probar_conexion_real(cfg):
+    """Intenta validar conexión real. En Render solo permite prueba lógica y bloquea impresión real."""
+    estado_base, detalle_base = zebra_validar_campos_config(cfg)
+    if estado_base == 'CONFIGURACIÓN INCOMPLETA' or estado_base == 'NO CONFIGURADA':
+        return estado_base, detalle_base, False
+    def get(k):
+        try:
+            return clean(cfg[k])
+        except Exception:
+            return clean(getattr(cfg, k, ''))
+    impresora = get('impresora_nombre')
+    tipo = get('tipo_conexion').upper()
+    ip = get('ip_impresora')
+    puerto = get('puerto')
+    if es_entorno_render():
+        return 'PRUEBA LÓGICA / REQUIERE PC LOCAL', 'Render no puede detectar tu Zebra física. Esta prueba solo valida campos y genera archivo; la impresión real queda bloqueada hasta ejecutar el sistema en la PC local o usar un servicio local de impresión.', False
+    if 'RED' in tipo:
+        try:
+            import socket
+            with socket.create_connection((ip, int(puerto)), timeout=3):
+                return 'LISTA PARA IMPRIMIR', f'Conexión de red OK con {ip}:{puerto}.', True
+        except Exception as e:
+            return 'NO DETECTADA', f'No se pudo conectar por red a {ip}:{puerto}. Detalle: {e}', False
+    if 'BLUETOOTH' in tipo:
+        # En Windows normalmente Bluetooth queda como COM; si pyserial existe se prueba apertura.
+        if not puerto:
+            return 'CONFIGURACIÓN INCOMPLETA', 'Para Bluetooth indique el puerto COM asignado por Windows.', False
+        try:
+            import serial  # type: ignore
+            ser = serial.Serial(puerto, timeout=2)
+            ser.close()
+            return 'LISTA PARA IMPRIMIR', f'Puerto Bluetooth {puerto} disponible.', True
+        except Exception as e:
+            return 'PENDIENTE DE PRUEBA REAL', f'Bluetooth configurado, pero no se pudo abrir {puerto}. Verifique emparejamiento, driver y puerto COM. Detalle: {e}', False
+    # Cola Windows / USB
+    try:
+        import win32print  # type: ignore
+        printers = [x[2] for x in win32print.EnumPrinters(2)]
+        if impresora in printers:
+            return 'LISTA PARA IMPRIMIR', f'Impresora encontrada en Windows: {impresora}.', True
+        similares = ', '.join([x for x in printers if 'zebra' in x.lower()])
+        return 'NO DETECTADA', f'No se encontró la impresora exacta "{impresora}" en Windows. Detectadas Zebra: {similares or "ninguna"}.', False
+    except Exception as e:
+        return 'PENDIENTE DE PRUEBA REAL', f'No se pudo consultar la cola de Windows desde este entorno. Ejecute en la PC local con driver Zebra instalado. Detalle: {e}', False
+
+
+def zebra_permite_impresion(estado):
+    return clean(estado).upper() == 'LISTA PARA IMPRIMIR'
+
+
 
 def sincronizar_jefes_vacaciones(con):
     """Sincroniza JEFE INMEDIATO por DNI entre saldos, trabajadores y solicitudes."""
@@ -1205,7 +1295,7 @@ def init_db():
             if not existe_cfg_zebra:
                 con.execute('''INSERT INTO fotocheck_zebra_config(impresora_nombre,tipo_conexion,bluetooth_nombre,bluetooth_mac,ip_impresora,puerto,tamano_tarjeta,orientacion,caras,copias,plantilla_diseno,ruta_salida,estado_conexion,observacion,fecha_actualizacion,actualizado_por)
                                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                            ('Zebra ZC300','COLA WINDOWS / USB','','','','','CR80','Horizontal','Frente',1,'PRIZE - FOTOCHECK ESTÁNDAR',str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),'NO PROBADA','Configurar según la PC donde esté instalada la impresora.',now_txt(),'SISTEMA'))
+                            ('Zebra ZC300','COLA WINDOWS / USB','','','','','CR80','Horizontal','Frente',1,'PRIZE - FOTOCHECK ESTÁNDAR',str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),'NO CONFIGURADA','Configurar según la PC donde esté instalada la impresora. No se permite impresión hasta validar conexión real.',now_txt(),'SISTEMA'))
         except Exception:
             pass
 
@@ -6286,19 +6376,19 @@ def admin_contratacion():
                 'ruta_salida': clean(request.form.get('ruta_salida')) or str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),
                 'observacion': clean(request.form.get('observacion_config')),
             }
-            if cfg['tipo_conexion'].upper() == 'BLUETOOTH' and not (cfg['bluetooth_nombre'] or cfg['bluetooth_mac']):
-                flash('Para conexión Bluetooth indique el nombre del dispositivo o MAC/ID emparejado.', 'error')
-                return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+            estado_cfg, detalle_cfg = zebra_validar_campos_config(cfg)
             with db() as con:
                 existe = con.execute('SELECT id FROM fotocheck_zebra_config LIMIT 1').fetchone()
                 if existe:
                     con.execute('''UPDATE fotocheck_zebra_config SET impresora_nombre=?,tipo_conexion=?,bluetooth_nombre=?,bluetooth_mac=?,ip_impresora=?,puerto=?,tamano_tarjeta=?,orientacion=?,caras=?,copias=?,plantilla_diseno=?,ruta_salida=?,estado_conexion=?,observacion=?,fecha_actualizacion=?,actualizado_por=? WHERE id=?''',
-                                (cfg['impresora_nombre'],cfg['tipo_conexion'],cfg['bluetooth_nombre'],cfg['bluetooth_mac'],cfg['ip_impresora'],cfg['puerto'],cfg['tamano_tarjeta'],cfg['orientacion'],cfg['caras'],cfg['copias'],cfg['plantilla_diseno'],cfg['ruta_salida'],'CONFIGURADA',cfg['observacion'],now_txt(),session.get('admin_user','admin'),existe['id']))
+                                (cfg['impresora_nombre'],cfg['tipo_conexion'],cfg['bluetooth_nombre'],cfg['bluetooth_mac'],cfg['ip_impresora'],cfg['puerto'],cfg['tamano_tarjeta'],cfg['orientacion'],cfg['caras'],cfg['copias'],cfg['plantilla_diseno'],cfg['ruta_salida'],estado_cfg,(cfg['observacion'] + (' | ' if cfg['observacion'] else '') + detalle_cfg),now_txt(),session.get('admin_user','admin'),existe['id']))
                 else:
                     con.execute('''INSERT INTO fotocheck_zebra_config(impresora_nombre,tipo_conexion,bluetooth_nombre,bluetooth_mac,ip_impresora,puerto,tamano_tarjeta,orientacion,caras,copias,plantilla_diseno,ruta_salida,estado_conexion,observacion,fecha_actualizacion,actualizado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                                (cfg['impresora_nombre'],cfg['tipo_conexion'],cfg['bluetooth_nombre'],cfg['bluetooth_mac'],cfg['ip_impresora'],cfg['puerto'],cfg['tamano_tarjeta'],cfg['orientacion'],cfg['caras'],cfg['copias'],cfg['plantilla_diseno'],cfg['ruta_salida'],'CONFIGURADA',cfg['observacion'],now_txt(),session.get('admin_user','admin')))
+                                (cfg['impresora_nombre'],cfg['tipo_conexion'],cfg['bluetooth_nombre'],cfg['bluetooth_mac'],cfg['ip_impresora'],cfg['puerto'],cfg['tamano_tarjeta'],cfg['orientacion'],cfg['caras'],cfg['copias'],cfg['plantilla_diseno'],cfg['ruta_salida'],estado_cfg,(cfg['observacion'] + (' | ' if cfg['observacion'] else '') + detalle_cfg),now_txt(),session.get('admin_user','admin')))
+                con.execute('''INSERT INTO fotocheck_zebra_historial(dni,trabajador,requerimiento,accion,impresora,tipo_conexion,lote_impresion,estado,detalle,fecha,usuario) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
+                            ('','','','GUARDAR CONFIGURACIÓN',cfg['impresora_nombre'],cfg['tipo_conexion'],'CFG-' + now_file(),estado_cfg,detalle_cfg,now_txt(),session.get('admin_user','admin')))
                 con.commit()
-            flash('Configuración Zebra ZC300 guardada. Ya puede probar conexión o impresión.', 'ok')
+            flash(('Configuración guardada: ' + estado_cfg + '. ' + detalle_cfg), 'ok' if estado_cfg == 'PENDIENTE DE PRUEBA LOCAL' else 'error')
             return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
         if accion in ['fotocheck_probar_zebra','fotocheck_prueba_impresion']:
             req_return = clean(request.form.get('req_return'))
@@ -6307,19 +6397,18 @@ def admin_contratacion():
                 if not cfg:
                     flash('Primero guarde la configuración de la Zebra ZC300.', 'error')
                     return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
-                estado = 'DETECTADA / LISTA'
-                detalle = 'Prueba lógica generada. Para impresión real se requiere driver Zebra instalado y servicio local/cola Windows disponible.'
+                estado, detalle, permite = zebra_probar_conexion_real(cfg)
                 if accion == 'fotocheck_prueba_impresion':
                     salida = Path(cfg['ruta_salida'] or (UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'))
                     salida.mkdir(parents=True, exist_ok=True)
                     prueba = salida / ('PRUEBA_ZEBRA_ZC300_' + now_file() + '.txt')
-                    prueba.write_text('PRUEBA DE IMPRESIÓN ZEBRA ZC300\nImpresora: %s\nConexión: %s\nFecha: %s\n' % (cfg['impresora_nombre'], cfg['tipo_conexion'], now_txt()), encoding='utf-8')
-                    detalle = 'Archivo de prueba generado: ' + str(prueba)
-                con.execute('UPDATE fotocheck_zebra_config SET estado_conexion=?,fecha_actualizacion=?,actualizado_por=? WHERE id=?', (estado, now_txt(), session.get('admin_user','admin'), cfg['id']))
+                    prueba.write_text('PRUEBA DE IMPRESIÓN ZEBRA ZC300\nImpresora: %s\nConexión: %s\nEstado: %s\nFecha: %s\nDetalle: %s\n' % (cfg['impresora_nombre'], cfg['tipo_conexion'], estado, now_txt(), detalle), encoding='utf-8')
+                    detalle = detalle + ' Archivo de prueba generado: ' + str(prueba)
+                con.execute('UPDATE fotocheck_zebra_config SET estado_conexion=?,observacion=?,fecha_actualizacion=?,actualizado_por=? WHERE id=?', (estado, detalle, now_txt(), session.get('admin_user','admin'), cfg['id']))
                 con.execute('''INSERT INTO fotocheck_zebra_historial(dni,trabajador,requerimiento,accion,impresora,tipo_conexion,lote_impresion,estado,detalle,fecha,usuario) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
                             ('','','', 'PROBAR CONEXIÓN' if accion=='fotocheck_probar_zebra' else 'IMPRESIÓN DE PRUEBA', cfg['impresora_nombre'], cfg['tipo_conexion'], 'TEST-' + now_file(), estado, detalle, now_txt(), session.get('admin_user','admin')))
                 con.commit()
-            flash(detalle, 'ok')
+            flash(detalle, 'ok' if zebra_permite_impresion(estado) else 'error')
             return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
         if accion == 'fotocheck_accion_masiva':
             ids=[]
@@ -6336,8 +6425,8 @@ def admin_contratacion():
             tipo_conexion_actual = cfg_zebra_actual['tipo_conexion'] if cfg_zebra_actual else 'COLA WINDOWS / USB'
             estado_conexion_actual = (cfg_zebra_actual['estado_conexion'] if cfg_zebra_actual else 'NO CONFIGURADA')
             lote = clean(request.form.get('lote_impresion')) or ('FOTO-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
-            if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO'] and estado_conexion_actual not in ['DETECTADA / LISTA','CONFIGURADA']:
-                flash('Configure o pruebe la conexión Zebra antes de enviar/imprimir fotocheck.', 'error')
+            if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO'] and not zebra_permite_impresion(estado_conexion_actual):
+                flash('Impresión bloqueada: la Zebra debe estar en estado LISTA PARA IMPRIMIR. En Render no se puede validar una impresora física; ejecute en la PC local o use un servicio local de impresión.', 'error')
                 return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
             if not ids:
                 flash('Seleccione trabajadores para actualizar Fotocheck.', 'error')
@@ -7907,7 +7996,16 @@ html,body{overflow-x:hidden!important;}
             cfg_ruta = cfg_zebra['ruta_salida'] if cfg_zebra else str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion')
             cfg_estado = cfg_zebra['estado_conexion'] if cfg_zebra else 'NO CONFIGURADA'
             cfg_obs = cfg_zebra['observacion'] if cfg_zebra else ''
+            if cfg_zebra:
+                estado_minimo_zebra, detalle_minimo_zebra = zebra_validar_campos_config(cfg_zebra)
+                if estado_minimo_zebra == 'CONFIGURACIÓN INCOMPLETA':
+                    cfg_estado = estado_minimo_zebra
+                    cfg_obs = detalle_minimo_zebra
+                elif es_entorno_render() and cfg_estado in ['DETECTADA / LISTA','CONFIGURADA','LISTA PARA IMPRIMIR']:
+                    cfg_estado = 'PRUEBA LÓGICA / REQUIERE PC LOCAL'
+                    cfg_obs = 'Render no puede detectar ni usar la Zebra física. La impresión real permanece bloqueada.'
             def _sel(a,b): return 'selected' if str(a).upper()==str(b).upper() else ''
+            cfg_estado_class = 'ok' if zebra_permite_impresion(cfg_estado) else ('warn' if cfg_estado in ['PENDIENTE DE PRUEBA LOCAL','PENDIENTE DE PRUEBA REAL','PRUEBA LÓGICA / REQUIERE PC LOCAL'] else 'bad')
             hist_rows = ''.join([f"<tr><td>{h(x['fecha'])}</td><td>{h(x['accion'])}</td><td>{h(x['impresora'])}</td><td>{h(x['tipo_conexion'])}</td><td>{h(x['estado'])}</td><td>{h(x['detalle'])}</td></tr>" for x in hist_zebra]) or "<tr><td colspan='6'>Sin pruebas ni impresiones registradas.</td></tr>"
             content=wrap(f"""
             <style>
@@ -7925,6 +8023,8 @@ html,body{overflow-x:hidden!important;}
             .zebra-grid label{{display:grid;gap:6px;font-weight:900;color:#0f513f;font-size:12px}}
             .zebra-grid input,.zebra-grid select{{border:1px solid #cbd5e1;border-radius:10px;padding:10px;background:white}}
             .zebra-status{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}}
+            .status-pill.warn{{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}}
+            .status-pill.bad{{background:#fee2e2!important;color:#991b1b!important;border:1px solid #fecaca!important}}
             @media(max-width:1000px){{.foto-kpis,.foto-flow,.zebra-grid{{grid-template-columns:1fr 1fr}}.foto-actions{{display:grid}}}}
             </style>
             <h2 class='c-title'>{tit}</h2>
@@ -7933,12 +8033,12 @@ html,body{overflow-x:hidden!important;}
                 <h1>Fotocheck por Requerimiento</h1>
                 <p class='muted2'>Flujo conectado: Requerimiento → Postulantes → Foto → Validación → Impresión Zebra ZC300 → Cargo firmado → Entregado.</p>
               </div>
-              <span class='status-pill ok'>Zebra: {h(cfg_estado)}</span>
+              <span class='status-pill {cfg_estado_class}'>Zebra: {h(cfg_estado)}</span>
             </div>
             <div class='foto-flow'><div>1. Ticket</div><div>2. Postulantes</div><div>3. Foto</div><div>4. Validación</div><div>5. Zebra ZC300</div><div>6. Cargo firma</div></div>
             <form method='post' class='zebra-config'>
               <input type='hidden' name='req_return' value='{h(req_actual)}'>
-              <div class='zebra-status'><h3 style='margin:0'>Configuración Zebra ZC300</h3><span class='status-pill ok'>{h(cfg_estado)}</span><small class='muted2'>Soporta cola Windows/USB, red y Bluetooth emparejado.</small></div>
+              <div class='zebra-status'><h3 style='margin:0'>Configuración Zebra ZC300</h3><span class='status-pill {cfg_estado_class}'>{h(cfg_estado)}</span><small class='muted2'>Soporta cola Windows/USB, red y Bluetooth emparejado.</small></div>
               <div class='zebra-grid'>
                 <label>Nombre exacto impresora Windows<input name='impresora_nombre' value='{h(cfg_impresora)}' placeholder='Ej. Zebra ZC300'></label>
                 <label>Tipo conexión<select name='tipo_conexion'><option {_sel(cfg_tipo,'COLA WINDOWS / USB')}>COLA WINDOWS / USB</option><option {_sel(cfg_tipo,'RED / IP')}>RED / IP</option><option {_sel(cfg_tipo,'BLUETOOTH')}>BLUETOOTH</option></select></label>
@@ -7998,7 +8098,7 @@ html,body{overflow-x:hidden!important;}
             </form>
             <div class='c-card' style='padding:18px;margin-top:16px'>
               <h3>Reglas automáticas</h3>
-              <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto o si la Zebra no está configurada/probada. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
+              <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto o si la Zebra no está en estado LISTA PARA IMPRIMIR. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
               <h3>Historial Zebra</h3><div class='table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Acción</th><th>Impresora</th><th>Conexión</th><th>Estado</th><th>Detalle</th></tr>{hist_rows}</table></div>
             </div>
             """)
