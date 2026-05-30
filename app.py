@@ -527,6 +527,58 @@ def db():
 
 
 # =============================
+# ALERTAS PREVENTIVAS / TRABAJADORES OBSERVADOS
+# =============================
+def _row_get_safe(row, key, default=''):
+    try:
+        return row[key] if key in row.keys() else default
+    except Exception:
+        return default
+
+def nivel_alerta_info(nivel):
+    n = clean(nivel).upper().replace('NIVEL','').strip()
+    if n == '1':
+        return {'codigo':'NIVEL 1','titulo':'Advertencia preventiva','color':'warn','bloquea':False,'requiere_autorizacion':False,'mensaje':'Permite continuar, pero deja trazabilidad y revisión visible.'}
+    if n == '2':
+        return {'codigo':'NIVEL 2','titulo':'Requiere validación RR.HH./Jefatura','color':'mid','bloquea':False,'requiere_autorizacion':True,'mensaje':'Puede continuar solo con validación registrada de RR.HH. o jefatura.'}
+    return {'codigo':'NIVEL 3','titulo':'Bloqueo preventivo','color':'bad','bloquea':True,'requiere_autorizacion':True,'mensaje':'Bloquea contratación hasta autorización o levantamiento de observación.'}
+
+def alerta_observado_por_dni(dni):
+    dni = normalizar_dni(dni)
+    if not dni:
+        return {'encontrado':False}
+    with db() as con:
+        obs = con.execute("SELECT * FROM trabajadores_observados WHERE numero_documento=? AND UPPER(COALESCE(estado,'')) IN ('ACTIVE','ACTIVO') ORDER BY id DESC LIMIT 1", (dni,)).fetchone()
+        if not obs:
+            return {'encontrado':False,'dni':dni}
+        aut = con.execute("SELECT * FROM trabajadores_observados_autorizaciones WHERE observado_id=? AND estado='APROBADO' ORDER BY id DESC LIMIT 1", (obs['id'],)).fetchone()
+    info = nivel_alerta_info(_row_get_safe(obs,'nivel_restriccion','NIVEL 3'))
+    autorizado = bool(aut)
+    return {'encontrado':True,'dni':dni,'id':obs['id'],'nombre':_row_get_safe(obs,'nombre'),'motivo':_row_get_safe(obs,'motivo'),'nivel':info['codigo'],'titulo':info['titulo'],'mensaje':info['mensaje'],'color':info['color'],'bloquea':bool(info['bloquea'] and not autorizado),'requiere_autorizacion':bool(info['requiere_autorizacion'] and not autorizado),'autorizado':autorizado,'ultima_empresa':_row_get_safe(obs,'ultima_empresa'),'cargo':_row_get_safe(obs,'cargo'),'area':_row_get_safe(obs,'area'),'fecha_observacion':_row_get_safe(obs,'fecha_observacion') or _row_get_safe(obs,'fecha_creacion'),'comentario':_row_get_safe(obs,'comentario'),'evidencia':_row_get_safe(obs,'evidencia_nombre'),'estado':_row_get_safe(obs,'estado')}
+
+def bloqueo_observado_msg(dni, modulo='este módulo'):
+    a = alerta_observado_por_dni(dni)
+    if not a.get('encontrado'):
+        return None
+    if a.get('bloquea'):
+        return f"DNI {a['dni']} observado en {a['nivel']}: {a['motivo']}. Bloquea {modulo} hasta aprobar excepción o levantar observación."
+    if a.get('requiere_autorizacion'):
+        return f"DNI {a['dni']} observado en {a['nivel']}: {a['motivo']}. Requiere validación RR.HH./jefatura antes de continuar."
+    return None
+
+def registrar_evento_observado(dni, modulo, accion, detalle=''):
+    try:
+        a = alerta_observado_por_dni(dni)
+        if not a.get('encontrado'):
+            return
+        with db() as con:
+            con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (a['id'], a['dni'], modulo, accion, detalle, session.get('admin_user','admin') if 'session' in globals() else 'SISTEMA', now_txt()))
+            con.commit()
+    except Exception as e:
+        print('No se pudo registrar evento observado', e)
+
+
+# =============================
 # ZEBRA ZC300 - VALIDACIÓN REAL DE CONFIGURACIÓN
 # =============================
 def es_entorno_render():
@@ -1388,9 +1440,23 @@ def init_db():
             ('tipo_documento', "ALTER TABLE trabajadores_observados ADD COLUMN tipo_documento TEXT DEFAULT 'DNI'"),
             ('editor_por', 'ALTER TABLE trabajadores_observados ADD COLUMN editor_por TEXT'),
             ('fecha_edicion', 'ALTER TABLE trabajadores_observados ADD COLUMN fecha_edicion TEXT'),
+            ('ultima_empresa', 'ALTER TABLE trabajadores_observados ADD COLUMN ultima_empresa TEXT'),
+            ('cargo', 'ALTER TABLE trabajadores_observados ADD COLUMN cargo TEXT'),
+            ('area', 'ALTER TABLE trabajadores_observados ADD COLUMN area TEXT'),
+            ('fecha_observacion', 'ALTER TABLE trabajadores_observados ADD COLUMN fecha_observacion TEXT'),
+            ('evidencia_nombre', 'ALTER TABLE trabajadores_observados ADD COLUMN evidencia_nombre TEXT'),
+            ('ruta_evidencia', 'ALTER TABLE trabajadores_observados ADD COLUMN ruta_evidencia TEXT'),
+            ('comentario_levantamiento', 'ALTER TABLE trabajadores_observados ADD COLUMN comentario_levantamiento TEXT'),
+            ('fecha_levantamiento', 'ALTER TABLE trabajadores_observados ADD COLUMN fecha_levantamiento TEXT'),
+            ('levantado_por', 'ALTER TABLE trabajadores_observados ADD COLUMN levantado_por TEXT'),
+            ('estado_autorizacion', "ALTER TABLE trabajadores_observados ADD COLUMN estado_autorizacion TEXT DEFAULT 'SIN AUTORIZACIÓN'"),
         ]:
             try: con.execute(ddl)
             except Exception: pass
+        con.execute("CREATE TABLE IF NOT EXISTS trabajadores_observados_historial(id INTEGER PRIMARY KEY AUTOINCREMENT, observado_id INTEGER, numero_documento TEXT, modulo TEXT, accion TEXT, detalle TEXT, usuario TEXT, fecha TEXT)")
+        con.execute("CREATE TABLE IF NOT EXISTS trabajadores_observados_autorizaciones(id INTEGER PRIMARY KEY AUTOINCREMENT, observado_id INTEGER, numero_documento TEXT, tipo TEXT DEFAULT 'EXCEPCIÓN', estado TEXT DEFAULT 'SOLICITADO', motivo_solicitud TEXT, comentario_aprobacion TEXT, solicitado_por TEXT, fecha_solicitud TEXT, aprobado_por TEXT, fecha_aprobacion TEXT)")
+        try: con.execute('CREATE INDEX IF NOT EXISTS idx_obs_dni_estado ON trabajadores_observados(numero_documento, estado)')
+        except Exception: pass
         if not con.execute("SELECT 1 FROM contratacion_plantillas LIMIT 1").fetchone():
             semillas=[
                 ('ACUERDO PREFERENCIAL','ACUERDO PREFERENCIAL','ACUERDO PREFERENCIAL','CONTRATACION PREFERENCIAL AQUII'),
@@ -3337,6 +3403,7 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
 .flow-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}.flow-step{background:#fff;border:1px solid #dbe3ef;border-radius:14px;padding:14px;box-shadow:0 8px 20px rgba(15,23,42,.06)}.flow-step b{display:block;color:#111827}.flow-step small{color:#64748b}.semaforo-ticket{display:inline-flex;gap:6px;align-items:center}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.dot.ok{background:#16a34a}.dot.warn{background:#f59e0b}.dot.bad{background:#dc2626}.dot.info{background:#2563eb}.status-pill.warn{background:#fff7ed!important;color:#9a3412!important;border-color:#fed7aa!important}.status-pill.info{background:#eff6ff!important;color:#1d4ed8!important;border-color:#bfdbfe!important}.missing-list{font-size:12px;color:#9a3412;max-width:260px}.checklist-mini{display:flex;gap:6px;flex-wrap:wrap}.checklist-mini span{font-size:11px;border:1px solid #dbe3ef;border-radius:999px;padding:4px 7px;background:#f8fafc}.checklist-mini .ok{background:#ecfdf5;color:#166534}.checklist-mini .warn{background:#fff7ed;color:#9a3412}
 @media(max-width:900px){.flow-strip{grid-template-columns:1fr}}
 
+.preventive-alert-box{margin:0 0 16px;padding:14px 18px;border-radius:16px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;font-weight:650}.preventive-alert-box.warn{background:#fff7ed;color:#9a3412;border-color:#fed7aa}.preventive-alert-box.mid{background:#fefce8;color:#854d0e;border-color:#fde68a}.preventive-alert-box.bad{background:#fef2f2;color:#991b1b;border-color:#fecaca}
 </style>
 <script>
 function side(){return document.querySelector('.side')}
@@ -3503,7 +3570,7 @@ def sidebar(active):
               <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
                 <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><i class='bi bi-grid'></i><span class='label'>Mantenedor General</span></a>
-                <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><i class='bi bi-people'></i><span class='label'>Trabajadores Obs.</span></a>
+                <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><i class='bi bi-people'></i><span class='label'>Alertas y Trab. Observados</span></a>
                 <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><i class='bi bi-briefcase'></i><span class='label'>Cargo</span></a>
                 <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><i class='bi bi-arrow-repeat'></i><span class='label'>Actualizar Trabajador</span></a>
                 <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
@@ -5950,6 +6017,12 @@ def contratacion_descarga_expediente(dni):
 
 
 
+@app.route('/api/contratacion/alerta_observado/<dni>')
+@admin_required
+def api_alerta_observado(dni):
+    return jsonify(alerta_observado_por_dni(dni))
+
+
 @app.route('/admin/contratacion', methods=['GET','POST'])
 @admin_required
 def admin_contratacion():
@@ -6437,6 +6510,12 @@ def admin_contratacion():
                 actualizados = 0
                 bloqueados = 0
                 for r in seleccionados:
+                    msg_obs = bloqueo_observado_msg(r['dni'], 'Fotocheck')
+                    if msg_obs:
+                        registrar_evento_observado(r['dni'], 'FOTOCHECK', 'ACCIÓN BLOQUEADA', msg_obs)
+                        bloqueados += 1
+                        continue
+                    registrar_evento_observado(r['dni'], 'FOTOCHECK', 'VALIDACIÓN DNI', 'DNI validado en fotocheck')
                     foto_ruta = r['foto_ruta'] if 'foto_ruta' in r.keys() else ''
                     if nuevo_estado in ['LISTO PARA IMPRIMIR', 'ENVIADO A ZEBRA ZC300', 'IMPRESO', 'ENTREGADO'] and not foto_ruta:
                         bloqueados += 1
@@ -6936,14 +7015,28 @@ def admin_contratacion():
             motivo = motivo_otro.upper() if motivo_otro else motivo_lista.upper()
             nivel = clean(request.form.get('nivel_restriccion')) or 'NIVEL 3'
             comentario = clean(request.form.get('comentario'))
+            ultima_empresa = clean(request.form.get('ultima_empresa'))
+            cargo_obs = clean(request.form.get('cargo'))
+            area_obs = clean(request.form.get('area'))
+            fecha_obs = fecha_sin_hora(request.form.get('fecha_observacion')) or fecha_sin_hora(hoy_iso())
+            f_ev = request.files.get('evidencia')
+            evidencia_nombre = ''; ruta_evidencia = ''
+            if f_ev and f_ev.filename:
+                carpeta_ev = UPLOAD_DIR/'contratacion'/'observados'/numero_documento
+                carpeta_ev.mkdir(parents=True, exist_ok=True)
+                evidencia_nombre = now_file() + '_' + secure_filename(f_ev.filename)
+                ruta_evidencia = str(carpeta_ev/evidencia_nombre)
+                f_ev.save(ruta_evidencia)
             if not numero_documento or not nombre or not motivo:
                 flash('Completa trabajador/DNI, nombre y motivo para registrar observado.', 'error')
                 return redirect(url_for('admin_contratacion', sec='observados'))
             with db() as con:
-                con.execute('''INSERT INTO trabajadores_observados(tipo_persona,tipo_documento,numero_documento,nombre,motivo,nivel_restriccion,comentario,estado,creado_por,fecha_creacion,fecha_edicion)
-                               VALUES(?,?,?,?,?,?,?,?,?,?,?)''', (tipo_persona, 'DNI', numero_documento, nombre.upper(), motivo, nivel, comentario.upper(), 'Active', marca_carga(session.get('admin_user','admin')), now_txt(), ''))
+                con.execute('''INSERT INTO trabajadores_observados(tipo_persona,tipo_documento,numero_documento,nombre,motivo,nivel_restriccion,comentario,estado,creado_por,fecha_creacion,fecha_edicion,ultima_empresa,cargo,area,fecha_observacion,evidencia_nombre,ruta_evidencia,estado_autorizacion)
+                               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (tipo_persona, 'DNI', numero_documento, nombre.upper(), motivo, nivel, comentario.upper(), 'Active', marca_carga(session.get('admin_user','admin')), now_txt(), '', ultima_empresa.upper(), cargo_obs.upper(), area_obs.upper(), fecha_obs, evidencia_nombre, ruta_evidencia, 'SIN AUTORIZACIÓN'))
+                oid = con.execute('SELECT last_insert_rowid()').fetchone()[0]
+                con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, numero_documento, 'ALERTAS Y TRABAJADORES OBSERVADOS', 'REGISTRO', motivo + ' | ' + comentario.upper(), session.get('admin_user','admin'), now_txt()))
                 con.commit()
-            flash('Trabajador observado registrado correctamente.', 'ok')
+            flash('Alerta preventiva registrada y conectada al flujo por DNI.', 'ok')
             return redirect(url_for('admin_contratacion', sec='observados'))
         if accion == 'estado_observado':
             oid = request.form.get('observado_id')
@@ -6951,6 +7044,29 @@ def admin_contratacion():
             with db() as con:
                 con.execute('UPDATE trabajadores_observados SET estado=?, editor_por=?, fecha_edicion=? WHERE id=?', (estado, marca_carga(session.get('admin_user','admin')), now_txt(), oid)); con.commit()
             flash('Estado de trabajador observado actualizado.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='observados'))
+        if accion in {'solicitar_autorizacion_observado','aprobar_excepcion_observado','levantar_observacion'}:
+            oid = request.form.get('observado_id')
+            comentario_acc = clean(request.form.get('comentario_accion'))
+            with db() as con:
+                obs = con.execute('SELECT * FROM trabajadores_observados WHERE id=?', (oid,)).fetchone()
+                if not obs:
+                    flash('No se encontró la observación.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='observados'))
+                if accion == 'solicitar_autorizacion_observado':
+                    con.execute("INSERT INTO trabajadores_observados_autorizaciones(observado_id,numero_documento,tipo,estado,motivo_solicitud,solicitado_por,fecha_solicitud) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'EXCEPCIÓN', 'SOLICITADO', comentario_acc, session.get('admin_user','admin'), now_txt()))
+                    con.execute("UPDATE trabajadores_observados SET estado_autorizacion='SOLICITADO', editor_por=?, fecha_edicion=? WHERE id=?", (marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                    evento='SOLICITUD DE AUTORIZACIÓN'; msg='Solicitud de autorización registrada.'
+                elif accion == 'aprobar_excepcion_observado':
+                    con.execute("INSERT INTO trabajadores_observados_autorizaciones(observado_id,numero_documento,tipo,estado,motivo_solicitud,comentario_aprobacion,solicitado_por,fecha_solicitud,aprobado_por,fecha_aprobacion) VALUES(?,?,?,?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'EXCEPCIÓN', 'APROBADO', comentario_acc, comentario_acc, session.get('admin_user','admin'), now_txt(), session.get('admin_user','admin'), now_txt()))
+                    con.execute("UPDATE trabajadores_observados SET estado_autorizacion='APROBADO', editor_por=?, fecha_edicion=? WHERE id=?", (marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                    evento='EXCEPCIÓN APROBADA'; msg='Excepción aprobada. El DNI podrá continuar con trazabilidad.'
+                else:
+                    con.execute("UPDATE trabajadores_observados SET estado='Inactive', comentario_levantamiento=?, fecha_levantamiento=?, levantado_por=?, editor_por=?, fecha_edicion=?, estado_autorizacion='LEVANTADO' WHERE id=?", (comentario_acc, now_txt(), session.get('admin_user','admin'), marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                    evento='OBSERVACIÓN LEVANTADA'; msg='Observación levantada correctamente.'
+                con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'ALERTAS Y TRABAJADORES OBSERVADOS', evento, comentario_acc, session.get('admin_user','admin'), now_txt()))
+                con.commit()
+            flash(msg, 'ok')
             return redirect(url_for('admin_contratacion', sec='observados'))
         if accion == 'eliminar_observado':
             oid = request.form.get('observado_id')
@@ -7065,6 +7181,12 @@ def admin_contratacion():
                     if 'INCOMPLETO' in clean(doc['estado']).upper() or 'OBSERVADO_DATOS_INCOMPLETOS' in clean(doc['ruta_archivo']).upper():
                         con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado',now_txt(),f"No se envió {doc['tipo_doc']} porque tiene datos incompletos."))
                         continue
+                    msg_obs = bloqueo_observado_msg(doc['dni'], 'Firma / Documentos')
+                    if msg_obs:
+                        registrar_evento_observado(doc['dni'], 'DOCUMENTOS', 'ENVÍO A FIRMA BLOQUEADO', msg_obs)
+                        flash(msg_obs, 'error')
+                        return redirect(url_for('admin_contratacion', sec='firma'))
+                    registrar_evento_observado(doc['dni'], 'DOCUMENTOS', 'VALIDACIÓN PRE FIRMA', 'Documento validado contra alertas preventivas')
                     ok_firma, bloqueos = puede_pasar_a_firma(doc['dni'])
                     if not ok_firma:
                         con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado por flujo',now_txt(),'Faltan requisitos: ' + ', '.join(bloqueos)))
@@ -7101,6 +7223,12 @@ def admin_contratacion():
                     flash('Documento no encontrado para enviar a firma.', 'error')
             return redirect(url_for('admin_contratacion', sec='firma'))
         f=request.files.get('archivo'); dni=normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni); tipo=clean(request.form.get('tipo_doc')); etapa=clean(request.form.get('etapa')) or 'Incorporación'
+        msg_obs = bloqueo_observado_msg(dni, 'Documentos')
+        if msg_obs:
+            registrar_evento_observado(dni, 'DOCUMENTOS', 'INTENTO DE REGISTRO BLOQUEADO', msg_obs)
+            flash(msg_obs, 'error')
+            return redirect(url_for('admin_contratacion', sec='documentaria'))
+        registrar_evento_observado(dni, 'DOCUMENTOS', 'VALIDACIÓN DNI', 'DNI validado al cargar documento')
         if f and f.filename and dni:
             folder=UPLOAD_DIR/'contratacion'/dni; folder.mkdir(parents=True, exist_ok=True)
             name=now_file()+'_'+secure_filename(f.filename); path=folder/name; f.save(path)
@@ -8241,7 +8369,7 @@ html,body{overflow-x:hidden!important;}
         <div id='tipoModal' class='obs-modal'>
           <div class='obs-box tipo-box'>
             <div class='obs-head'><h2 id='tipoModalTitulo'>Editar Tipo de Documento por Etapa</h2><button type='button' onclick='cerrarTipoModal()'>×</button></div>
-            <form method='post' class='obs-form'>
+            <form method='post' enctype='multipart/form-data' class='obs-form'>
               <input type='hidden' name='accion' value='guardar_tipo_etapa'><input type='hidden' name='tipo_id' id='tipo_id'>
               <label>Código Tipo Doc:</label><input name='codigo' id='tipo_codigo' required>
               <label>Tipo Documento:</label><input name='descripcion' id='tipo_descripcion' required>
@@ -8255,7 +8383,7 @@ html,body{overflow-x:hidden!important;}
             </form>
           </div>
         </div>
-        <style>.nowrap{{white-space:nowrap}}.icon-btn{{border:0;background:transparent;font-size:20px;cursor:pointer;margin:0 3px}}.select-mini{{background:#fff!important;color:#111!important;border:1px solid #d1d5db;border-radius:999px;padding:6px 10px}}.c-badge.gray{{background:#e5e7eb!important;color:#6b7280!important}}.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(760px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.tipo-box{{width:min(700px,96vw)}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:190px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input:not([type=checkbox]),.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.obs-form input[type=checkbox]{{width:20px;height:20px;accent-color:#1a73e8}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}</style>
+        <style>.nowrap{{white-space:nowrap}}.icon-btn{{border:0;background:transparent;font-size:20px;cursor:pointer;margin:0 3px}}.select-mini{{background:#fff!important;color:#111!important;border:1px solid #d1d5db;border-radius:999px;padding:6px 10px}}.c-badge.gray{{background:#e5e7eb!important;color:#6b7280!important}}.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(760px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.tipo-box{{width:min(700px,96vw)}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:190px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input:not([type=checkbox]),.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.obs-form input[type=checkbox]{{width:20px;height:20px;accent-color:#1a73e8}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end}}.alert-level{{display:inline-flex;padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px}}.alert-level.level1{{background:#fff7ed!important;color:#c2410c!important;border:1px solid #fed7aa!important}}.alert-level.level2{{background:#fefce8!important;color:#a16207!important;border:1px solid #fde68a!important}}.alert-level.level3{{background:#fef2f2!important;color:#b91c1c!important;border:1px solid #fecaca!important}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}</style>
         <script>
         function abrirTipoModal(){{document.getElementById('tipoModalTitulo').innerText='Crear Tipo de Documento por Etapa';document.getElementById('tipo_id').value='';document.getElementById('tipo_codigo').value='';document.getElementById('tipo_descripcion').value='';document.getElementById('tipo_etapa').value='Incorporacion';document.getElementById('tipo_activo').value='1';document.getElementById('tipo_fd').checked=true;document.getElementById('tipo_fe').checked=true;document.getElementById('tipo_obligatorio').checked=true;document.getElementById('tipo_cr').checked=false;document.getElementById('tipoModal').classList.add('show');}}
         function cerrarTipoModal(){{document.getElementById('tipoModal').classList.remove('show');}}
@@ -8378,19 +8506,19 @@ html,body{overflow-x:hidden!important;}
         """)
     elif sec in ['observados','tipos_etapa','tipo_empleado','cargo']:
         content=wrap(f"""
-        <h2 class='c-title'>Listas de trabajadores observados</h2>
+        <h2 class='c-title'>Alertas y Trabajadores Observados</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Módulo de alerta preventiva</h1><p class='muted2'>Conectado a Requerimiento, Postulantes, Evaluación Médica, Documentos y Fotocheck. Al registrar DNI, el sistema valida si existe observación activa y aplica advertencia, validación o bloqueo.</p></div><div><span class='alert-level level1'>Nivel 1: advertencia</span><br><br><span class='alert-level level2'>Nivel 2: validación</span><br><br><span class='alert-level level3'>Nivel 3: bloqueo</span></div></div>
         <div class='c-bar'>
           <div>
             <input class='input' style='background:#fff!important;color:#111!important;max-width:520px' placeholder='Nombre / Num. Documento' onkeyup='filtrarObs(this.value)'>
             <br><br><button class='c-btn' type='button'>⌕ Buscar</button> <button class='c-btn gray' type='button' onclick='location.href=location.pathname+"?sec=observados"'>Limpiar</button>
           </div>
-          <button type='button' class='c-btn' onclick='abrirObsModal()'>+ Crear trabajador observado</button>
+          <button type='button' class='c-btn' onclick='abrirObsModal()'>+ Crear alerta / trabajador observado</button>
         </div>
         <div class='toolbar'>⚙ Acción ▾ &nbsp; ⬇ Descargar ▾</div>
 
         <div id='obsModal' class='obs-modal'>
           <div class='obs-box'>
-            <div class='obs-head'><h2>Crear trabajador observado</h2><button type='button' onclick='cerrarObsModal()'>×</button></div>
+            <div class='obs-head'><h2>Crear alerta preventiva</h2><button type='button' onclick='cerrarObsModal()'>×</button></div>
             <form method='post' class='obs-form'>
               <input type='hidden' name='accion' value='crear_observado'>
               <label>Tipo Persona:</label><div class='radio-line'><label><input type='radio' name='tipo_persona' value='Trabajador' checked onchange='toggleObsTipo()'> Trabajador</label><label><input type='radio' name='tipo_persona' value='Externo' onchange='toggleObsTipo()'> Externo</label></div>
@@ -8399,7 +8527,12 @@ html,body{overflow-x:hidden!important;}
               <label>Nombre:</label><input name='nombre_externo' id='obsNombre' placeholder='Nombre externo o se toma de trabajador'>
               <label>Motivo:</label><select name='motivo' id='obsMotivo'><option value=''>Motivos</option>{motivo_options}</select>
               <label>Motivo digitado:</label><input name='motivo_otro' placeholder='Opcional: digitar motivo personalizado'>
-              <label>Nivel Restricción:</label><select name='nivel_restriccion'><option value=''>Niveles</option>{nivel_options}</select>
+              <label>Última empresa:</label><input name='ultima_empresa' placeholder='Última empresa donde laboró'>
+              <label>Cargo:</label><input name='cargo' placeholder='Cargo observado'>
+              <label>Área:</label><input name='area' placeholder='Área'>
+              <label>Fecha observación:</label><input type='date' name='fecha_observacion' value='{hoy_iso()}'>
+              <label>Nivel Restricción:</label><select name='nivel_restriccion'><option value='NIVEL 1'>Nivel 1 - Advertencia</option><option value='NIVEL 2'>Nivel 2 - Validación RR.HH./Jefatura</option><option value='NIVEL 3'>Nivel 3 - Bloqueo preventivo</option></select>
+              <label>Evidencia:</label><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.doc,.docx'>
               <label>Comentario:</label><input name='comentario' placeholder='Comentario / detalle'>
               <div></div><div class='obs-actions'><button class='c-btn'>Guardar</button><button type='reset' class='c-btn gray'>Limpiar</button><button type='button' onclick='cerrarObsModal()' class='c-btn gray'>Cerrar</button></div>
             </form>
