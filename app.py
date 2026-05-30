@@ -3298,7 +3298,7 @@ def sidebar(active):
             pass
         def cls(sec):
             return 'menu-item sub-mini active' if active_sub == sec else 'menu-item sub-mini'
-        renovacion_secs = {'renovacion_dashboard','renovacion','plantillas_renovacion','documentaria_renovacion','firma_renovacion','flujo'}
+        renovacion_secs = {'renovacion_dashboard','renovacion','documentaria_renovacion','firma_renovacion','flujo'}
         con_group_cls = 'menu-group force-open' + ('' if active_sub in renovacion_secs else ' active-main')
         ren_group_cls = 'menu-group force-open' + (' active-main' if active_sub in renovacion_secs else '')
         con_title_cls = 'menu-title active' if active_sub not in renovacion_secs else 'menu-title'
@@ -3310,14 +3310,12 @@ def sidebar(active):
             <a class='{cls('dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=dashboard'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard</span></a>
             <a class='{cls('requerimientos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=requerimientos'><i class='bi bi-ticket-perforated'></i><span class='label'>Requerimiento</span></a>
             <a class='{cls('nuevos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nuevos'><i class='bi bi-person-plus'></i><span class='label'>Postulantes</span></a>
-            <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span></a>
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
             <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
             <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Doc. Postulantes</span></a>
             <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
             <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
-            <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
             <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
             <a class='{cls('reportes')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=reportes'><i class='bi bi-bar-chart-line'></i><span class='label'>Reportes</span></a>
             <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
@@ -3332,6 +3330,16 @@ def sidebar(active):
                 <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
                 <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Centro de Descargas</span></a>
                 <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-database-check'></i><span class='label'>Base Central / Integración</span></a>
+                <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
+                <div id='grp_config_doc_maestros' data-group='config_doc_maestros' class='menu-group nested force-open'>
+                  <button type='button' class='menu-title' onclick="toggleGroup('grp_config_doc_maestros')"><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span><span class='chev'>∨</span></button>
+                  <div class='submenu'>
+                    <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantillas Contratación</span></a>
+                    <a class='{cls('plantillas_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas_renovacion'><i class='bi bi-arrow-repeat'></i><span class='label'>Plantillas Renovación</span></a>
+                    <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><i class='bi bi-tags'></i><span class='label'>Tipos por Etapa</span></a>
+                    <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><i class='bi bi-card-checklist'></i><span class='label'>Tipo Documento Empleado</span></a>
+                  </div>
+                </div>
               </div>
             </div>
             <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><i class='bi bi-megaphone'></i><span class='label'>Anuncios</span></a>
@@ -3342,11 +3350,9 @@ def sidebar(active):
           <div class='submenu'>
             <a class='{cls('renovacion_dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion_dashboard'><i class='bi bi-speedometer'></i><span class='label'>Dashboard Renovación</span></a>
             <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><i class='bi bi-file-earmark-text'></i><span class='label'>Renovación Masiva</span></a>
-            <a class='{cls('plantillas_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas_renovacion'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantillas Renovación</span></a>
             <a class='{cls('documentaria_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria_renovacion'><i class='bi bi-folder2-open'></i><span class='label'>Documentos Renovación</span></a>
             <a class='{cls('firma_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma_renovacion'><i class='bi bi-pen'></i><span class='label'>Firma Renovación</span></a>
             <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><i class='bi bi-signpost-split'></i><span class='label'>Aprobaciones</span></a>
-            <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
           </div>
         </div>"""
         return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div></nav>"""
@@ -6757,8 +6763,13 @@ def admin_contratacion():
         return redirect(url_for('admin_contratacion', sec='documentaria'))
     with db() as con:
         tipos=con.execute('SELECT * FROM contratacion_tipos ORDER BY etapa, descripcion').fetchall()
-        docs=con.execute('SELECT * FROM contratacion_docs ORDER BY id DESC LIMIT 300').fetchall()
-        firma_sols=con.execute('SELECT * FROM firma_solicitudes ORDER BY id DESC LIMIT 300').fetchall()
+        scope_firma = clean(request.args.get('scope'))
+        if scope_firma == 'renovacion':
+            docs=con.execute("""SELECT * FROM contratacion_docs WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%' ORDER BY id DESC LIMIT 300""").fetchall()
+            firma_sols=con.execute("""SELECT f.* FROM firma_solicitudes f LEFT JOIN contratacion_docs d ON d.id=f.documento_id WHERE UPPER(COALESCE(d.etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%RENOV%' OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%ADENDA%' ORDER BY f.id DESC LIMIT 300""").fetchall()
+        else:
+            docs=con.execute('SELECT * FROM contratacion_docs ORDER BY id DESC LIMIT 300').fetchall()
+            firma_sols=con.execute('SELECT * FROM firma_solicitudes ORDER BY id DESC LIMIT 300').fetchall()
         trabajadores=con.execute('SELECT dni,nombre,empresa,cargo,area,correo,activo,fecha_registro FROM trabajadores ORDER BY nombre LIMIT 700').fetchall()
         observados=con.execute('SELECT * FROM trabajadores_observados ORDER BY id DESC LIMIT 500').fetchall()
         tipo_empleado=con.execute('SELECT * FROM contratacion_tipo_empleado ORDER BY descripcion LIMIT 1000').fetchall()
@@ -7671,10 +7682,17 @@ html,body{overflow-x:hidden!important;}
         """)
     elif sec=='plantillas_renovacion':
         content=wrap("""
-        <h2 class='c-title'>Plantillas de Renovación</h2>
-        <div class='dash-hero'><div><h1>Plantillas para adendas y renovaciones</h1><p class='muted2'>Usa las mismas plantillas Word del sistema, pero configuradas con etapa <b>Renovación</b>. Deben detectar campos «...» y tener mapeo antes de activarse.</p></div><a class='c-btn' href='/admin/contratacion?sec=plantillas'>Ir a configuración documentaria</a></div>
+        <h2 class='c-title'>Configuración Documentaria / Plantillas Renovación</h2>
+        <div class='dash-hero'><div><h1>Plantillas para adendas y renovaciones</h1><p class='muted2'>Esta opción ahora pertenece a <b>Datos Maestros → Configuración Documentaria</b>. Usa las mismas funcionalidades de plantillas Word/PDF, campos dinámicos, condiciones y mapeo, pero orientadas a la etapa <b>Renovación</b>.</p></div><a class='c-btn' href='/admin/contratacion?sec=plantillas'>Ir a Plantillas Contratación</a></div>
+        <div class='c-card' style='padding:14px 18px;margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center'>
+          <b>Accesos:</b>
+          <a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas'>Plantillas Contratación</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipos_etapa'>Tipos por Etapa</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=renovacion'>Volver a Renovación Masiva</a>
+        </div>
         <div class='dash-kpis'><div class='dash-card'><small>Campos obligatorios</small><b>Contrato origen</b></div><div class='dash-card'><small>Fecha nueva</small><b>Requerida</b></div><div class='dash-card'><small>Firma digital</small><b>Obligatoria</b></div></div>
         <div class='c-card'><h2>Recomendación de configuración</h2><p class='muted2'>Crea plantillas con tipo documento: CONTRATO TRABAJADOR(RENOVACIÓN), ADENDA, CARGO ENTREGA RENOVACIÓN. Relaciónalas a trabajadores activos y bloquea documentos si faltan campos.</p></div>
+        <div class='c-card'><h2>Regla operativa</h2><p class='muted2'>La configuración se realiza aquí; la ejecución queda en <b>Gestión Renovación</b>: Renovación Masiva → Firma Renovación → Aprobaciones → Archivo/Ficha Trabajador.</p></div>
         """)
     elif sec=='documentaria_renovacion':
         content=wrap("""
@@ -7697,11 +7715,63 @@ html,body{overflow-x:hidden!important;}
         </table></div>
         """)
     elif sec=='firma_renovacion':
-        content=wrap("""
-        <h2 class='c-title'>Firma Digital de Renovación</h2>
-        <div class='dash-hero'><div><h1>Firma de adendas y renovaciones</h1><p class='muted2'>Último paso del flujo de renovación. Solo debe habilitarse si existe documento generado, fecha fin nueva y previsualización validada.</p></div><a class='c-btn' href='/admin/contratacion?sec=firma'>Ir a bandeja de firma</a></div>
-        <div class='dash-kpis'><div class='dash-card'><small>Validación previa</small><b>Obligatoria</b></div><div class='dash-card'><small>Evidencia</small><b>Selfie/Firma</b></div><div class='dash-card'><small>Archivado</small><b>Automático</b></div></div>
-        <div class='c-card'><h2>Reglas del módulo</h2><p class='muted2'>No enviar si falta plantilla, trabajador activo, fecha fin nueva, documento generado o token de firma. Al completarse, actualizar Ficha Trabajador, Archivos Trabajador y Base Central.</p></div>
+        # Firma Renovación reutiliza el motor de Firma / Facial / Digital, pero filtrado a etapa Renovación.
+        with db() as con_fr:
+            docs_ren = con_fr.execute("""SELECT * FROM contratacion_docs 
+                                      WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' 
+                                         OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'
+                                         OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%'
+                                      ORDER BY id DESC LIMIT 300""").fetchall()
+            firmas_ren = con_fr.execute("""SELECT f.* FROM firma_solicitudes f
+                                      LEFT JOIN contratacion_docs d ON d.id=f.documento_id
+                                      WHERE UPPER(COALESCE(d.etapa,'')) LIKE '%RENOV%' 
+                                         OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%RENOV%'
+                                         OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%ADENDA%'
+                                      ORDER BY f.id DESC LIMIT 300""").fetchall()
+        doc_cards_ren = ''
+        for d in docs_ren:
+            doc_cards_ren += f"""<label class='doc-sign-card'><input type='checkbox' class='chk-doc-firma' value='{d['id']}' data-dni='{h(d['dni'])}' data-trabajador='{h(d['trabajador'])}' data-tipo='{h(d['tipo_doc'])}' checked><span class='doc-icon'>W</span><span class='doc-info'><b>{h(d['tipo_doc'] or 'RENOVACIÓN')}</b><small>{h(d['trabajador'] or '')} · DNI {h(d['dni'] or '')}</small><small>Estado: {h(d['estado'] or 'Pendiente')}</small></span></label>"""
+        rows_firma_ren = ''
+        for r in firmas_ren:
+            token = r['firma_token'] if 'firma_token' in r.keys() and r['firma_token'] else ''
+            link = firma_url_token(token) if token else ''
+            rows_firma_ren += f"""<tr><td>{r['id']}</td><td>{h(r['dni'])}</td><td>{h(r['trabajador'])}</td><td><span class='estado-pill'>{h(r['estado'])}</span></td><td>{h(r['fecha_envio'])}</td><td>{h(r['fecha_firma'] or '')}</td><td>{'<a class=\"c-btn gray mini-btn\" target=\"_blank\" href=\"'+h(link)+'\">Abrir enlace</a>' if link else '-'}</td></tr>"""
+        content=wrap(f"""
+        <div class='firma-page firma-boceto-final firma-renovacion-pro'>
+          <div class='firma-topbar'>
+            <div class='title-wrap'><div class='title-icon'>✍</div><div><h1>Firma Renovación</h1><p>Misma funcionalidad de Firma Facial / Digital, filtrada para adendas y renovaciones.</p></div></div>
+            <a class='btn-back' href='/admin/contratacion?sec=renovacion'>← Volver a Renovación Masiva</a>
+          </div>
+          <div class='person-strip'>
+            <div class='strip-item'><span class='strip-ico'>📄</span><div><small>Tipo de documento</small><b>RENOVACIÓN / ADENDA</b></div></div>
+            <div class='strip-item'><span class='strip-ico'>📸</span><div><small>Método</small><b>FACIAL + FIRMA DIGITAL</b></div></div>
+            <div class='strip-item'><span class='strip-ico'>➡</span><div><small>Siguiente paso</small><b>APROBACIONES</b></div></div>
+            <div class='strip-item'><span class='strip-ico'>🗂</span><div><small>Archivo final</small><b>FICHA ÚNICA</b></div></div>
+          </div>
+          <form method='post' onsubmit='return prepararFirmaMasiva()'>
+            <input type='hidden' name='accion' value='firma_masiva'>
+            <input type='hidden' name='documentos_lote' id='documentos_lote'>
+            <input type='hidden' name='metodo_masivo' value='FACIAL + FIRMA DIGITAL - RENOVACIÓN'>
+            <input type='hidden' name='observacion_masiva' value='Renovación pendiente de firma facial/digital'>
+            <div class='firma-grid-boceto-main'>
+              <div class='firma-card-b camera-card-b'>
+                <h2>Activación de cámara</h2><p class='b-muted'>Captura facial del trabajador para firmar adendas/renovaciones.</p>
+                <div class='cam-wrap cam-boceto'><video id='firmaVideo' autoplay playsinline muted></video><canvas id='firmaCanvas' style='display:none'></canvas><img id='firmaPreview' style='display:none'><div class='face-frame'></div><div class='face-mesh'></div><div id='liveBadge' class='live-badge'>● APAGADA</div><div id='captureToast' class='capture-toast'>✅ Rostro reconocido correctamente<br><small>Captura realizada automáticamente</small></div></div>
+                <div id='soundBox' class='sound-ok'><span class='sound-icon'>🔊</span><div><b>¡Captura exitosa!</b><small>Rostro reconocido correctamente</small></div><span class='wave'>▂▃▄▅▆▇▆▅▄▃▂</span></div>
+                <div class='firma-actions boceto-actions'><button type='button' id='btnActivarCamara' class='btn-green' onclick='return firmaStartCam(event)'>🎥 Activar cámara</button><button type='button' class='btn-yellow' onclick='return firmaCapture()'>📸 Capturar evidencia</button><button type='button' class='btn-dark' onclick='return firmaStopCam()'>■ Detener</button><label class='btn-dark filecam-label'>📁 Cámara/archivo<input id='firmaFileCam' type='file' accept='image/*' capture='user' onchange='firmaLoadFileCam(this)' style='display:none'></label></div><p id='firmaCamMsg' class='b-muted'></p>
+              </div>
+              <div class='firma-card-b docs-panel-b'>
+                <h2>Renovaciones a firmar <span id='docsBadge' class='badge-green'>0</span></h2><p class='b-muted'>Solo aparecen documentos de etapa Renovación / Adenda.</p>
+                <div class='doc-sign-list'>{doc_cards_ren or '<div class="empty-docs">No hay renovaciones generadas. Primero usa Renovación Masiva → Generar Renovación.</div>'}</div>
+                <label class='switch-row'><input type='checkbox' checked onchange='marcarTodosFirma(this.checked)'><span>Firma masiva de renovaciones</span></label>
+                <div class='ready-box'>🛡️ <div><b>Al firmar</b><small>La renovación quedará lista para pasar a Aprobaciones.</small></div></div><br>
+                <button class='btn-green btn-firmar'>🖊️ Enviar / firmar renovaciones<br><small id='firmaMassCounter'>0 seleccionados</small></button>
+              </div>
+            </div>
+          </form>
+          <div class='firma-card table-wrap'><h2>Bandeja de firmas de renovación</h2><table class='c-table firma-table'><tr><th>ID</th><th>DNI</th><th>Trabajador</th><th>Estado</th><th>Fecha envío</th><th>Fecha firma</th><th>Enlace</th></tr>{rows_firma_ren or '<tr><td colspan=7>No hay solicitudes de firma para renovación.</td></tr>'}</table></div>
+          <div class='c-card'><h2>Regla automática</h2><p class='muted2'>Al completarse la firma, el documento pasa a <b>Aprobaciones</b> y se archiva en la <b>Ficha Trabajador única</b>, Archivos Trabajador y Base Central.</p></div>
+        </div>
         """)
     elif sec=='renovacion':
         content=wrap(f"""
@@ -7817,7 +7887,8 @@ html,body{overflow-x:hidden!important;}
         periodos_html = ''.join([f"<span class='mini-chip'>{h(p['periodo_inicio'])}/{h(p['periodo_fin'])} · saldo {h(p['saldo'])}</span>" for p in vac_periodos]) or '<span class="mini-chip">Sin periodos cargados</span>'
 
         content=wrap(f"""
-        <h2 class='c-title'>Ficha Trabajador</h2>
+        <h2 class='c-title'>Ficha Trabajador Única</h2>
+        <div class='c-card' style='margin-bottom:14px'><b>Expediente único:</b> aquí se consolida contratación, renovación, documentos, contratos, firmas, fotocheck, indumentaria y observaciones.</div>
         <form method='get' action='/admin/contratacion' class='ficha-search'>
           <input type='hidden' name='sec' value='ficha'>
           <input name='dni' value='{h(dni_sel)}' list='trabajadores_ficha_list' placeholder='Buscar por DNI'>
@@ -7884,8 +7955,15 @@ html,body{overflow-x:hidden!important;}
         content=wrap(f"""
         <style>.config-contratos-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:10px 0 18px}}.config-contract-card{{padding:20px!important;min-height:210px}}.config-contract-card h2{{margin:4px 0 8px;color:#0f2b46}}.config-icon{{width:54px;height:54px;border-radius:16px;background:#ecfdf5;display:grid;place-items:center;font-size:28px;margin-bottom:10px}}.base-excel-form{{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:12px 0}}.quick-grid{{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}}.quick-grid a{{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:999px;padding:9px 13px;color:#047857!important;font-weight:800;text-decoration:none}}@media(max-width:900px){{.config-contratos-grid{{grid-template-columns:1fr}}.base-excel-form{{grid-template-columns:1fr}}.base-excel-form .c-btn{{width:100%}}}}</style>
         <div class='plantilla-top'>
-          <div><h1 class='c-title plantillas-title-pro'>Configuración de Contratos</h1><p class='muted2'>Organiza por separado los documentos Word/PDF contractuales y la base Excel de trabajadores para generar contratos, adendas, renovaciones y documentos a entregar.</p></div>
+          <div><h1 class='c-title plantillas-title-pro'>Configuración Documentaria</h1><p class='muted2'>Módulo ubicado en <b>Datos Maestros</b>. Desde aquí se gobiernan plantillas de contratación, plantillas de renovación, campos dinámicos, condiciones y tipos documentarios.</p></div>
           <a class='c-btn crear-btn' href='#crearPlantilla'>+ Crear Plantilla Word/PDF</a>
+        </div>
+        <div class='c-card' style='padding:14px 18px;margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center'>
+          <b>Configuración Documentaria:</b>
+          <a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas'>Plantillas Contratación</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=plantillas_renovacion'>Plantillas Renovación</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipos_etapa'>Tipos por Etapa</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipo_empleado'>Tipo Documento Empleado</a>
         </div>
         <div class='config-contratos-grid'>
           <div class='c-card config-contract-card'>
