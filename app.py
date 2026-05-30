@@ -1130,6 +1130,38 @@ def init_db():
         ]:
             try: con.execute(ddl)
             except Exception: pass
+
+        # PRO: Centro de Fotocheck conectado a Requerimiento/Postulantes.
+        # Administra foto, validación, cola de impresión Zebra ZC300 y cargo de entrega firmado.
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS contratacion_fotocheck(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dni TEXT,
+            trabajador TEXT,
+            empresa TEXT,
+            area TEXT,
+            cargo TEXT,
+            actividad TEXT,
+            requerimiento TEXT,
+            fecha_ingreso TEXT,
+            foto_estado TEXT DEFAULT 'PENDIENTE FOTO',
+            fotocheck_estado TEXT DEFAULT 'PENDIENTE',
+            impresora TEXT DEFAULT 'Zebra ZC300',
+            lote_impresion TEXT,
+            cargo_nombre TEXT,
+            ruta_cargo TEXT,
+            observacion TEXT,
+            fecha_registro TEXT,
+            fecha_impresion TEXT,
+            fecha_entrega TEXT,
+            registrado_por TEXT
+        )""")
+        try:
+            con.execute('CREATE INDEX IF NOT EXISTS idx_fotocheck_req ON contratacion_fotocheck(requerimiento)')
+            con.execute('CREATE INDEX IF NOT EXISTS idx_fotocheck_dni ON contratacion_fotocheck(dni)')
+        except Exception:
+            pass
+
         for col, ddl in [
             ('tipo_examen', 'ALTER TABLE contratacion_medica ADD COLUMN tipo_examen TEXT'),
             ('protocolo', 'ALTER TABLE contratacion_medica ADD COLUMN protocolo TEXT'),
@@ -6190,6 +6222,90 @@ def admin_contratacion():
                 con.commit()
             flash('Entrega de indumentaria registrada y sincronizada con el postulante.', 'ok')
             return redirect(url_for('admin_contratacion', sec='indumentaria'))
+        if accion == 'fotocheck_accion_masiva':
+            ids=[]
+            for x in request.form.getlist('ingreso_ids'):
+                try:
+                    ids.append(int(x))
+                except Exception:
+                    pass
+            nuevo_estado = clean(request.form.get('nuevo_estado')) or 'LISTO PARA IMPRIMIR'
+            req_return = clean(request.form.get('req_return'))
+            impresora = clean(request.form.get('impresora')) or 'Zebra ZC300'
+            lote = clean(request.form.get('lote_impresion')) or ('FOTO-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
+            if not ids:
+                flash('Seleccione trabajadores para actualizar Fotocheck.', 'error')
+                return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+            with db() as con:
+                q = ','.join(['?'] * len(ids))
+                seleccionados = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q})', ids).fetchall()
+                actualizados = 0
+                bloqueados = 0
+                for r in seleccionados:
+                    foto_ruta = r['foto_ruta'] if 'foto_ruta' in r.keys() else ''
+                    if nuevo_estado in ['LISTO PARA IMPRIMIR', 'ENVIADO A ZEBRA ZC300', 'IMPRESO', 'ENTREGADO'] and not foto_ruta:
+                        bloqueados += 1
+                        continue
+                    foto_estado = 'FOTO APROBADA' if foto_ruta else 'PENDIENTE FOTO'
+                    con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', (nuevo_estado, r['id']))
+                    con.execute("""INSERT INTO contratacion_fotocheck
+                        (dni,trabajador,empresa,area,cargo,actividad,requerimiento,fecha_ingreso,foto_estado,fotocheck_estado,impresora,lote_impresion,observacion,fecha_registro,fecha_impresion,fecha_entrega,registrado_por)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (r['dni'], r['trabajador'], r['empresa'], r['area'], r['cargo'], r['actividad'], r['requerimiento'], r['fecha_ingreso'],
+                         foto_estado, nuevo_estado, impresora, lote,
+                         clean(request.form.get('observacion')),
+                         now_txt(),
+                         now_txt() if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO'] else '',
+                         now_txt() if nuevo_estado == 'ENTREGADO' else '',
+                         session.get('admin_user','admin')))
+                    actualizados += 1
+                con.commit()
+            msg = f'Fotocheck actualizado: {actualizados} trabajador(es).'
+            if bloqueados:
+                msg += f' {bloqueados} bloqueado(s) por no tener foto aprobada.'
+            flash(msg, 'ok' if actualizados else 'error')
+            return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+        if accion == 'fotocheck_generar_cargo':
+            ids=[]
+            for x in request.form.getlist('ingreso_ids'):
+                try:
+                    ids.append(int(x))
+                except Exception:
+                    pass
+            req_return = clean(request.form.get('req_return'))
+            if not ids:
+                flash('Seleccione trabajadores para generar cargo de entrega de fotocheck.', 'error')
+                return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+            with db() as con:
+                q = ','.join(['?'] * len(ids))
+                seleccionados = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q}) ORDER BY trabajador', ids).fetchall()
+                carpeta = UPLOAD_DIR/'contratacion'/'fotocheck'/(req_return or 'GENERAL')
+                carpeta.mkdir(parents=True, exist_ok=True)
+                nombre_cargo = 'CARGO_FOTOCHECK_' + (req_return or 'GENERAL') + '_' + now_file() + '.html'
+                path_cargo = carpeta / secure_filename(nombre_cargo)
+                filas = ''.join([f"<tr><td>{h(r['dni'])}</td><td>{h(r['trabajador'])}</td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['cargo'])}</td><td>{h(r['requerimiento'])}</td><td>________________</td></tr>" for r in seleccionados])
+                html_doc = f"""<!doctype html><html><head><meta charset='utf-8'><title>Cargo Fotocheck</title>
+                <style>body{{font-family:Arial,sans-serif;margin:28px;color:#111827}}h1{{font-size:20px}}table{{width:100%;border-collapse:collapse;margin-top:16px}}td,th{{border:1px solid #94a3b8;padding:8px;font-size:12px}}th{{background:#e2e8f0}}.firma{{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:60px}}.linea{{border-top:1px solid #111;padding-top:8px;text-align:center}}</style>
+                </head><body><h1>CARGO DE ENTREGA DE FOTOCHECK</h1><p><b>Requerimiento:</b> {h(req_return or 'GENERAL')} &nbsp; <b>Fecha:</b> {h(now_txt())}</p>
+                <p>Documento generado para firma y constancia de entrega de fotocheck.</p>
+                <table><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Requerimiento</th><th>Firma trabajador</th></tr>{filas}</table>
+                <div class='firma'><div class='linea'>Responsable RR.HH.</div><div class='linea'>V°B° / Control</div></div></body></html>"""
+                path_cargo.write_text(html_doc, encoding='utf-8')
+                for r in seleccionados:
+                    con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', ('CARGO GENERADO', r['id']))
+                    con.execute("""INSERT INTO contratacion_fotocheck
+                        (dni,trabajador,empresa,area,cargo,actividad,requerimiento,fecha_ingreso,foto_estado,fotocheck_estado,impresora,lote_impresion,cargo_nombre,ruta_cargo,observacion,fecha_registro,registrado_por)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (r['dni'], r['trabajador'], r['empresa'], r['area'], r['cargo'], r['actividad'], r['requerimiento'], r['fecha_ingreso'],
+                         'FOTO APROBADA' if (r['foto_ruta'] if 'foto_ruta' in r.keys() else '') else 'PENDIENTE FOTO',
+                         'CARGO GENERADO', 'Zebra ZC300', 'CARGO-' + now_file(), path_cargo.name, str(path_cargo),
+                         'Cargo de entrega generado desde Centro de Fotocheck', now_txt(), session.get('admin_user','admin')))
+                    con.execute("""INSERT INTO contratacion_docs(dni,trabajador,empresa,etapa,tipo_doc,estado,archivo_nombre,ruta_archivo,fecha_registro,uploaded_by)
+                                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                                (r['dni'], r['trabajador'], r['empresa'], 'Fotocheck', 'Cargo de entrega de fotocheck', 'Generado', path_cargo.name, str(path_cargo), now_txt(), session.get('admin_user','admin')))
+                con.commit()
+            flash('Cargo de entrega de fotocheck generado y archivado en documentos del trabajador.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
         if accion == 'guardar_ingreso':
             dni = normalizar_dni(request.form.get('dni'))
             nombre = clean(request.form.get('trabajador')).upper()
@@ -7631,9 +7747,105 @@ html,body{overflow-x:hidden!important;}
             <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_documentos'>Firma de contrato / documentos</option><option value='fotocheck_estado'>Fotocheck</option><option value='estado_indumentaria'>Indumentaria</option><option value='estado_medico'>Evaluación médica</option><option value='estado_capacitacion'>Inducción / capacitación</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>GENERADO</option><option>ENVIADO</option><option>FIRMADO</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>Contrato / Docs</th><th>Fotocheck</th><th>Foto</th><th>Indumentaria</th><th>Detalle</th><th>Eliminar</th></tr>{tabla_rows}</table></div></form>
             """)
         else:
-            tit='Migración de fotos para fotocheck'
-            foto_rows=''.join([f"<tr><td><input type='checkbox' name='sel' value='{h(r['dni'])}'></td><td>{('<img class=\'foto-mini\' src=\'/foto_trabajador/'+h(r['dni'])+'\'>') if r['foto_ruta'] else '<span class=\'photo-dot photo-no\'>SIN FOTO</span>'}</td><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td><span class='{('photo-dot photo-ok' if r['foto_ruta'] else 'photo-dot photo-no')}'>{'CON FOTO' if r['foto_ruta'] else 'SIN FOTO'}</span></td><td><span class='status-pill ok'>{h(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</span></td><td><a class='c-btn gray' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver</a></td></tr>" for r in trabajadores_proceso_mostrar]) or "<tr><td colspan='9'>Sin base de fotos.</td></tr>"
-            content=wrap(f"""<h2 class='c-title'>{tit}</h2><div class='c-card' style='padding:18px'><h2>Fotos / fotocheck + Zebra ZC300</h2><p class='muted2'>Base conectada con Postulantes. Muestra quién tiene foto, quién falta y deja lista la impresión del fotocheck.</p></div><div class='filter-row-pro'><b>Base fotocheck</b><select onchange="location.href='/admin/contratacion?sec=fotocheck&req='+encodeURIComponent(this.value)"><option value=''>Todos los requerimientos</option>{opt_req}</select><input oninput="filtrarTabla(this,'tabla_fotos')" placeholder='Filtrar DNI o trabajador...'><button type='button' class='c-btn gray'>Generar PDF</button><button type='button' class='c-btn'>Imprimir seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_fotos' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Cargo</th><th>Estado foto</th><th>Fotocheck</th><th>Acción</th></tr>{foto_rows}</table></div>""")
+            tit='Centro de Fotocheck'
+            req_actual = clean(request.args.get('req')) or ticket_sel
+            lista_foto = trabajadores_proceso_mostrar[:800]
+            total_foto = len(lista_foto)
+            sin_foto = sum(1 for r in lista_foto if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
+            foto_ok = total_foto - sin_foto
+            listos = sum(1 for r in lista_foto if (r['foto_ruta'] if 'foto_ruta' in r.keys() else '') and str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else '').upper() in ['LISTO PARA IMPRIMIR','FOTO APROBADA','APROBADO'])
+            impresos = sum(1 for r in lista_foto if str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else '').upper() in ['IMPRESO','ENTREGADO','CARGO GENERADO'])
+            def _ft_estado(v, foto):
+                vv = str(v or 'PENDIENTE').upper()
+                if not foto:
+                    return "<span class='status-pill warn'>PENDIENTE FOTO</span>"
+                ok = vv in ['LISTO PARA IMPRIMIR','ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO','CARGO GENERADO','FOTO APROBADA','APROBADO']
+                return f"<span class='status-pill {'ok' if ok else ''}'>{h(vv)}</span>"
+            foto_rows=[]
+            for r in lista_foto:
+                foto = r['foto_ruta'] if 'foto_ruta' in r.keys() else ''
+                estado_fc = r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE'
+                foto_html = f"<img class='foto-mini' src='/foto_trabajador/{h(r['dni'])}'>" if foto else "<span class='photo-dot photo-no'>SIN FOTO</span>"
+                foto_rows.append(f"""<tr>
+                    <td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td>
+                    <td>{foto_html}</td>
+                    <td><b>{h(r['dni'])}</b></td>
+                    <td><b>{h(r['trabajador']) or 'PENDIENTE COMPLETAR'}</b></td>
+                    <td>{h(r['empresa'])}</td>
+                    <td>{h(r['area'])}</td>
+                    <td>{h(r['cargo'])}</td>
+                    <td>{h(r['requerimiento'])}</td>
+                    <td>{h(r['fecha_ingreso'])}</td>
+                    <td>{'<span class="photo-dot photo-ok">FOTO APROBADA</span>' if foto else '<span class="photo-dot photo-no">SIN FOTO</span>'}</td>
+                    <td>{_ft_estado(estado_fc, foto)}</td>
+                    <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver ficha</a></td>
+                </tr>""")
+            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='12'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
+            content=wrap(f"""
+            <style>
+            .foto-kpis{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:14px;margin:14px 0 18px}}
+            .foto-kpis .kpi{{background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:15px;box-shadow:0 8px 22px rgba(15,23,42,.06)}}
+            .foto-kpis .kpi span{{display:block;color:#64748b;font-weight:900;font-size:11px;text-transform:uppercase}}
+            .foto-kpis .kpi b{{font-size:26px;color:#0f513f}}
+            .foto-flow{{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:12px 0}}
+            .foto-flow div{{background:#f8fafc;border:1px solid #dbeafe;border-radius:14px;padding:12px;text-align:center;font-weight:900;color:#0f513f}}
+            .foto-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:#fff;border:1px solid #dce8e5;border-radius:16px;padding:14px;margin-bottom:14px}}
+            .foto-actions label{{display:grid;gap:5px;font-weight:900;color:#334155;font-size:12px}}
+            .foto-actions select,.foto-actions input{{min-width:190px;border:1px solid #cbd5e1;border-radius:10px;padding:10px}}
+            @media(max-width:1000px){{.foto-kpis,.foto-flow{{grid-template-columns:1fr 1fr}}.foto-actions{{display:grid}}}}
+            </style>
+            <h2 class='c-title'>{tit}</h2>
+            <div class='dash-hero' style='margin-bottom:18px'>
+              <div>
+                <h1>Fotocheck por Requerimiento</h1>
+                <p class='muted2'>Flujo conectado: Requerimiento → Postulantes → Foto → Validación → Impresión Zebra ZC300 → Cargo firmado → Entregado.</p>
+              </div>
+              <span class='status-pill ok'>Zebra ZC300 preparada</span>
+            </div>
+            <div class='foto-flow'><div>1. Ticket</div><div>2. Postulantes</div><div>3. Foto</div><div>4. Validación</div><div>5. Zebra ZC300</div><div>6. Cargo firma</div></div>
+            <div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'>
+              <b>Requerimiento / Ticket</b>
+              <select onchange="location.href='/admin/contratacion?sec=fotocheck&req='+encodeURIComponent(this.value)"><option value=''>Todos los requerimientos</option>{opt_req}</select>
+              <b>Buscar trabajador</b>
+              <input oninput="filtrarTabla(this,'tabla_fotocheck')" placeholder='DNI, trabajador, cargo, área, estado...'>
+            </div>
+            <div class='foto-kpis'>
+              <div class='kpi'><span>Total</span><b>{total_foto}</b></div>
+              <div class='kpi'><span>Sin foto</span><b>{sin_foto}</b></div>
+              <div class='kpi'><span>Foto aprobada</span><b>{foto_ok}</b></div>
+              <div class='kpi'><span>Listos imprimir</span><b>{listos}</b></div>
+              <div class='kpi'><span>Impresos / cargo</span><b>{impresos}</b></div>
+            </div>
+            <form method='post'>
+              <input type='hidden' name='req_return' value='{h(req_actual)}'>
+              <div class='foto-actions'>
+                <label>Impresora<input name='impresora' value='Zebra ZC300'></label>
+                <label>Lote impresión<input name='lote_impresion' placeholder='Automático si se deja vacío'></label>
+                <label>Acción<select name='nuevo_estado'>
+                  <option>FOTO APROBADA</option>
+                  <option>LISTO PARA IMPRIMIR</option>
+                  <option>ENVIADO A ZEBRA ZC300</option>
+                  <option>IMPRESO</option>
+                  <option>CARGO GENERADO</option>
+                  <option>ENTREGADO</option>
+                  <option>OBSERVADO</option>
+                </select></label>
+                <label>Observación<input name='observacion' placeholder='Ej. impresión masiva / reimpresión'></label>
+                <button class='c-btn' name='accion' value='fotocheck_accion_masiva'>Actualizar seleccionados</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_generar_cargo'>Generar cargo para firma</button>
+              </div>
+              <div class='c-card table-wrap'>
+                <table id='tabla_fotocheck' class='c-table'>
+                  <tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Requerimiento</th><th>Ingreso</th><th>Estado foto</th><th>Fotocheck</th><th>Acción</th></tr>
+                  {foto_rows_html}
+                </table>
+              </div>
+            </form>
+            <div class='c-card' style='padding:18px;margin-top:16px'>
+              <h3>Reglas automáticas</h3>
+              <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
+            </div>
+            """)
     elif sec=='detalle_postulante':
         pid = int(request.args.get('id') or 0)
         with db() as con:
