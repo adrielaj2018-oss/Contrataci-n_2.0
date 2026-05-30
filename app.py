@@ -7203,12 +7203,234 @@ html,body{overflow-x:hidden!important;}
         <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='Filtrar DNI, trabajador, sede, cargo, estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_ingreso' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_ingresos' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Tipo</th><th>Empresa</th><th>Sede</th><th>Cargo</th><th>Área</th><th>Requerimiento</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Eliminar</th></tr>{ingreso_rows}</table></div>
         """)
     elif sec=='medica':
-        med_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['clinica'])}</td><td>{h(r['fecha_programada'])}</td><td>{h(r['fecha_resultado'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(r['observacion'])}</td></tr>" for r in medicas]) or "<tr><td colspan='10'>Sin evaluaciones médicas.</td></tr>"
+        # PRO: Evaluación Médica reorganizada como punto crítico de decisión.
+        # Al digitar DNI autocompleta datos del postulante y muestra arriba Aptitud / Estado Operativo.
+        medicos_por_dni = {}
+        try:
+            for m in medicas:
+                dni_m = clean(m['dni'])
+                if dni_m and dni_m not in medicos_por_dni:
+                    medicos_por_dni[dni_m] = {
+                        'aptitud': row_get(m, 'aptitud') or row_get(m, 'estado') or 'PENDIENTE',
+                        'estado': row_get(m, 'estado') or 'PENDIENTE',
+                        'fecha_resultado': row_get(m, 'fecha_resultado'),
+                        'fecha_vencimiento': row_get(m, 'fecha_vencimiento'),
+                        'restricciones': row_get(m, 'restricciones'),
+                        'observacion': row_get(m, 'observacion')
+                    }
+        except Exception:
+            medicos_por_dni = {}
+
+        medica_data = []
+        for r in trabajadores_proceso_mostrar:
+            dni_r = clean(row_get(r, 'dni'))
+            medica_data.append({
+                'dni': dni_r,
+                'trabajador': row_get(r, 'trabajador'),
+                'requerimiento': row_get(r, 'requerimiento'),
+                'empresa': row_get(r, 'empresa'),
+                'area': row_get(r, 'area'),
+                'cargo': row_get(r, 'cargo'),
+                'fecha_ingreso': row_get(r, 'fecha_ingreso'),
+                'estado_medico': row_get(r, 'estado_medico') or 'PENDIENTE',
+                'medica': medicos_por_dni.get(dni_r, {})
+            })
+        medica_json = json.dumps(medica_data, ensure_ascii=False)
+
+        def clase_medica(v):
+            vv = clean(v).upper()
+            if 'NO APTO' in vv or 'BLOQUEADO' in vv:
+                return 'danger'
+            if 'RESTRICC' in vv or 'OBSERV' in vv:
+                return 'warn'
+            if 'APTO' in vv or 'HABILITADO' in vv:
+                return 'ok'
+            return 'pending'
+
+        med_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'requerimiento'))}</td><td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td><td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'fecha_resultado'))}</td><td>{h(row_get(r,'fecha_vencimiento'))}</td><td>{h(row_get(r,'clinica'))}</td><td>{h(row_get(r,'restricciones'))}</td><td>{h(row_get(r,'observacion'))}</td></tr>" for r in medicas]) or "<tr><td colspan='12'>Sin evaluaciones médicas.</td></tr>"
+
         content=wrap(f"""
-        <h2 class='c-title'>Evaluación médica</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Control médico</h1><p class='muted2'>Solo los trabajadores APTOS deben pasar a capacitación y firma de documentos.</p></div><a class='c-btn' href='/admin/contratacion?sec=induccion'>Ir a inducción</a></div>
-        <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card c-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_medica'><b>DNI</b><input name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI y seleccione trabajador'><datalist id='lista_ingresos'>{opt_ingresos}</datalist><b>Requerimiento</b><input name='requerimiento' placeholder='REQ-2026-0001 / LABORES'><b>Tipo examen</b><select name='tipo_examen'><option>PRE OCUPACIONAL</option><option>PERIÓDICO</option><option>RETIRO</option><option>CAMBIO DE PUESTO</option></select><b>Clínica / proveedor</b><input name='clinica' placeholder='Centro médico autorizado'><b>Protocolo médico</b><input name='protocolo' placeholder='Básico, alto riesgo, manipulación alimentos, altura, etc.'><b>Riesgo del puesto</b><select name='riesgo_puesto'><option>BAJO</option><option>MEDIO</option><option>ALTO</option></select><b>Fecha programada</b><input type='date' name='fecha_programada' value='{hoy_iso()}'><b>Fecha resultado</b><input type='date' name='fecha_resultado' value='{hoy_iso()}'><b>Fecha vencimiento</b><input type='date' name='fecha_vencimiento' value='{hoy_iso()}'><b>Estado operativo</b><select name='estado'><option>PENDIENTE</option><option>PROGRAMADO</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option><option>OBSERVADO</option></select><b>Aptitud médica</b><select name='aptitud'><option>PENDIENTE</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option></select><b>Restricciones</b><input name='restricciones' placeholder='Ej. no cargar peso, lentes, control, etc.'><b>Recomendaciones</b><input name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'><b>Responsable seguimiento</b><input name='responsable_seguimiento' placeholder='RRHH / SST / Médico ocupacional'><b>Contacto proveedor</b><input name='proveedor_contacto' placeholder='Correo / teléfono'><b>Costo</b><input name='costo' placeholder='S/ 0.00'><b>Resultado PDF/imagen</b><input type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle libre'></textarea><span></span><button class='c-btn'>💾 Registrar evaluación</button></form>
+        <style>
+          .med-critical{{display:grid;grid-template-columns:1.1fr .95fr .95fr;gap:14px;margin-bottom:16px}}
+          .med-search{{background:#ffffff;border:1px solid #dbe7ef;border-radius:22px;padding:18px;box-shadow:0 14px 30px #0f172a0d}}
+          .med-status-card{{border-radius:22px;padding:18px;color:#0f172a;background:#f8fafc;border:1px solid #dbe7ef;box-shadow:0 14px 30px #0f172a0d}}
+          .med-status-card h3{{margin:0 0 10px;font-size:15px;color:#475569;text-transform:uppercase;letter-spacing:.04em}}
+          .med-status-value{{font-size:30px;font-weight:1000;line-height:1.05;color:#0b2742}}
+          .med-status-card.ok{{background:#ecfdf5;border-color:#86efac}}
+          .med-status-card.warn{{background:#fffbeb;border-color:#fcd34d}}
+          .med-status-card.danger{{background:#fef2f2;border-color:#fca5a5}}
+          .med-status-card.pending{{background:#f8fafc;border-color:#cbd5e1}}
+          .med-person{{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin:12px 0 16px}}
+          .med-person div{{background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:12px}}
+          .med-person small{{display:block;color:#64748b;font-weight:800;margin-bottom:4px}}
+          .med-person b{{display:block;color:#0b2742;font-size:14px}}
+          .med-pill{{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:7px 10px;font-weight:1000;font-size:12px;background:#e2e8f0;color:#334155;white-space:nowrap}}
+          .med-pill.ok{{background:#dcfce7;color:#166534}}
+          .med-pill.warn{{background:#fef3c7;color:#92400e}}
+          .med-pill.danger{{background:#fee2e2;color:#991b1b}}
+          .med-pill.pending{{background:#e2e8f0;color:#334155}}
+          .med-block-msg{{margin-top:10px;border-radius:16px;padding:12px;font-weight:900;background:#ecfdf5;color:#166534}}
+          .med-block-msg.blocked{{background:#fef2f2;color:#991b1b}}
+          .med-form-grid{{display:grid;grid-template-columns:180px 1fr 180px 1fr;gap:12px;align-items:center}}
+          .med-form-grid b{{text-align:right;color:#0b2742}}
+          .med-form-grid input,.med-form-grid select,.med-form-grid textarea{{width:100%;border:1px solid #d6e3ef;border-radius:12px;padding:11px;font-weight:800;background:#fff}}
+          .med-form-grid .full{{grid-column:2 / 5}}
+          .med-form-grid .span-all{{grid-column:1 / 5}}
+          @media(max-width:900px){{.med-critical,.med-person,.med-form-grid{{grid-template-columns:1fr}}.med-form-grid b{{text-align:left}}.med-form-grid .full,.med-form-grid .span-all{{grid-column:auto}}}}
+        </style>
+
+        <h2 class='c-title'>Evaluación médica</h2>
+        <div class='dash-hero' style='margin-bottom:18px'>
+          <div>
+            <h1>Control médico crítico</h1>
+            <p class='muted2'>El sistema autocompleta datos por DNI y resalta Aptitud Médica / Estado Operativo antes de avanzar a contratación.</p>
+          </div>
+          <a class='c-btn' href='/admin/contratacion?sec=induccion'>Ir a inducción</a>
+        </div>
+
+        <div class='med-critical'>
+          <div class='med-search'>
+            <h3 style='margin:0 0 10px;color:#0b2742'>Buscar postulante</h3>
+            <input id='med_dni_lookup' form='form_medica' name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI' style='width:100%;border:1px solid #d6e3ef;border-radius:14px;padding:14px;font-weight:1000;font-size:18px'>
+            <datalist id='lista_ingresos'>{opt_ingresos}</datalist>
+            <div id='med_decision_msg' class='med-block-msg'>Digite DNI para validar si puede avanzar.</div>
+          </div>
+          <div id='med_aptitud_card' class='med-status-card pending'>
+            <h3>Aptitud médica</h3>
+            <div id='med_aptitud_val' class='med-status-value'>PENDIENTE</div>
+          </div>
+          <div id='med_estado_card' class='med-status-card pending'>
+            <h3>Estado operativo</h3>
+            <div id='med_estado_val' class='med-status-value'>PENDIENTE</div>
+          </div>
+        </div>
+
+        <div class='med-person'>
+          <div><small>Trabajador</small><b id='med_nombre'>—</b></div>
+          <div><small>Requerimiento</small><b id='med_req'>—</b></div>
+          <div><small>Empresa</small><b id='med_empresa'>—</b></div>
+          <div><small>Área / Cargo</small><b id='med_area_cargo'>—</b></div>
+          <div><small>Fecha ingreso</small><b id='med_fecha_ingreso'>—</b></div>
+        </div>
+
+        <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid' style='padding:20px'>
+          <input type='hidden' name='accion' value='guardar_medica'>
+          <input type='hidden' id='med_trabajador_hidden' name='trabajador'>
+          <b>Requerimiento</b><input id='med_req_input' name='requerimiento' placeholder='REQ-2026-0001 / LABORES'>
+          <b>Clínica / proveedor</b><input name='clinica' placeholder='Centro médico autorizado'>
+
+          <b>Aptitud médica</b>
+          <select id='med_aptitud_select' name='aptitud'>
+            <option>PENDIENTE</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option>
+          </select>
+          <b>Estado operativo</b>
+          <select id='med_estado_select' name='estado'>
+            <option>PENDIENTE</option><option>HABILITADO</option><option>OBSERVADO</option><option>BLOQUEADO</option><option>PROGRAMADO</option>
+          </select>
+
+          <b>Tipo examen</b><select name='tipo_examen'><option>PRE OCUPACIONAL</option><option>PERIÓDICO</option><option>RETIRO</option><option>CAMBIO DE PUESTO</option></select>
+          <b>Riesgo del puesto</b><select name='riesgo_puesto'><option>BAJO</option><option>MEDIO</option><option>ALTO</option></select>
+
+          <b>Protocolo médico</b><input name='protocolo' placeholder='Básico, alto riesgo, manipulación alimentos, altura, etc.'>
+          <b>Fecha programada</b><input type='date' name='fecha_programada' value='{hoy_iso()}'>
+
+          <b>Fecha resultado</b><input id='med_fecha_resultado' type='date' name='fecha_resultado' value='{hoy_iso()}'>
+          <b>Fecha vencimiento</b><input id='med_fecha_vencimiento' type='date' name='fecha_vencimiento' value='{hoy_iso()}'>
+
+          <b>Restricciones</b><input id='med_restricciones' class='full' name='restricciones' placeholder='Ej. no cargar peso, uso de lentes, control médico, etc.'>
+          <b>Recomendaciones</b><input class='full' name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'>
+
+          <b>Responsable seguimiento</b><input name='responsable_seguimiento' placeholder='RRHH / SST / Médico ocupacional'>
+          <b>Contacto proveedor</b><input name='proveedor_contacto' placeholder='Correo / teléfono'>
+
+          <b>Costo</b><input name='costo' placeholder='S/ 0.00'>
+          <b>Resultado PDF/imagen</b><input type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'>
+
+          <b>Observación</b><textarea class='full' name='observacion' rows='2' placeholder='Detalle libre'></textarea>
+          <div class='span-all' style='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap'>
+            <button class='c-btn'>💾 Registrar evaluación</button>
+          </div>
+        </form>
+
         {bandeja_operativa('tabla_embudo_medica')}
-        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, clínica, aptitud, observación'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_medica' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_medica' class='c-table'><tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Clínica</th><th>Programada</th><th>Resultado</th><th>Estado</th><th>Observación</th></tr>{med_rows}</table></div>
+
+        <div class='module-tools'>
+          <input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, clínica, aptitud, estado, observación'>
+          <button type='submit' form='form_medica' class='c-btn'>Guardar</button>
+        </div>
+        <div class='c-card table-wrap'>
+          <table id='tabla_medica' class='c-table'>
+            <tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Aptitud</th><th>Estado Operativo</th><th>Resultado</th><th>Vencimiento</th><th>Clínica</th><th>Restricciones</th><th>Observación</th></tr>
+            {med_rows}
+          </table>
+        </div>
+
+        <script>
+          const MEDICA_POSTULANTES = {medica_json};
+          const medDni = document.getElementById('med_dni_lookup');
+          const medNombre = document.getElementById('med_nombre');
+          const medReq = document.getElementById('med_req');
+          const medEmpresa = document.getElementById('med_empresa');
+          const medAreaCargo = document.getElementById('med_area_cargo');
+          const medFechaIngreso = document.getElementById('med_fecha_ingreso');
+          const medReqInput = document.getElementById('med_req_input');
+          const medTrabHidden = document.getElementById('med_trabajador_hidden');
+          const medAptitudSelect = document.getElementById('med_aptitud_select');
+          const medEstadoSelect = document.getElementById('med_estado_select');
+          const medAptitudCard = document.getElementById('med_aptitud_card');
+          const medEstadoCard = document.getElementById('med_estado_card');
+          const medAptitudVal = document.getElementById('med_aptitud_val');
+          const medEstadoVal = document.getElementById('med_estado_val');
+          const medDecisionMsg = document.getElementById('med_decision_msg');
+          function medClass(v){{
+            v = (v || '').toUpperCase();
+            if(v.includes('NO APTO') || v.includes('BLOQUEADO')) return 'danger';
+            if(v.includes('RESTRICC') || v.includes('OBSERV')) return 'warn';
+            if(v.includes('APTO') || v.includes('HABILITADO')) return 'ok';
+            return 'pending';
+          }}
+          function setMedCard(card, valEl, value){{
+            const cls = medClass(value);
+            card.className = 'med-status-card ' + cls;
+            valEl.textContent = value || 'PENDIENTE';
+          }}
+          function actualizarMedicaPorDni(){{
+            const dni = (medDni.value || '').replace(/\\D/g,'').slice(-8);
+            const row = MEDICA_POSTULANTES.find(x => (x.dni || '') === dni);
+            if(!row){{
+              medNombre.textContent = 'No encontrado en Postulantes';
+              medReq.textContent = '—'; medEmpresa.textContent = '—'; medAreaCargo.textContent = '—'; medFechaIngreso.textContent = '—';
+              medReqInput.value = ''; medTrabHidden.value = '';
+              setMedCard(medAptitudCard, medAptitudVal, 'PENDIENTE');
+              setMedCard(medEstadoCard, medEstadoVal, 'PENDIENTE');
+              medDecisionMsg.textContent = 'DNI no encontrado en Postulantes. Primero registra al postulante.';
+              medDecisionMsg.className = 'med-block-msg blocked';
+              return;
+            }}
+            medNombre.textContent = row.trabajador || '—';
+            medReq.textContent = row.requerimiento || '—';
+            medEmpresa.textContent = row.empresa || '—';
+            medAreaCargo.textContent = ((row.area || '—') + ' / ' + (row.cargo || '—'));
+            medFechaIngreso.textContent = row.fecha_ingreso || '—';
+            medReqInput.value = row.requerimiento || '';
+            medTrabHidden.value = row.trabajador || '';
+            const apt = (row.medica && row.medica.aptitud) ? row.medica.aptitud : 'PENDIENTE';
+            const est = (row.medica && row.medica.estado) ? row.medica.estado : (row.estado_medico || 'PENDIENTE');
+            setMedCard(medAptitudCard, medAptitudVal, apt);
+            setMedCard(medEstadoCard, medEstadoVal, est);
+            if(medAptitudSelect && apt) medAptitudSelect.value = apt;
+            if(medEstadoSelect && est) medEstadoSelect.value = est;
+            if(row.medica){{
+              if(row.medica.restricciones && document.getElementById('med_restricciones')) document.getElementById('med_restricciones').value = row.medica.restricciones;
+            }}
+            const blocked = medClass(apt)==='danger' || medClass(est)==='danger';
+            medDecisionMsg.textContent = blocked ? 'BLOQUEADO: no debe avanzar a contrato/documentos/firma.' : 'Validación médica preparada. Si queda APTO/HABILITADO puede avanzar.';
+            medDecisionMsg.className = 'med-block-msg' + (blocked ? ' blocked' : '');
+          }}
+          ['input','change'].forEach(ev => medDni.addEventListener(ev, actualizarMedicaPorDni));
+          medAptitudSelect.addEventListener('change', () => setMedCard(medAptitudCard, medAptitudVal, medAptitudSelect.value));
+          medEstadoSelect.addEventListener('change', () => setMedCard(medEstadoCard, medEstadoVal, medEstadoSelect.value));
+        </script>
         """)
     elif sec in ('capacitacion','induccion','cursos'):
         if sec in ('capacitacion','cursos'):
