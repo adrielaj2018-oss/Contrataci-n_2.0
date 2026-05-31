@@ -579,6 +579,163 @@ def registrar_evento_observado(dni, modulo, accion, detalle=''):
 
 
 # =============================
+# IA INTERNA - GESTIÓN DE CONTRATACIÓN
+# =============================
+def _sql_count_safe(con, sql, params=()):
+    try:
+        return int(con.execute(sql, params).fetchone()[0] or 0)
+    except Exception:
+        return 0
+
+
+def _sql_rows_safe(con, sql, params=()):
+    try:
+        return con.execute(sql, params).fetchall()
+    except Exception:
+        return []
+
+
+def _fecha_parse_safe(v):
+    txt = fecha_sin_hora(v)
+    if not txt:
+        return None
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(txt, fmt).date()
+        except Exception:
+            pass
+    return None
+
+
+def ia_contratacion_analizar_dni(dni):
+    """Motor de reglas IA local: valida postulante/trabajador sin depender de internet ni API externa."""
+    dni = normalizar_dni(dni)
+    resultado = {
+        'dni': dni, 'estado': 'PENDIENTE', 'color': 'warn', 'trabajador': None,
+        'alertas': [], 'faltantes': [], 'recomendaciones': [], 'kpis': {}
+    }
+    if not dni:
+        resultado['estado'] = 'BLOQUEADO'
+        resultado['color'] = 'bad'
+        resultado['alertas'].append('Ingresa un DNI válido de 8 dígitos para analizar.')
+        return resultado
+    obligatorios = [
+        ('nombre','Nombres'), ('fecha_nacimiento','Fecha nacimiento'), ('direccion','Dirección'),
+        ('distrito','Distrito'), ('provincia','Provincia'), ('departamento','Departamento'),
+        ('empresa','Empresa'), ('area','Área'), ('cargo','Cargo'), ('actividad','Actividad'),
+        ('regimen_laboral','Régimen laboral'), ('fecha_ingreso','Fecha ingreso'),
+        ('fecha_fin_contrato','Fecha fin contrato'), ('remuneracion_basica','Remuneración básica')
+    ]
+    with db() as con:
+        t = con.execute('SELECT * FROM trabajadores WHERE dni=? LIMIT 1', (dni,)).fetchone()
+        ing = _sql_rows_safe(con, 'SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 3', (dni,))
+        docs = _sql_count_safe(con, 'SELECT COUNT(*) FROM contratacion_docs WHERE dni=?', (dni,))
+        firmas_pend = _sql_count_safe(con, "SELECT COUNT(*) FROM firma_solicitudes WHERE dni=? AND UPPER(COALESCE(estado,'')) NOT IN ('FIRMADO','APROBADO','COMPLETADO')", (dni,))
+        medicas = _sql_rows_safe(con, 'SELECT * FROM contratacion_medica WHERE dni=? ORDER BY id DESC LIMIT 1', (dni,))
+        checklist_pend = _sql_count_safe(con, "SELECT COUNT(*) FROM contratacion_checklist_next WHERE dni=? AND UPPER(COALESCE(estado,'')) NOT IN ('COMPLETO','COMPLETADO','OK')", (dni,))
+    obs = alerta_observado_por_dni(dni)
+    if obs.get('encontrado'):
+        resultado['alertas'].append(f"Trabajador observado: {obs.get('nivel')} - {obs.get('motivo') or 'Sin motivo registrado'}.")
+        if obs.get('bloquea'):
+            resultado['estado'] = 'BLOQUEADO'
+            resultado['color'] = 'bad'
+            resultado['recomendaciones'].append('Bloquear generación de contrato hasta levantar observación o aprobar excepción.')
+        elif obs.get('requiere_autorizacion'):
+            resultado['recomendaciones'].append('Solicitar validación de RR.HH./jefatura antes de continuar.')
+    if not t:
+        resultado['alertas'].append('El DNI no existe en la base de trabajadores/postulantes.')
+        resultado['recomendaciones'].append('Crear postulante desde el módulo POSTULANTES y completar datos obligatorios.')
+        if resultado['estado'] != 'BLOQUEADO':
+            resultado['estado'] = 'PENDIENTE'
+        return resultado
+    resultado['trabajador'] = dict(t)
+    for campo, etiqueta in obligatorios:
+        if campo not in t.keys() or not clean(t[campo]):
+            resultado['faltantes'].append(etiqueta)
+    if resultado['faltantes']:
+        resultado['alertas'].append('Faltan datos obligatorios para generar contrato: ' + ', '.join(resultado['faltantes'][:8]) + ('.' if len(resultado['faltantes']) <= 8 else '...'))
+        resultado['recomendaciones'].append('Completar la ficha del postulante antes de generar contrato o renovación.')
+    if ing:
+        tipo_ing = clean(ing[0]['tipo_ingreso'] if 'tipo_ingreso' in ing[0].keys() else '')
+        if 'REING' in tipo_ing.upper():
+            resultado['alertas'].append('El trabajador figura como REINGRESANTE. Revisar historial laboral y documentos anteriores.')
+    else:
+        resultado['recomendaciones'].append('No se encontró registro en POSTULANTES; enlazarlo a un requerimiento/ticket.')
+    if medicas:
+        estado_med = clean(medicas[0]['estado'] if 'estado' in medicas[0].keys() else '')
+        if estado_med and estado_med.upper() != 'APTO':
+            resultado['alertas'].append(f'Evaluación médica no apta o pendiente: {estado_med}.')
+    else:
+        resultado['recomendaciones'].append('Registrar o validar evaluación médica antes de cerrar contratación.')
+    if firmas_pend:
+        resultado['alertas'].append(f'Tiene {firmas_pend} documento(s) pendiente(s) de firma.')
+    if checklist_pend:
+        resultado['alertas'].append(f'Tiene {checklist_pend} pendiente(s) en checklist documental.')
+    ffin = _fecha_parse_safe(t['fecha_fin_contrato'] if 'fecha_fin_contrato' in t.keys() else '')
+    if ffin:
+        dias = (ffin - datetime.now(APP_TZ).date()).days
+        if dias < 0:
+            resultado['alertas'].append(f'Contrato vencido hace {abs(dias)} día(s).')
+        elif dias <= 30:
+            resultado['alertas'].append(f'Contrato próximo a vencer en {dias} día(s).')
+    resultado['kpis'] = {'documentos': docs, 'firmas_pendientes': firmas_pend, 'checklist_pendiente': checklist_pend}
+    if resultado['estado'] != 'BLOQUEADO':
+        if resultado['faltantes'] or firmas_pend or checklist_pend or not medicas:
+            resultado['estado'] = 'PENDIENTE'
+            resultado['color'] = 'warn'
+        else:
+            resultado['estado'] = 'LISTO'
+            resultado['color'] = 'ok'
+            resultado['recomendaciones'].append('Puede continuar con generación de contrato/documentos, sujeto a revisión final de RR.HH.')
+    return resultado
+
+
+def ia_contratacion_resumen_global():
+    with db() as con:
+        total_post = _sql_count_safe(con, 'SELECT COUNT(*) FROM contratacion_ingresos')
+        total_req = _sql_count_safe(con, 'SELECT COUNT(*) FROM contratacion_requerimientos')
+        obs_act = _sql_count_safe(con, "SELECT COUNT(*) FROM trabajadores_observados WHERE UPPER(COALESCE(estado,'')) IN ('ACTIVE','ACTIVO')")
+        firmas = _sql_count_safe(con, "SELECT COUNT(*) FROM firma_solicitudes WHERE UPPER(COALESCE(estado,'')) NOT IN ('FIRMADO','APROBADO','COMPLETADO')")
+        docs = _sql_count_safe(con, 'SELECT COUNT(*) FROM contratacion_docs')
+        vencen = 0
+        for r in _sql_rows_safe(con, "SELECT dni, nombre, fecha_fin_contrato FROM trabajadores WHERE COALESCE(fecha_fin_contrato,'')<>''"):
+            f = _fecha_parse_safe(r['fecha_fin_contrato'])
+            if f and 0 <= (f - datetime.now(APP_TZ).date()).days <= 30:
+                vencen += 1
+    return {'postulantes': total_post, 'requerimientos': total_req, 'observados_activos': obs_act, 'firmas_pendientes': firmas, 'documentos': docs, 'vencen_30': vencen}
+
+
+def ia_contratacion_responder(pregunta, dni=''):
+    pregunta_l = clean(pregunta).lower()
+    dni_norm = normalizar_dni(dni or pregunta)
+    if dni_norm:
+        a = ia_contratacion_analizar_dni(dni_norm)
+        nombre = h(a['trabajador']['nombre']) if a.get('trabajador') else 'No registrado'
+        alertas = ''.join([f"<li>{h(x)}</li>" for x in a['alertas']]) or '<li>Sin alertas críticas.</li>'
+        recs = ''.join([f"<li>{h(x)}</li>" for x in a['recomendaciones']]) or '<li>Continuar con revisión estándar de RR.HH.</li>'
+        falt = ', '.join(a['faltantes']) if a['faltantes'] else 'Ninguno'
+        return f"""
+        <div class='ia-result {a['color']}'><h3>Resultado IA: {a['estado']}</h3>
+        <p><b>DNI:</b> {h(a['dni'])} · <b>Trabajador:</b> {nombre}</p>
+        <p><b>Datos faltantes:</b> {h(falt)}</p>
+        <h4>Alertas</h4><ul>{alertas}</ul><h4>Recomendación</h4><ul>{recs}</ul></div>
+        """
+    resumen = ia_contratacion_resumen_global()
+    if any(x in pregunta_l for x in ['firma', 'firmar', 'pendiente de firma']):
+        return f"<div class='ia-result warn'><h3>Firmas pendientes</h3><p>Actualmente existen <b>{resumen['firmas_pendientes']}</b> documentos pendientes de firma.</p><p>Recomendación IA: revisar el módulo Firma / Facial / Digital y priorizar renovaciones próximas a vencer.</p></div>"
+    if any(x in pregunta_l for x in ['venc', 'renov']):
+        return f"<div class='ia-result warn'><h3>Vencimientos / renovaciones</h3><p>Hay <b>{resumen['vencen_30']}</b> contrato(s) con vencimiento dentro de los próximos 30 días.</p><p>Recomendación IA: generar renovaciones masivas y enviarlas a firma.</p></div>"
+    if any(x in pregunta_l for x in ['observ', 'bloque']):
+        return f"<div class='ia-result bad'><h3>Trabajadores observados</h3><p>Hay <b>{resumen['observados_activos']}</b> observación(es) activas.</p><p>Recomendación IA: Nivel 3 bloquea contratación; Nivel 2 requiere validación de RR.HH./jefatura.</p></div>"
+    return f"""
+    <div class='ia-result ok'><h3>Resumen IA de contratación</h3>
+    <p>Requerimientos: <b>{resumen['requerimientos']}</b> · Postulantes: <b>{resumen['postulantes']}</b> · Documentos: <b>{resumen['documentos']}</b></p>
+    <p>Observados activos: <b>{resumen['observados_activos']}</b> · Firmas pendientes: <b>{resumen['firmas_pendientes']}</b> · Vencen en 30 días: <b>{resumen['vencen_30']}</b></p>
+    <p>Pregunta por un DNI o escribe: pendientes de firma, contratos por vencer, trabajadores observados.</p></div>
+    """
+
+
+# =============================
 # ZEBRA ZC300 - VALIDACIÓN REAL DE CONFIGURACIÓN
 # =============================
 def es_entorno_render():
@@ -830,6 +987,15 @@ def init_db():
         CREATE TABLE IF NOT EXISTS app_config(
             clave TEXT PRIMARY KEY,
             valor TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS ia_contratacion_log(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pregunta TEXT,
+            dni TEXT,
+            respuesta_estado TEXT,
+            usuario TEXT,
+            fecha TEXT
         )''')
         con.execute('''
         CREATE TABLE IF NOT EXISTS base_central_sync_config(
@@ -7713,6 +7879,71 @@ html,body{overflow-x:hidden!important;}
 </style>"""
     def wrap(inner):
         return css + inner
+    if sec=='ia':
+        dni_q = clean(request.values.get('dni'))
+        pregunta_q = clean(request.values.get('pregunta')) or 'resumen general'
+        respuesta_ia = ia_contratacion_responder(pregunta_q, dni_q)
+        resumen_ia = ia_contratacion_resumen_global()
+        try:
+            with db() as con_ia:
+                con_ia.execute('INSERT INTO ia_contratacion_log(pregunta,dni,respuesta_estado,usuario,fecha) VALUES(?,?,?,?,?)', (pregunta_q, normalizar_dni(dni_q), 'CONSULTADO', session.get('admin_user','admin'), now_txt()))
+                con_ia.commit()
+        except Exception:
+            pass
+        content=wrap(f"""
+        <style>
+          .ia-hero{{display:flex;justify-content:space-between;gap:18px;align-items:center;background:linear-gradient(135deg,#062b24,#0f766e);color:white;border-radius:24px;padding:26px;margin-bottom:18px;box-shadow:0 18px 38px rgba(15,118,110,.22)}}
+          .ia-hero h1{{color:white!important;margin:0;font-size:30px}} .ia-hero p{{color:#d9fff6;margin:8px 0 0}}
+          .ia-kpis{{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:12px;margin-bottom:18px}}
+          .ia-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:18px;padding:16px;box-shadow:0 10px 24px #0f172a0d}}
+          .ia-kpi small{{display:block;color:#64748b;font-weight:900}} .ia-kpi b{{font-size:28px;color:#0f172a}}
+          .ia-grid{{display:grid;grid-template-columns:.9fr 1.25fr;gap:18px;align-items:start}}
+          .ia-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:20px;box-shadow:0 14px 32px #0f172a0d;color:#0f172a}}
+          .ia-form{{display:grid;grid-template-columns:140px 1fr;gap:12px;align-items:center}}
+          .ia-form input,.ia-form textarea{{width:100%;background:#fff!important;color:#0f172a!important;border:1px solid #cbd5e1!important;border-radius:12px!important;padding:12px!important;font-weight:800}}
+          .ia-result{{border-radius:18px;padding:18px;border:1px solid #dbe7ef;background:#f8fafc;color:#0f172a}}
+          .ia-result.ok{{border-color:#86efac;background:#f0fdf4}} .ia-result.warn{{border-color:#fde68a;background:#fffbeb}} .ia-result.bad{{border-color:#fecdd3;background:#fff1f2}}
+          .ia-result h3{{color:#0f172a!important;margin-top:0}} .ia-result li{{margin:6px 0}}
+          .ia-suggest{{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}} .ia-suggest a{{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-radius:999px;padding:8px 12px;text-decoration:none;font-weight:900}}
+          @media(max-width:1100px){{.ia-kpis,.ia-grid{{grid-template-columns:1fr}}.ia-form{{grid-template-columns:1fr}}.ia-hero{{display:block}}}}
+        </style>
+        <div class='ia-hero'>
+          <div><h1>🤖 IA RR.HH. - Gestión de Contratación</h1><p>Asistente interno con reglas de validación: postulantes, datos obligatorios, observados, contratos, firmas y renovaciones.</p></div>
+          <a class='c-btn gray' href='{url_for('admin_contratacion', sec='dashboard')}'>Volver al dashboard</a>
+        </div>
+        <div class='ia-kpis'>
+          <div class='ia-kpi'><small>Requerimientos</small><b>{resumen_ia['requerimientos']}</b></div>
+          <div class='ia-kpi'><small>Postulantes</small><b>{resumen_ia['postulantes']}</b></div>
+          <div class='ia-kpi'><small>Documentos</small><b>{resumen_ia['documentos']}</b></div>
+          <div class='ia-kpi'><small>Observados</small><b>{resumen_ia['observados_activos']}</b></div>
+          <div class='ia-kpi'><small>Firmas pendientes</small><b>{resumen_ia['firmas_pendientes']}</b></div>
+          <div class='ia-kpi'><small>Vencen 30 días</small><b>{resumen_ia['vencen_30']}</b></div>
+        </div>
+        <div class='ia-grid'>
+          <div class='ia-card'>
+            <h2>Consultar IA</h2>
+            <form method='get' action='{url_for('admin_contratacion')}' class='ia-form'>
+              <input type='hidden' name='sec' value='ia'>
+              <b>DNI</b><input name='dni' value='{h(dni_q)}' placeholder='Ejemplo: 74324033'>
+              <b>Pregunta</b><textarea name='pregunta' rows='4' placeholder='Ejemplo: ¿Puede generar contrato? ¿Qué le falta? ¿Tiene observación?'>{h(pregunta_q)}</textarea>
+              <span></span><button class='c-btn'>Analizar con IA</button>
+            </form>
+            <div class='ia-suggest'>
+              <a href='{url_for('admin_contratacion', sec='ia', pregunta='pendientes de firma')}'>Pendientes de firma</a>
+              <a href='{url_for('admin_contratacion', sec='ia', pregunta='contratos por vencer')}'>Contratos por vencer</a>
+              <a href='{url_for('admin_contratacion', sec='ia', pregunta='trabajadores observados')}'>Observados</a>
+            </div>
+          </div>
+          <div class='ia-card'>
+            <h2>Resultado del análisis</h2>
+            {respuesta_ia}
+          </div>
+        </div>
+        <div class='ia-card' style='margin-top:18px'>
+          <h2>Reglas implementadas</h2>
+          <p>LISTO: datos completos y sin bloqueos. PENDIENTE: faltan datos, firma, checklist o validación. BLOQUEADO: observación Nivel 3 activa o DNI inválido.</p>
+        </div>
+        """)
     if sec=='dashboard':
         total_trab = len(trabajadores)
         total_req = len(requerimientos)
@@ -7731,7 +7962,7 @@ html,body{overflow-x:hidden!important;}
             <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=requerimientos'>Nuevo ticket</a><a class='c-btn gray' href='/admin/contratacion?sec=nuevos'>Registrar trabajador</a></div>
           </div>
           <div class='dash-kpis'><div class='dash-card'><small>Tickets</small><b>{total_req}</b></div><div class='dash-card'><small>Postulantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Lotes NISIRA</small><b>{total_nisira}</b></div></div>
-          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, inducción e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
+          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, inducción e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/admin/contratacion?sec=ia'>IA RR.HH.</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
           <div class='dash-card table-wrap'><h2>Últimos registros del embudo</h2><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Ingreso</th><th>Sede</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
         </section>
         """)
