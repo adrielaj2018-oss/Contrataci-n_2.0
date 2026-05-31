@@ -311,6 +311,11 @@ def clean(v):
     return str(v or "").strip()
 
 
+def h(v):
+    """Escape HTML seguro para plantillas internas render_template_string."""
+    return html.escape(str(v or ''))
+
+
 
 def fecha_sin_hora(v):
     """Muestra fechas sin 00:00:00, aceptando Excel datetime, ISO y texto dd/mm/aaaa."""
@@ -6189,6 +6194,30 @@ def api_alerta_observado(dni):
     return jsonify(alerta_observado_por_dni(dni))
 
 
+
+@app.route('/admin/ia_rrhh_mini', methods=['POST'])
+@admin_required
+def ia_rrhh_mini():
+    """Consulta rápida de IA RR.HH. desde cualquier módulo de contratación."""
+    data = request.get_json(silent=True) or {}
+    modulo = clean(data.get('modulo') or request.form.get('modulo'))
+    pregunta = clean(data.get('pregunta') or request.form.get('pregunta'))
+    dni = clean(data.get('dni') or request.form.get('dni'))
+    if not pregunta and not dni:
+        pregunta = f"resumen del módulo {modulo or 'contratación'}"
+    try:
+        respuesta = ia_contratacion_responder(pregunta, dni)
+        try:
+            with db() as con_ia:
+                con_ia.execute('INSERT INTO ia_contratacion_log(pregunta,dni,respuesta_estado,usuario,fecha) VALUES(?,?,?,?,?)',
+                               (pregunta, normalizar_dni(dni), 'MINI_WIDGET', session.get('admin_user','admin'), now_txt()))
+                con_ia.commit()
+        except Exception:
+            pass
+        return jsonify({'ok': True, 'html': respuesta})
+    except Exception as e:
+        return jsonify({'ok': False, 'html': "<div class='ia-result bad'><h3>Error IA</h3><p>No se pudo procesar la consulta. Detalle: " + h(e) + "</p></div>"}), 200
+
 @app.route('/admin/contratacion', methods=['GET','POST'])
 @admin_required
 def admin_contratacion():
@@ -7878,7 +7907,58 @@ html,body{overflow-x:hidden!important;}
 }
 </style>"""
     def wrap(inner):
-        return css + inner
+        sec_label = h(sec or 'dashboard')
+        mini_ia = f"""
+<style>
+.ia-mini-box{{position:fixed;right:22px;bottom:22px;z-index:9998;width:min(360px,92vw);font-family:inherit}}
+.ia-mini-toggle{{width:100%;border:0;border-radius:20px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:15px 18px;font-weight:1000;font-size:16px;box-shadow:0 16px 34px rgba(5,150,105,.30);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}}
+.ia-mini-panel{{display:none;margin-top:10px;background:#fff;border:1px solid #dbe7ef;border-radius:22px;box-shadow:0 24px 60px rgba(15,23,42,.22);overflow:hidden;color:#0f172a}}
+.ia-mini-box.open .ia-mini-panel{{display:block}}
+.ia-mini-head{{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#062b24,#0f766e);color:#fff;padding:14px 16px;font-weight:1000}}
+.ia-mini-head small{{display:block;color:#ccfbf1;font-weight:800;margin-top:2px}}
+.ia-mini-close{{background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:10px;padding:6px 10px;font-weight:1000;cursor:pointer}}
+.ia-mini-body{{padding:14px}}
+.ia-mini-body input,.ia-mini-body textarea{{width:100%;box-sizing:border-box;background:#fff!important;color:#0f172a!important;border:1px solid #cbd5e1!important;border-radius:12px!important;padding:10px!important;font-weight:850;margin-bottom:8px}}
+.ia-mini-body textarea{{min-height:74px;resize:vertical}}
+.ia-mini-send{{width:100%;border:0;border-radius:14px;background:#0ea55f;color:#fff;padding:12px 14px;font-weight:1000;cursor:pointer}}
+.ia-mini-result{{max-height:300px;overflow:auto;margin-top:10px;font-size:13.5px}}
+.ia-mini-result .ia-result{{padding:12px!important;border-radius:14px!important}}
+.ia-mini-result h3{{font-size:16px!important;margin:0 0 8px!important}}
+.ia-mini-result h4{{font-size:14px!important;margin:8px 0 4px!important}}
+.ia-mini-result ul{{padding-left:18px!important;margin:6px 0!important}}
+@media(max-width:700px){{.ia-mini-box{{right:10px;left:10px;bottom:12px;width:auto}}.ia-mini-toggle{{font-size:15px;padding:13px}}}}
+</style>
+<div class="ia-mini-box" id="iaMiniBox" data-modulo="{sec_label}">
+  <button type="button" class="ia-mini-toggle" onclick="iaMiniToggle()">🤖 Consultar IA RR.HH.</button>
+  <div class="ia-mini-panel">
+    <div class="ia-mini-head"><div>IA RR.HH.<small>Módulo: {sec_label}</small></div><button type="button" class="ia-mini-close" onclick="iaMiniToggle()">×</button></div>
+    <div class="ia-mini-body">
+      <input id="iaMiniDni" maxlength="8" placeholder="DNI opcional">
+      <textarea id="iaMiniPregunta" placeholder="Pregunta rápida: ¿está listo?, ¿qué falta?, ¿bloquea contratación?"></textarea>
+      <button type="button" class="ia-mini-send" onclick="iaMiniConsultar()">Analizar con IA</button>
+      <div class="ia-mini-result" id="iaMiniResult"></div>
+    </div>
+  </div>
+</div>
+<script>
+function iaMiniToggle(){{document.getElementById('iaMiniBox').classList.toggle('open');}}
+async function iaMiniConsultar(){{
+  const box=document.getElementById('iaMiniBox');
+  const out=document.getElementById('iaMiniResult');
+  const dni=document.getElementById('iaMiniDni').value||'';
+  const pregunta=document.getElementById('iaMiniPregunta').value||'';
+  out.innerHTML='<div class="ia-result warn"><b>Analizando...</b></div>';
+  try{{
+    const res=await fetch('/admin/ia_rrhh_mini',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{modulo:box.dataset.modulo,dni,pregunta}})}});
+    const data=await res.json();
+    out.innerHTML=data.html || '<div class="ia-result bad">Sin respuesta.</div>';
+  }}catch(e){{
+    out.innerHTML='<div class="ia-result bad"><h3>Error</h3><p>No se pudo conectar con la IA interna.</p></div>';
+  }}
+}}
+</script>
+"""
+        return css + inner + mini_ia
     if sec=='ia':
         dni_q = clean(request.values.get('dni'))
         pregunta_q = clean(request.values.get('pregunta')) or 'resumen general'
