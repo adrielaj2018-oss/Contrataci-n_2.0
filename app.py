@@ -58,10 +58,10 @@ app = Flask(__name__)
 # Módulo de contratación deshabilitado por solicitud: se oculta del menú y se bloquea el acceso directo.
 @app.before_request
 def bloquear_modulo_contratacion_portal_hr():
-    # CORRECCIÓN: el módulo de contratación debe permanecer habilitado.
-    # Antes este bloque redirigía cualquier ruta que contenga "contratacion" hacia /admin,
-    # por eso la pantalla inicial aparecía y luego "desaparecía" al cambiar de pestaña.
-    return None
+    ruta = request.path.lower()
+    if ruta.startswith('/admin/contratacion') or ruta.startswith('/contratacion/') or ruta.startswith('/admin/firma') or ruta.startswith('/firma/') or 'contratacion' in ruta:
+        flash('El módulo de contratación fue retirado de PORTAL HR PRO.', 'ok')
+        return redirect(url_for('admin') if session.get('admin_id') else url_for('panel'))
 
 
 @app.after_request
@@ -686,16 +686,6 @@ def asegurar_ia_hr_pro():
             fecha TEXT,
             usuario TEXT
         )""")
-        con.execute("""CREATE TABLE IF NOT EXISTS ia_actualizaciones_hr(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT,
-            fuente TEXT,
-            registros INTEGER DEFAULT 0,
-            detalle TEXT,
-            fecha TEXT,
-            usuario TEXT
-        )""")
-
         for modulo, rol, preg, resp, ruta, keys in semillas_sistema:
             existe = con.execute('SELECT id FROM ia_base_conocimiento_hr WHERE UPPER(pregunta_clave)=UPPER(?) AND rol_destino=? LIMIT 1', (preg, rol)).fetchone()
             if not existe:
@@ -707,101 +697,6 @@ def asegurar_ia_hr_pro():
                 con.execute("""INSERT INTO ia_legislacion_peru(tema,pregunta_clave,respuesta,base_legal,detalle_legal,palabras_clave,activo,fecha_actualizacion)
                                VALUES(?,?,?,?,?,?,1,?)""", (tema,preg,resp,base,det,keys,now_txt()))
         con.commit()
-
-
-
-def ia_upsert_legal(tema, pregunta_clave, respuesta, base_legal, detalle_legal='', palabras_clave=''):
-    """Inserta o actualiza una respuesta legal de IA por pregunta clave."""
-    tema = clean(tema)
-    pregunta_clave = clean(pregunta_clave)
-    if not pregunta_clave:
-        return 0
-    with db() as con:
-        row = con.execute('SELECT id FROM ia_legislacion_peru WHERE UPPER(pregunta_clave)=UPPER(?) LIMIT 1', (pregunta_clave,)).fetchone()
-        if row:
-            con.execute("""UPDATE ia_legislacion_peru
-                              SET tema=?, respuesta=?, base_legal=?, detalle_legal=?, palabras_clave=?, activo=1, fecha_actualizacion=?
-                            WHERE id=?""", (tema, clean(respuesta), clean(base_legal), clean(detalle_legal), clean(palabras_clave), now_txt(), row['id']))
-        else:
-            con.execute("""INSERT INTO ia_legislacion_peru(tema,pregunta_clave,respuesta,base_legal,detalle_legal,palabras_clave,activo,fecha_actualizacion)
-                           VALUES(?,?,?,?,?,?,1,?)""", (tema, pregunta_clave, clean(respuesta), clean(base_legal), clean(detalle_legal), clean(palabras_clave), now_txt()))
-        con.commit()
-    return 1
-
-
-def ia_upsert_sistema(modulo, rol_destino, pregunta_clave, respuesta, ruta='', palabras_clave=''):
-    """Inserta o actualiza una respuesta operativa del sistema por pregunta clave y rol."""
-    modulo = clean(modulo)
-    rol_destino = clean(rol_destino or 'ambos')
-    pregunta_clave = clean(pregunta_clave)
-    if not pregunta_clave:
-        return 0
-    with db() as con:
-        row = con.execute('SELECT id FROM ia_base_conocimiento_hr WHERE UPPER(pregunta_clave)=UPPER(?) AND rol_destino=? LIMIT 1', (pregunta_clave, rol_destino)).fetchone()
-        if row:
-            con.execute("""UPDATE ia_base_conocimiento_hr
-                              SET modulo=?, respuesta=?, ruta=?, palabras_clave=?, activo=1, fecha_registro=?, registrado_por=?
-                            WHERE id=?""", (modulo, clean(respuesta), clean(ruta), clean(palabras_clave), now_txt(), 'ACTUALIZADOR IA', row['id']))
-        else:
-            con.execute("""INSERT INTO ia_base_conocimiento_hr(modulo,rol_destino,pregunta_clave,respuesta,ruta,palabras_clave,activo,fecha_registro,registrado_por)
-                           VALUES(?,?,?,?,?,?,1,?,?)""", (modulo, rol_destino, pregunta_clave, clean(respuesta), clean(ruta), clean(palabras_clave), now_txt(), 'ACTUALIZADOR IA'))
-        con.commit()
-    return 1
-
-
-def ia_hr_actualizar_base_plus(fuente='Base PRO interna'):
-    """Actualiza la base IA sin borrar personalizaciones del administrador."""
-    asegurar_ia_hr_pro()
-    legales_extra = [
-        ('Vacaciones','Qué son vacaciones ordinarias','Las vacaciones ordinarias son el descanso vacacional anual que corresponde al trabajador por cada año completo de servicios, siempre que cumpla el récord vacacional. En el régimen privado general equivale a 30 días calendario de descanso remunerado.','D. Leg. N.° 713 y D.S. N.° 012-92-TR','No es lo mismo que vacaciones truncas. Las ordinarias son descanso anual; las truncas son pago proporcional al cese.','vacaciones ordinarias descanso vacacional anual normales 30 dias calendario'),
-        ('Vacaciones','Qué son vacaciones vencidas','Son vacaciones generadas que no fueron gozadas dentro del plazo legal. Pueden generar contingencia laboral e incluso indemnización vacacional si se cumplen los supuestos legales.','D. Leg. N.° 713 y D.S. N.° 012-92-TR','RR.HH. debe revisar fecha de ingreso, periodo, goce efectivo y oportunidad del descanso.','vacaciones vencidas no gozadas indemnizacion vacacional periodo vencido'),
-        ('Vacaciones','Diferencia entre vacaciones ordinarias y truncas','Las vacaciones ordinarias son el descanso anual de 30 días calendario cuando el trabajador cumplió un año de servicios y récord. Las vacaciones truncas son el pago proporcional generado al cese antes de completar un nuevo año.','D. Leg. N.° 713','La diferencia principal es que una se goza como descanso y la otra normalmente se paga en liquidación al cese.','diferencia vacaciones ordinarias truncas descanso anual liquidacion cese'),
-        ('Boleta de pago','Qué es boleta de utilidades','La boleta o constancia de utilidades informa al trabajador el monto pagado por participación en utilidades, cuando corresponde según la actividad, renta empresarial y requisitos legales. No es una boleta mensual de remuneración, sino un documento de pago específico del beneficio.','D. Leg. N.° 892 y D.S. N.° 009-98-TR','La participación en utilidades aplica a empresas que generan rentas de tercera categoría y cumplen condiciones legales.','boleta utilidades constancia participacion utilidades pago utilidad'),
-        ('Utilidades','Qué es participación en utilidades','Es el derecho de los trabajadores a participar en las utilidades de empresas que desarrollan actividades generadoras de renta de tercera categoría, cuando cumplen los requisitos legales. El porcentaje depende de la actividad económica de la empresa.','D. Leg. N.° 892 y D.S. N.° 009-98-TR','Debe revisarse si la empresa está obligada, número de trabajadores, renta y actividad económica.','participacion utilidades trabajadores porcentaje renta tercera categoria'),
-        ('CTS','Qué es boleta CTS','Es el documento o constancia que informa el cálculo o depósito de la Compensación por Tiempo de Servicios. Permite al trabajador revisar periodo, remuneración computable, días considerados y entidad depositaria, según el flujo de la empresa.','D.S. N.° 001-97-TR y D.S. N.° 004-97-TR','La CTS se deposita normalmente en mayo y noviembre, salvo reglas especiales.','boleta cts constancia compensacion tiempo servicios deposito'),
-        ('Gratificación','Qué es boleta de gratificación','Es el documento que informa el pago de gratificación legal de julio o diciembre, incluyendo monto, descuentos si correspondiera y bonificación extraordinaria cuando aplique.','Ley N.° 27735 y D.S. N.° 005-2002-TR','La gratificación depende del semestre laborado y requisitos aplicables.','boleta gratificacion julio diciembre fiestas patrias navidad'),
-        ('Remuneración','Qué es remuneración básica','La remuneración básica es el monto principal pactado por la prestación de servicios. Sirve como referencia para diversos cálculos, aunque no siempre es la única base computable de beneficios.','TUO del D. Leg. N.° 728 y normas complementarias','Debe diferenciarse entre básico, remuneración computable y conceptos no remunerativos.','remuneracion basica sueldo basico computable beneficios'),
-        ('Régimen agrario','Qué es remuneración diaria agraria','En el régimen laboral agrario, la remuneración diaria integra conceptos según la Ley 31110, y puede incluir reglas especiales sobre remuneración básica, gratificaciones, CTS y BETA según corresponda.','Ley N.° 31110 y D.S. N.° 005-2021-MIDAGRI','Debe validarse si el trabajador y la actividad están comprendidos en el régimen agrario.','remuneracion diaria agraria rd beta ley 31110'),
-        ('Régimen agrario','Qué es BETA agrario','La BETA es la Bonificación Especial por Trabajo Agrario prevista en la Ley 31110. Tiene carácter no remunerativo y equivale al porcentaje establecido por la norma respecto de la RMV.','Ley N.° 31110 y D.S. N.° 005-2021-MIDAGRI','No constituye remuneración para efectos legales, según la norma especial.','beta bonificacion especial trabajo agrario ley 31110'),
-        ('Licencias','Qué es licencia por adopción','Es la licencia laboral otorgada al trabajador por adopción, conforme a la normativa aplicable, para atender el proceso de integración familiar.','Ley N.° 27409','RR.HH. debe validar resolución o documento sustentatorio y oportunidad de goce.','licencia adopcion trabajador hijo adoptivo'),
-        ('Licencias','Qué es licencia por familiar grave','Es la licencia para trabajadores con familiares directos que se encuentran con enfermedad grave o terminal, o sufren accidente grave, conforme a la ley y reglamento.','Ley N.° 30012 y D.S. N.° 008-2017-TR','Debe acreditarse el vínculo y la condición médica conforme al procedimiento interno y norma.','licencia familiar enfermedad grave terminal accidente grave'),
-        ('Licencias','Qué es licencia por rehabilitación de persona con discapacidad','Es la licencia para asistencia médica y terapia de rehabilitación de personas con discapacidad, cuando se cumplen los requisitos legales.','Ley N.° 30119 y D.S. N.° 013-2017-TR','Debe sustentarse vínculo, discapacidad y citas o terapias.','licencia rehabilitacion discapacidad terapia asistencia medica'),
-        ('Planillas','Qué es T-Registro','T-Registro es el registro de información laboral de empleadores, trabajadores, pensionistas, prestadores y otros sujetos, como parte de la Planilla Electrónica.','Normas de Planilla Electrónica SUNAT/MTPE','Se vincula con la declaración mensual PLAME.','t registro planilla electronica trabajador alta baja'),
-        ('Planillas','Qué es PLAME','PLAME es el componente de Planilla Electrónica usado para declarar remuneraciones, descuentos, aportes y tributos laborales mensuales ante SUNAT.','Normas de Planilla Electrónica SUNAT/MTPE','Debe conciliarse con boletas, AFP/ONP, EsSalud y registros laborales.','plame planilla electronica remuneraciones aportes sunat'),
-    ]
-    sistema_extra = [
-        ('portal','admin','Cómo actualizar la IA HR','Ingresa a Base IA HR y usa el botón Actualizar base IA. El sistema agrega o actualiza respuestas legales y del manual sin borrar tus registros personalizados.','/admin/ia_hr','actualizar ia base legal respuestas manual'),
-        ('portal','admin','Cómo importar normativa PDF','Ingresa a Base IA HR, sección Importar normativa PDF. Carga el archivo legal y el sistema guardará una ficha de referencia para que la IA la considere como fuente interna.','/admin/ia_hr','importar normativa pdf ley reglamento compendio'),
-        ('portal','admin','Cómo ver historial de actualización IA','Ingresa a Base IA HR y revisa el bloque Historial de actualizaciones. Ahí verás fecha, usuario, fuente y cantidad de registros agregados.','/admin/ia_hr','historial actualizaciones ia fecha usuario fuente'),
-    ]
-    total = 0
-    for item in legales_extra:
-        total += ia_upsert_legal(*item)
-    for item in sistema_extra:
-        total += ia_upsert_sistema(*item)
-    with db() as con:
-        con.execute("""INSERT INTO ia_actualizaciones_hr(tipo,fuente,registros,detalle,fecha,usuario)
-                       VALUES(?,?,?,?,?,?)""", ('actualizacion_base', fuente, total, 'Actualización PRO de base legal y manual del sistema.', now_txt(), session.get('admin_nombre') or 'admin'))
-        con.commit()
-    return total
-
-
-def ia_hr_registrar_fuente_pdf(nombre_archivo, ruta_archivo, resumen=''):
-    """Registra un PDF como fuente legal interna. No reemplaza la revisión legal humana."""
-    asegurar_ia_hr_pro()
-    nombre = clean(nombre_archivo)
-    tema = 'Normativa PDF'
-    pregunta = f'Fuente normativa: {nombre}'
-    respuesta = resumen or f'Se registró el documento legal {nombre} como fuente interna de consulta para RR.HH. Puedes agregar preguntas específicas desde Base IA HR.'
-    base = nombre
-    detalle = f'Archivo importado por administrador. Ruta interna: {ruta_archivo}'
-    keys = ia_norm(nombre).replace(' ', ' ') + ' normativa pdf ley reglamento'
-    creado = ia_upsert_legal(tema, pregunta, respuesta, base, detalle, keys)
-    with db() as con:
-        con.execute("""INSERT INTO ia_actualizaciones_hr(tipo,fuente,registros,detalle,fecha,usuario)
-                       VALUES(?,?,?,?,?,?)""", ('importacion_pdf', nombre, creado, detalle, now_txt(), session.get('admin_nombre') or 'admin'))
-        con.commit()
-    return creado
 
 
 def ia_registrar_log(rol, modulo, dni, pregunta, tipo):
@@ -817,13 +712,8 @@ def ia_registrar_log(rol, modulo, dni, pregunta, tipo):
 def ia_buscar_base_conocimiento(pregunta, rol, modulo=''):
     try:
         with db() as con:
-            if rol == 'admin':
-                # Administrador: acceso total a respuestas de admin, trabajador y ambos roles.
-                rows = con.execute("""SELECT * FROM ia_base_conocimiento_hr
-                                      WHERE activo=1""").fetchall()
-            else:
-                rows = con.execute("""SELECT * FROM ia_base_conocimiento_hr
-                                      WHERE activo=1 AND rol_destino IN ('ambos', ?)""", (rol,)).fetchall()
+            rows = con.execute("""SELECT * FROM ia_base_conocimiento_hr
+                                  WHERE activo=1 AND rol_destino IN ('ambos', ?)""", (rol,)).fetchall()
         if not rows:
             return None
         ranked = sorted(rows, key=lambda r: ia_score(pregunta + ' ' + modulo, r), reverse=True)
@@ -837,52 +727,9 @@ def ia_buscar_base_conocimiento(pregunta, rol, modulo=''):
 
 
 def ia_buscar_legal(pregunta):
-    """Busca primero coincidencias exactas/frases y luego por puntaje."""
     try:
-        pregunta_n = ia_norm(pregunta)
         with db() as con:
             rows = con.execute('SELECT * FROM ia_legislacion_peru WHERE activo=1').fetchall()
-        if not rows:
-            return None
-
-        # 1) Coincidencia exacta por pregunta clave normalizada.
-        for r in rows:
-            clave_n = ia_norm(r['pregunta_clave'])
-            if pregunta_n == clave_n or clave_n in pregunta_n or pregunta_n in clave_n:
-                return f"""
-                <div class='ia-result legal'>
-                  <h3>{h(r['pregunta_clave'])}</h3>
-                  <p>{h(r['respuesta'])}</p>
-                  <p><b>Base legal referencial:</b> {h(r['base_legal'])}</p>
-                  <p class='muted'>{h(r['detalle_legal'])}</p>
-                  <small>Respuesta informativa. RR.HH. debe validar régimen, jornada, fecha, documentos y caso concreto antes de aplicar.</small>
-                </div>"""
-
-        # 2) Frases críticas para evitar confusiones.
-        sinonimos = {
-            'vacaciones ordinarias': ['vacaciones ordinarias','vacaciones normales','descanso vacacional anual','vacacion ordinaria'],
-            'vacaciones truncas': ['vacaciones truncas','vacacion trunca','truncas'],
-            'vacaciones vencidas': ['vacaciones vencidas','vacacion vencida','no gozadas','no goce vacaciones'],
-            'boleta de utilidades': ['boleta de utilidades','boletas utilidades','constancia de utilidades','boleta utilidad'],
-            'boleta de pago': ['boleta de pago','boleta mensual','boleta remuneracion'],
-            'boleta cts': ['boleta cts','boleta de cts','constancia cts'],
-            'boleta de gratificación': ['boleta gratificacion','boleta de gratificacion','constancia gratificacion'],
-        }
-        for objetivo, frases in sinonimos.items():
-            if any(f in pregunta_n for f in frases):
-                ranked_exact = [r for r in rows if objetivo in ia_norm(r['pregunta_clave']) or objetivo in ia_norm(r['palabras_clave'])]
-                if ranked_exact:
-                    r = ranked_exact[0]
-                    return f"""
-                    <div class='ia-result legal'>
-                      <h3>{h(r['pregunta_clave'])}</h3>
-                      <p>{h(r['respuesta'])}</p>
-                      <p><b>Base legal referencial:</b> {h(r['base_legal'])}</p>
-                      <p class='muted'>{h(r['detalle_legal'])}</p>
-                      <small>Respuesta informativa. RR.HH. debe validar régimen, jornada, fecha, documentos y caso concreto antes de aplicar.</small>
-                    </div>"""
-
-        # 3) Puntaje ponderado.
         ranked = sorted(rows, key=lambda r: ia_score(pregunta, r), reverse=True)
         if ranked and ia_score(pregunta, ranked[0]) >= 1:
             r = ranked[0]
@@ -892,10 +739,10 @@ def ia_buscar_legal(pregunta):
               <p>{h(r['respuesta'])}</p>
               <p><b>Base legal referencial:</b> {h(r['base_legal'])}</p>
               <p class='muted'>{h(r['detalle_legal'])}</p>
-              <small>Respuesta informativa. RR.HH. debe validar régimen, jornada, fecha, documentos y caso concreto antes de aplicar.</small>
+              <small>Respuesta informativa. Para casos especiales, RR.HH. debe validar régimen laboral, jornada y situación concreta.</small>
             </div>"""
-    except Exception as e:
-        return f"<div class='ia-result bad'><h3>Error en búsqueda legal IA</h3><p>{h(e)}</p></div>"
+    except Exception:
+        pass
     return None
 
 
@@ -944,11 +791,6 @@ def ia_hr_responder(pregunta, modulo='', rol=None, dni=None):
     admin_terms = ['cargar base','cargar trabajadores','subir saldos','cargar saldos','subir boletas masiva','sincronizar pdf','crear carpetas','reporte general','todos los trabajadores']
     if rol != 'admin' and any(t in q for t in admin_terms):
         return "<div class='ia-result bad'><h3>Acceso limitado</h3><p>Esa consulta corresponde a opciones administrativas. Desde tu portal puedes consultar tus boletas, documentos, saldo vacacional, solicitudes y conceptos laborales.</p></div>", 'bloqueo_rol'
-    # Preguntas conceptuales/legales primero para evitar confundir "qué son vacaciones ordinarias" con datos del saldo.
-    if any(x in q for x in ['que es', 'que son', 'cual es', 'cuantos dias', 'diferencia', 'significa']):
-        r = ia_buscar_legal(pregunta)
-        if r:
-            return r, 'legal_peru'
     if any(x in q for x in ['mis boletas','mis documentos','documentos','boleta','cts','gratificacion','utilidad','liquidacion']) and any(x in q for x in ['tengo','ver','donde','mis','cargadas','aparece','pendiente','resumen']):
         return ia_resumen_documental(rol, dni), 'datos_documental'
     if any(x in q for x in ['vacacion','saldo','solicitud','aprobacion','dias']) and any(x in q for x in ['tengo','mis','estado','pendiente','resumen','cuanto','cuantos']):
@@ -980,7 +822,7 @@ def ia_widget_hr(active=''):
       <div class='iahr-body'>
         <div class='iahr-ex'>{h(ejemplos)}</div>
         <input id='iahrModulo' type='hidden' value='{h(active)}'>
-        <textarea id='iahrPregunta' placeholder='Escribe tu pregunta aquí...' onkeydown="if(event.key==='Enter' && !event.shiftKey){{event.preventDefault(); iahrAsk(event);}}"></textarea>
+        <textarea id='iahrPregunta' placeholder='Escribe tu pregunta aquí...'></textarea>
         <button type='button' class='btn-green iahr-send' onclick='iahrAsk(event)'>Consultar IA</button>
         <div id='iahrRespuesta' class='iahr-respuesta'><div class='muted'>La respuesta se filtrará según tu rol.</div></div>
       </div>
@@ -1637,320 +1479,6 @@ def portal_required(fn):
     return wrapper
 
 
-# =============================
-# IA HR PRO PLUS - RR.HH. PERÚ / SISTEMA / DATOS REALES
-# =============================
-# Mejora: administrador puede consultar TODO (admin + trabajador + legal + datos).
-# Mejora: trabajador queda limitado a su información personal y consultas legales generales.
-# Mejora: preguntas tipo "qué es..." priorizan base legal antes que datos documentales.
-# Mejora: mayor base inicial de RR.HH. Perú, régimen privado y régimen agrario.
-
-def ia_keywords_hit(q_norm, terms):
-    return any(ia_norm(t) in q_norm for t in terms)
-
-
-def ia_score(pregunta, row):
-    """Score tolerante: coincidencia exacta + tokens + plurales simples."""
-    qn = ia_norm(pregunta)
-    q_tokens = [x for x in qn.split() if len(x) > 2]
-    q = set(q_tokens)
-    try:
-        base = ' '.join([clean(row[k]) for k in row.keys() if k in ['pregunta_clave','palabras_clave','tema','modulo','respuesta','base_legal']])
-    except Exception:
-        base = str(row)
-    bn = ia_norm(base)
-    b = set([x for x in bn.split() if len(x) > 2])
-    score = len(q & b)
-    if qn and qn in bn:
-        score += 12
-    # boost por raíz simple para plurales: utilidad/utilidades, boleta/boletas, vacacion/vacaciones
-    for tok in q:
-        raiz = tok[:-2] if tok.endswith('es') else tok[:-1] if tok.endswith('s') else tok
-        if len(raiz) >= 4 and raiz in bn:
-            score += 1
-    return score
-
-
-def ia_hr_semillas_legales_plus():
-    return [
-        ('Boleta de pago','Qué es una boleta de pago','La boleta de pago es el documento que muestra al trabajador el detalle de su remuneración, descuentos, aportes, periodo pagado y otros conceptos de planilla. Sirve como constancia del pago efectuado.','D.S. N.° 001-98-TR y normas de planilla electrónica','Debe contener información suficiente para identificar al empleador, trabajador, periodo y conceptos pagados/descontados.','boleta boletas pago remuneracion sueldo descuentos aportes planilla recibo haberes'),
-        ('Boleta de utilidades','Qué es boleta de utilidades','La boleta de utilidades es el documento o constancia donde se informa el pago de participación en utilidades cuando la empresa está obligada a distribuirlas. Muestra el importe pagado y, según el formato interno, puede detallar criterios como días laborados y remuneraciones computables.','D. Leg. N.° 892, D.S. N.° 009-98-TR y normas complementarias','En empresas obligadas, la participación se distribuye conforme a la actividad económica y reglas legales; en régimen agrario se consideran reglas especiales de Ley N.° 31110.','boleta utilidades utilidad participacion trabajadores renta empresa pago reparto'),
-        ('Utilidades','Qué son utilidades','La participación en utilidades es un beneficio por el cual ciertos trabajadores participan en un porcentaje de la renta anual antes de impuestos de empresas que generan rentas de tercera categoría y cumplen condiciones legales.','D. Leg. N.° 892, D.S. N.° 009-98-TR y modificatorias','El porcentaje depende de la actividad económica. La distribución se realiza, de forma general, en función a días laborados y remuneraciones.','utilidades utilidad participacion trabajadores renta tercera categoria porcentaje reparto'),
-        ('CTS','Qué es CTS','La Compensación por Tiempo de Servicios (CTS) es un beneficio social de previsión frente al cese. Funciona como un fondo de protección económica para el trabajador cuando termina la relación laboral.','TUO de la Ley de CTS - D.S. N.° 001-97-TR y D.S. N.° 004-97-TR','Generalmente se deposita en mayo y noviembre cuando corresponde, según régimen y cumplimiento de requisitos.','cts compensacion tiempo servicios deposito mayo noviembre cese'),
-        ('CTS','Cuándo se deposita la CTS','En el régimen privado general, la CTS se deposita semestralmente, normalmente hasta la primera quincena de mayo y noviembre, siempre que el trabajador cumpla los requisitos legales.','TUO de la Ley de CTS - D.S. N.° 001-97-TR','El tratamiento puede variar por régimen especial, tiempo parcial, microempresa o remuneración integral anual.','cuando depositan cts mayo noviembre fecha deposito'),
-        ('Gratificación','Qué es gratificación','La gratificación legal es un beneficio social que se paga por Fiestas Patrias y Navidad, usualmente en julio y diciembre, cuando el trabajador cumple los requisitos legales.','Ley N.° 27735 y D.S. N.° 005-2002-TR','Puede existir gratificación trunca si cesa antes del semestre completo y cumple condiciones.','gratificacion gratificaciones julio diciembre fiestas patrias navidad'),
-        ('Gratificación','Qué es gratificación trunca','La gratificación trunca es el pago proporcional que corresponde cuando el trabajador cesa antes de julio o diciembre, siempre que haya laborado al menos un mes completo dentro del semestre computable.','Ley N.° 27735 y D.S. N.° 005-2002-TR','Debe revisarse fecha de ingreso, cese y remuneración computable.','gratificacion trunca proporcional cese semestre'),
-        ('Vacaciones','Cuándo gano vacaciones','En el régimen laboral privado general, el trabajador adquiere derecho a 30 días calendario de descanso vacacional por cada año completo de servicios, sujeto al récord vacacional.','D. Leg. N.° 713 y D.S. N.° 012-92-TR','El récord depende de la jornada semanal y días efectivamente laborados.','vacaciones cuando gano derecho record vacacional 30 dias'),
-        ('Vacaciones','Qué es récord vacacional','El récord vacacional es el requisito de asistencia o días efectivos de labor dentro del año de servicios para acceder al descanso vacacional.','D. Leg. N.° 713 y D.S. N.° 012-92-TR','Se evalúa según jornada y supuestos legalmente considerados como días efectivos.','record vacacional dias laborados requisito asistencia'),
-        ('Vacaciones','Qué son vacaciones truncas','Las vacaciones truncas son el pago proporcional por vacaciones generado al cese antes de cumplir un nuevo año completo, conforme al tiempo laborado y reglas aplicables.','D. Leg. N.° 713 y D.S. N.° 012-92-TR','Se calculan en liquidación de beneficios sociales.','vacaciones truncas cese liquidacion proporcional'),
-        ('Vacaciones','Qué es indemnización vacacional','La indemnización vacacional puede corresponder cuando el trabajador no goza oportunamente su descanso vacacional dentro del plazo legal, según las reglas del régimen privado.','D. Leg. N.° 713','Debe evaluarse periodo vencido, oportunidad de goce y responsabilidad del empleador.','indemnizacion vacacional triple vacaciones vencidas no gozadas'),
-        ('Liquidación','Qué es liquidación de beneficios sociales','La liquidación de beneficios sociales es el cálculo de conceptos pendientes al cese: remuneraciones, CTS, gratificación trunca, vacaciones truncas o pendientes y otros pagos que correspondan.','Normativa laboral peruana según cada beneficio','Depende de régimen laboral, motivo de cese, fecha de ingreso, fecha de cese y pagos previos.','liquidacion beneficios sociales renuncia cese despido calculo'),
-        ('Asignación familiar','Qué es asignación familiar','La asignación familiar es un beneficio equivalente al 10% de la Remuneración Mínima Vital para trabajadores del régimen privado que cumplen los requisitos legales y tienen hijos a cargo según la norma.','Ley N.° 25129 y D.S. N.° 035-90-TR','El monto cambia cuando cambia la RMV. Debe sustentarse la condición familiar.','asignacion familiar hijo 10 rmv beneficio'),
-        ('Jornada','Cuál es la jornada máxima de trabajo','La jornada máxima ordinaria en Perú es de 8 horas diarias o 48 horas semanales, salvo jornadas especiales, acumulativas o atípicas válidamente implementadas.','Constitución Política del Perú y D.S. N.° 007-2002-TR','RR.HH. debe revisar régimen, jornada, horario, asistencia y descansos.','jornada maxima 8 horas 48 semanales horario trabajo'),
-        ('Horas extras','Qué son horas extras','Las horas extras son labores realizadas por encima de la jornada ordinaria. Deben ser voluntarias, registradas y pagadas con sobretasa legal o compensadas conforme a acuerdo válido.','D.S. N.° 007-2002-TR y reglamento','La sobretasa mínima usual es 25% para las dos primeras horas y 35% para las siguientes.','horas extras sobretiempo sobretasa 25 35'),
-        ('Feriados','Qué pasa si trabajo feriado','Si se trabaja en feriado no laborable, puede corresponder descanso sustitutorio o pago adicional según la norma. RR.HH. debe verificar si existió compensación.','D. Leg. N.° 713','El tratamiento depende del feriado, programación y descanso sustitutorio.','feriado trabajado pago descanso sustitutorio triple'),
-        ('Descanso semanal','Qué es descanso semanal obligatorio','Es el descanso remunerado semanal que, de forma general, debe ser de al menos 24 horas consecutivas, según la organización de la jornada.','D. Leg. N.° 713','Puede programarse según operación, turnos y régimen laboral.','descanso semanal obligatorio dso 24 horas'),
-        ('Contrato','Qué es un contrato de trabajo','Es el acuerdo por el cual una persona presta servicios personales, remunerados y subordinados para un empleador. Si existen esos elementos, se configura relación laboral.','TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR','Los elementos clave son prestación personal, remuneración y subordinación.','contrato trabajo relacion laboral subordinacion remuneracion servicios'),
-        ('Contrato','Cuántos tipos de contrato hay','En el régimen privado se suele distinguir contratos a plazo indeterminado y contratos sujetos a modalidad o plazo fijo. También existen contratos a tiempo parcial y modalidades especiales según actividad.','TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR','Los contratos sujetos a modalidad requieren causa objetiva y formalidades.','tipos contrato indeterminado plazo fijo sujeto modalidad parcial'),
-        ('Contrato','Qué es contrato intermitente','Es un contrato sujeto a modalidad para actividades permanentes pero discontinuas, donde la prestación se activa según necesidad de la actividad.','TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR','Debe existir causa objetiva y respetarse la formalidad contractual.','contrato intermitente discontinuo campaña agro actividad'),
-        ('Contrato','Qué es periodo de prueba','El periodo de prueba es la etapa inicial de la relación laboral durante la cual se evalúa la adaptación del trabajador al puesto. En general es de 3 meses, con reglas especiales para cargos de confianza o dirección.','TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR','Debe verificarse puesto, convenio y condiciones pactadas.','periodo prueba tres meses confianza direccion'),
-        ('Licencia por paternidad','Qué es licencia por paternidad','Es el permiso remunerado que corresponde al trabajador padre por nacimiento de hijo o hija. La regla general vigente es 10 días calendario consecutivos, con ampliaciones en supuestos especiales.','Ley N.° 29409 modificada por Ley N.° 30807','Puede ser 20 o 30 días en supuestos especiales como nacimiento prematuro, parto múltiple, enfermedad congénita terminal, discapacidad severa o complicaciones graves de la madre.','licencia paternidad nacimiento hijo padre 10 dias parto multiple prematuro'),
-        ('Licencia por paternidad','Cuántos días son de licencia por paternidad','La licencia por paternidad es de 10 días calendario consecutivos en parto natural o cesárea. Puede ampliarse a 20 o 30 días en casos especiales regulados.','Ley N.° 29409 modificada por Ley N.° 30807','RR.HH. debe validar el certificado y el supuesto aplicable.','dias licencia paternidad 10 20 30 parto cesarea'),
-        ('Licencia por maternidad','Qué es licencia por maternidad','Es el descanso pre y postnatal de la trabajadora gestante. En Perú suma 98 días naturales, usualmente 49 días antes y 49 días después del parto, con ampliaciones en casos especiales.','Ley N.° 26644 y normas modificatorias','Puede ampliarse por nacimiento múltiple o niño con discapacidad, entre otros supuestos.','licencia maternidad prenatal postnatal 98 dias gestante'),
-        ('Lactancia','Qué es permiso por lactancia','Es el derecho de la madre trabajadora a una hora diaria de permiso por lactancia materna hasta que su hijo cumpla un año, conforme a la ley.','Ley N.° 27240 y normas modificatorias','El horario debe coordinarse sin afectar el derecho.','lactancia permiso hora diaria madre hijo un año'),
-        ('Licencia por fallecimiento','Qué es licencia por luto','Es la licencia remunerada por fallecimiento de familiares directos. En el sector privado comprende 5 días calendario por fallecimiento de cónyuge, padres, hijos o hermanos, con reglas de ampliación por traslado.','Ley N.° 31602 y D.S. N.° 013-2023-TR','El trabajador debe sustentar parentesco y fallecimiento; la extensión depende del traslado.','licencia luto fallecimiento muerte familiar conyuge padres hijos hermanos 5 dias'),
-        ('Licencia por adopción','Qué es licencia por adopción','Es una licencia laboral vinculada al proceso de adopción, según los supuestos y requisitos establecidos por la ley.','Ley N.° 27409','RR.HH. debe validar resolución o documento sustentatorio aplicable.','licencia adopcion trabajador hijo adoptivo'),
-        ('Licencia familiar grave','Qué es licencia por familiar grave','Es la licencia para trabajadores con familiares directos con enfermedad grave o terminal o que sufran accidente grave, bajo requisitos legales.','Ley N.° 30012 y D.S. N.° 008-2017-TR','Debe acreditarse el vínculo y la condición médica según reglamento.','licencia familiar enfermedad grave terminal accidente grave'),
-        ('Descanso médico','Qué es descanso médico','Es la indicación de reposo emitida por profesional autorizado por incapacidad temporal. Sirve para justificar inasistencia y, según corresponda, gestionar subsidios.','Ley N.° 26790, normas EsSalud y procedimientos aplicables','RR.HH. debe validar certificado, CITT o canje, fechas y requisitos.','descanso medico certificado incapacidad temporal citt essalud'),
-        ('Subsidio','Qué es subsidio por incapacidad temporal','Es una prestación económica vinculada a incapacidad temporal para el trabajo, conforme a reglas de EsSalud y requisitos de aportación/acreditación.','Ley N.° 26790 y normas EsSalud','El procedimiento depende de días, acreditación y documentación médica.','subsidio incapacidad temporal essalud descanso medico'),
-        ('Subsidio','Qué es subsidio por maternidad','Es la prestación económica asociada al descanso por maternidad, sujeta a requisitos de acreditación y aportes ante EsSalud.','Ley N.° 26790 y normas EsSalud','Debe revisarse acreditación, vínculo laboral y descanso pre/postnatal.','subsidio maternidad essalud descanso prenatal postnatal'),
-        ('AFP ONP','Qué es AFP y ONP','AFP y ONP son sistemas de pensiones. AFP corresponde al Sistema Privado de Pensiones y ONP al Sistema Nacional de Pensiones. El trabajador aporta según su afiliación.','Normativa del sistema pensionario peruano','RR.HH. debe validar afiliación, comisión, aportes y declaración en planilla.','afp onp pension aporte descuento sistema previsional'),
-        ('Seguro Vida Ley','Qué es Vida Ley','El Seguro Vida Ley es un seguro obligatorio de vida a favor del trabajador, contratado por el empleador según los supuestos y coberturas reguladas.','D. Leg. N.° 688 y normas complementarias','Otorga coberturas por fallecimiento o invalidez según la póliza y norma.','vida ley seguro vida obligatorio trabajador'),
-        ('SCTR','Qué es SCTR','El Seguro Complementario de Trabajo de Riesgo cubre prestaciones de salud y pensiones por accidentes de trabajo o enfermedades profesionales en actividades de alto riesgo.','Ley N.° 26790 y normas complementarias','Aplica según actividad económica y riesgo.','sctr seguro complementario trabajo riesgo salud pension'),
-        ('SST','Qué es SST','SST significa Seguridad y Salud en el Trabajo. Es el sistema de prevención de riesgos laborales para proteger la vida, salud e integridad de los trabajadores.','Ley N.° 29783 y reglamento','Incluye IPERC, capacitaciones, comité/supervisor, investigación de accidentes y medidas preventivas.','sst seguridad salud trabajo prevencion riesgos'),
-        ('IPERC','Qué es IPERC','IPERC es la Identificación de Peligros, Evaluación de Riesgos y Controles. Sirve para reconocer peligros, valorar riesgos y definir controles preventivos.','Ley N.° 29783 y D.S. N.° 005-2012-TR','Debe actualizarse según cambios de proceso, incidentes o condiciones de trabajo.','iperc peligros riesgos controles matriz sst'),
-        ('Accidente de trabajo','Qué es accidente de trabajo','Es todo suceso repentino que sobreviene por causa o con ocasión del trabajo y que produce lesión, perturbación funcional, invalidez o muerte, según la normativa de SST.','Ley N.° 29783 y reglamento','Debe investigarse, registrarse y reportarse según corresponda.','accidente trabajo lesion investigacion sst'),
-        ('Incidente','Qué es incidente de trabajo','Es un suceso relacionado con el trabajo que pudo causar daño o lesión, aunque no necesariamente haya producido una lesión. Sirve para prevenir accidentes.','Ley N.° 29783 y reglamento','Debe analizarse para tomar acciones preventivas.','incidente trabajo casi accidente sst'),
-        ('Hostigamiento sexual','Qué es hostigamiento sexual laboral','Es una forma de violencia que puede presentarse en el ámbito laboral mediante conductas de naturaleza sexual o sexista no deseadas. Debe atenderse mediante procedimiento interno y medidas de protección.','Ley N.° 27942 y normas complementarias','El empleador debe prevenir, investigar y sancionar conforme al procedimiento aplicable.','hostigamiento sexual laboral acoso procedimiento comite'),
-        ('Teletrabajo','Qué es teletrabajo','El teletrabajo es una modalidad especial de prestación de servicios usando tecnologías de la información, fuera del centro de trabajo o con esquema híbrido, según acuerdo y normativa.','Ley N.° 31572 y reglamento','Debe regularse mediante acuerdo, condiciones, seguridad de información y SST.','teletrabajo trabajo remoto hibrido ley 31572'),
-        ('Régimen general','Qué es régimen laboral general privado','Es el régimen laboral aplicable a trabajadores de la actividad privada bajo el marco del D. Leg. N.° 728 y normas complementarias, salvo regímenes especiales.','TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR','Incluye reglas generales sobre contratación, beneficios, jornada y extinción.','regimen general privado 728 actividad privada'),
-        ('Régimen MYPE','Qué es régimen MYPE','Es un régimen especial para micro y pequeña empresa inscrita según la normativa aplicable. Los beneficios laborales pueden variar respecto del régimen general.','TUO de la Ley MYPE y normas complementarias','Debe verificarse inscripción REMYPE, fecha y categoría de empresa.','regimen mype microempresa pequena empresa remype beneficios'),
-        ('Régimen agrario','Qué es régimen laboral agrario','Es un régimen especial para actividades agrarias y agroindustriales comprendidas en Ley N.° 31110. Tiene reglas sobre remuneración básica, remuneración diaria, CTS/gratificaciones, BETA, jornada y otros derechos.','Ley N.° 31110 y D.S. N.° 005-2021-MIDAGRI','No todo personal está comprendido; debe revisarse actividad, área y alcance de la ley.','regimen agrario ley 31110 trabajador agrario agroindustrial beta rd rb'),
-        ('Régimen agrario','Qué es BETA agrario','La BETA es la Bonificación Especial por Trabajo Agrario equivalente al 30% de la RMV, con carácter no remunerativo y no pensionable, según Ley N.° 31110.','Ley N.° 31110 y D.S. N.° 005-2021-MIDAGRI','Puede pagarse mensual o proporcionalmente según días laborados, conforme a la norma.','beta bonificacion especial trabajo agrario 30 rmv'),
-        ('Régimen agrario','Cómo se paga CTS y gratificación en régimen agrario','En régimen agrario, la RB no puede ser menor a la RMV; las gratificaciones equivalen a 16.66% de la RB y la CTS a 9.72% de la RB, pudiendo integrarse en la remuneración diaria o pagarse en oportunidades generales si el trabajador lo elige conforme a la norma.','Ley N.° 31110 y D.S. N.° 005-2021-MIDAGRI','La decisión debe comunicarse por escrito dentro del plazo establecido en el reglamento.','cts gratificacion regimen agrario 9.72 16.66 remuneracion diaria'),
-        ('CAS','Qué es régimen CAS','El CAS es un régimen de contratación administrativa de servicios usado en el sector público, con reglas propias y diferentes al régimen laboral privado.','D. Leg. N.° 1057 y normas complementarias','No debe confundirse con el régimen privado D. Leg. 728.','cas contrato administrativo servicios sector publico'),
-        ('Practicantes','Qué son modalidades formativas laborales','Son convenios formativos como prácticas preprofesionales o profesionales, orientados al aprendizaje y formación, no equivalentes automáticamente a contrato laboral si cumplen la ley.','Ley N.° 28518 y D.S. N.° 007-2005-TR','Deben respetarse subvención, jornada formativa, convenio y plan de aprendizaje.','practicantes practicas preprofesionales profesionales modalidades formativas'),
-        ('Intermediación','Qué es intermediación laboral','Es la provisión de personal mediante empresas autorizadas para servicios temporales, complementarios o especializados, bajo reglas legales específicas.','Ley N.° 27626 y D.S. N.° 003-2002-TR','Debe verificarse registro y límites legales.','intermediacion laboral services cooperativas tercerizacion'),
-        ('Tercerización','Qué es tercerización laboral','Es la contratación de una empresa para realizar una actividad con autonomía empresarial, recursos propios y asunción de riesgos, conforme a la normativa.','Ley N.° 29245, D. Leg. N.° 1038 y reglamento','No debe usarse para simple provisión de personal.','tercerizacion outsourcing autonomia empresarial'),
-        ('Remuneración','Qué es remuneración computable','Es la remuneración que se toma como base para calcular determinados beneficios, según la naturaleza del concepto y la norma de cada beneficio.','Normativa laboral peruana según beneficio','No todos los conceptos pagados son computables para todos los beneficios.','remuneracion computable calculo beneficios cts gratificacion'),
-        ('Conceptos no remunerativos','Qué conceptos no son remunerativos','Algunos conceptos pueden no tener carácter remunerativo por ley o por su naturaleza, como ciertas condiciones de trabajo, movilidad supeditada, gratificaciones extraordinarias, entre otros, según evaluación.','TUO del D. Leg. N.° 728 y normas complementarias','Debe analizarse regularidad, libre disposición y finalidad del pago.','conceptos no remunerativos movilidad condiciones trabajo'),
-        ('Despido','Qué es despido arbitrario','Es la extinción unilateral del vínculo por el empleador sin causa justa o sin cumplir el procedimiento legal. Puede generar indemnización según el régimen aplicable.','TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR','Debe revisarse tipo de contrato, antigüedad, remuneración y causal.','despido arbitrario indemnizacion causa justa'),
-        ('Renuncia','Qué pasa si renuncio','La renuncia es la decisión del trabajador de terminar el vínculo laboral. Usualmente debe comunicarse con anticipación o solicitar exoneración del plazo. Corresponde liquidación de beneficios generados.','TUO del D. Leg. N.° 728 y normas complementarias','RR.HH. debe calcular beneficios pendientes hasta la fecha de cese.','renuncia voluntaria cese carta liquidacion 30 dias'),
-        ('Suspensión perfecta','Qué es suspensión perfecta','Es la suspensión temporal de la obligación de trabajar y pagar remuneración, bajo supuestos legales específicos. Debe estar sustentada y cumplir requisitos.','TUO del D. Leg. N.° 728 y normas especiales','Debe evaluarse caso concreto y formalidades.','suspension perfecta contrato remuneracion temporal'),
-        ('Reglamento interno','Qué es reglamento interno de trabajo','Es el documento interno que contiene reglas de orden laboral, deberes, derechos, disciplina, horarios y procedimientos dentro de la empresa, cuando corresponde.','D.S. N.° 039-91-TR','Debe difundirse y aplicarse respetando la ley.','reglamento interno trabajo rit normas empresa'),
-        ('Sindicato','Qué es libertad sindical','Es el derecho de trabajadores a organizarse, afiliarse, constituir sindicatos y realizar actividad sindical conforme a la ley.','Constitución, convenios OIT y normas laborales peruanas','El empleador debe respetar la actividad sindical lícita.','sindicato libertad sindical afiliacion negociacion colectiva'),
-        ('Inspección laboral','Qué es SUNAFIL','SUNAFIL es la entidad inspectiva encargada de fiscalizar el cumplimiento de normas sociolaborales y de seguridad y salud en el trabajo.','Ley N.° 29981 y normas inspectivas','Puede realizar actuaciones inspectivas y proponer sanciones ante incumplimientos.','sunafil inspeccion laboral fiscalizacion multa'),
-        ('Boleta vacaciones','Qué es boleta de vacaciones','Es el documento de pago asociado a remuneración vacacional o concepto vinculado al descanso vacacional, según el proceso de planilla de la empresa.','D. Leg. N.° 713 y normas de planillas','Debe corresponder al periodo, monto y trabajador correcto.','boleta vacaciones pago vacacional remuneracion vacacional'),
-        ('Boleta CTS','Qué es boleta CTS','Es el documento o constancia asociada al depósito o cálculo de CTS. Informa el beneficio calculado para el periodo correspondiente.','D.S. N.° 001-97-TR y normas de planilla','Puede estar vinculada al depósito semestral o liquidación, según el caso.','boleta cts deposito compensacion tiempo servicios'),
-        ('Boleta gratificación','Qué es boleta de gratificación','Es el documento que informa el pago de la gratificación legal de julio o diciembre, o gratificación trunca si corresponde.','Ley N.° 27735 y normas de planilla','Debe reflejar monto, periodo y bonificación extraordinaria cuando aplique.','boleta gratificacion julio diciembre bonificacion extraordinaria'),
-    ]
-
-
-def ia_hr_semillas_sistema_plus():
-    return [
-        ('documental','admin','Dónde cargar boletas de pago','Para cargar boletas ingresa a Gestión Documental > Documentos de pago o Subir / gestionar documentos. Selecciona tipo: Normal, CTS, Gratificación, Utilidad, Vacaciones o Liquidación, periodo y archivo.','/admin/documentos','boleta boletas pago cargar subir normal cts gratificacion utilidad liquidacion documentos pago'),
-        ('documental','admin','Dónde cargar boletas utilidades','Ingresa a Gestión Documental > Documentos de pago > Utilidad. También puedes cargar desde Subir / gestionar documentos seleccionando tipo Utilidad y periodo correspondiente.','/admin/documentos?tipo=Utilidad','cargar boletas utilidades utilidad subir documentos pago'),
-        ('documental','admin','Dónde sincronizar PDFs por DNI','Ingresa a Gestión Documental > Detectar PDFs o Sincronizar carpetas. El sistema revisa la carpeta DOCUMENTOS_PRIZE_AUTO, identifica DNI y registra documentos vinculados al trabajador.','/admin/sincronizar','detectar pdf dni sincronizar carpeta documentos prize auto'),
-        ('documental','admin','Dónde crear carpetas documentales','Ingresa a Gestión Documental > Crear carpetas. El sistema arma la estructura local para documentos de pago, empresa y personales.','/admin/crear_carpetas','crear carpetas documental estructura documentos'),
-        ('documental','admin','Dónde descargar plantilla documental','Ingresa a Gestión Documental > Plantilla Documental. Descarga el Excel base para organizar cargas de documentos.','/admin/plantilla_gestion/documental','plantilla documental excel descargar'),
-        ('documental','admin','Qué documentos están pendientes','Consulta Gestión Documental > Subir / gestionar documentos o usa la IA preguntando por resumen documental. Verás pendientes, leídos, aceptados, firmados y rechazados.','/admin/documentos','documentos pendientes lectura aceptacion firma rechazo'),
-        ('documental','admin','Cómo revisar documentos rechazados','Ingresa a Gestión Documental > Subir / gestionar documentos y filtra por estado Rechazado. Revisa comentario, trabajador, tipo y periodo.','/admin/documentos','documentos rechazados comentario estado filtro'),
-        ('documental','trabajador','Dónde veo mis boletas','Ingresa a Gestión Documental > Documentos de pago. Ahí verás tus boletas normales, CTS, gratificaciones, utilidades, vacaciones o liquidaciones cargadas para tu DNI.','/panel','mis boletas ver descargar pago cts gratificacion utilidad liquidacion'),
-        ('documental','trabajador','No veo mi boleta','Si no visualizas tu boleta, puede que RR.HH. aún no la haya cargado o que el archivo no esté vinculado a tu DNI. Revisa tipo y periodo; si no aparece, consulta con RR.HH.','/panel','no veo mi boleta no aparece documento'),
-        ('documental','ambos','Qué significa documento pendiente','Un documento pendiente es aquel que fue cargado, pero aún no registra lectura, aceptación, firma o aprobación final, según el flujo configurado por RR.HH.','','documento pendiente estado lectura firma aprobacion'),
-        ('vacacional','admin','Dónde cargar saldos vacacionales','Ingresa a Gestión Vacacional > Saldos Vacacionales o Dashboard Vacacional. Desde ahí cargas Excel con DNI, periodo, días ganados, gozados y saldo.','/admin/vacaciones#cargar-saldos','cargar saldos vacaciones vacacionales excel saldo'),
-        ('vacacional','admin','Dónde aprobar vacaciones','Ingresa a Gestión Vacacional > Aprobaciones. Revisa solicitudes pendientes de jefe y Gestión Humana, según el flujo.','/admin/vacaciones#aprobaciones','aprobar vacaciones aprobaciones jefe gestion humana'),
-        ('vacacional','admin','Dónde ver reportes vacacionales','Ingresa a Gestión Vacacional > Reportes. Revisa solicitudes, saldos, aprobadas, rechazadas y pendientes.','/admin/vacaciones#reportes','reportes vacaciones vacacional indicadores'),
-        ('vacacional','admin','Cómo anular solicitud de vacaciones','Ingresa a Gestión Vacacional > Solicitudes o Aprobaciones, ubica el registro, revisa estado y usa la acción de anulación si está habilitada para administrador.','/admin/vacaciones','anular solicitud vacaciones eliminar rechazar'),
-        ('vacacional','trabajador','Cómo solicito vacaciones','Ingresa a Gestión Vacacional > Saldo y solicitud. Selecciona periodo con saldo, registra fechas y envía la solicitud para aprobación.','/vacaciones/mi_solicitud#solicitar','solicitar vacaciones pedido solicitud saldo'),
-        ('vacacional','trabajador','Dónde veo mi saldo vacacional','Ingresa a Gestión Vacacional > Dashboard vacacional. Ahí verás periodos, días ganados, gozados y saldo disponible.','/vacaciones/mi_solicitud','mi saldo vacaciones cuantos dias tengo'),
-        ('vacacional','trabajador','Dónde veo el estado de mi solicitud','Ingresa a Gestión Vacacional > Dashboard vacacional. En Mis solicitudes verás si está pendiente, aprobada, rechazada o anulada.','/vacaciones/mi_solicitud','estado solicitud vacaciones pendiente aprobada rechazada'),
-        ('portal','ambos','Qué puede hacer la IA HR','La IA HR ayuda con dudas del sistema, gestión documental, boletas, vacaciones, datos reales y conceptos laborales peruanos. La respuesta se filtra por rol.','','ia asistente ayuda portal rrhh'),
-        ('portal','trabajador','Por qué no puedo cargar base de trabajadores','Esa opción es solo para administradores. Como trabajador puedes consultar tus documentos, boletas, vacaciones y estado de tus solicitudes.','','cargar base trabajadores no puedo'),
-        ('portal','admin','Qué puede consultar el administrador','El administrador puede consultar todo: manual del sistema, datos documentales, datos vacacionales, consultas legales y preguntas orientadas al trabajador para validar cómo respondería el portal.','','administrador consultar todo roles trabajador legal datos'),
-    ]
-
-
-def asegurar_ia_hr_pro():
-    """Crea y precarga IA HR. No borra respuestas editadas; agrega/actualiza catálogo base amplio."""
-    with db() as con:
-        con.execute("""CREATE TABLE IF NOT EXISTS ia_base_conocimiento_hr(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            modulo TEXT,
-            rol_destino TEXT DEFAULT 'ambos',
-            pregunta_clave TEXT,
-            respuesta TEXT,
-            ruta TEXT,
-            palabras_clave TEXT,
-            activo INTEGER DEFAULT 1,
-            fecha_registro TEXT,
-            registrado_por TEXT
-        )""")
-        con.execute("""CREATE TABLE IF NOT EXISTS ia_legislacion_peru(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tema TEXT,
-            pregunta_clave TEXT,
-            respuesta TEXT,
-            base_legal TEXT,
-            detalle_legal TEXT,
-            palabras_clave TEXT,
-            activo INTEGER DEFAULT 1,
-            fecha_actualizacion TEXT
-        )""")
-        con.execute("""CREATE TABLE IF NOT EXISTS ia_hr_log(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            rol TEXT,
-            modulo TEXT,
-            dni TEXT,
-            pregunta TEXT,
-            respuesta_tipo TEXT,
-            fecha TEXT,
-            usuario TEXT
-        )""")
-        con.execute("""CREATE TABLE IF NOT EXISTS ia_actualizaciones_hr(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT,
-            fuente TEXT,
-            registros INTEGER DEFAULT 0,
-            detalle TEXT,
-            fecha TEXT,
-            usuario TEXT
-        )""")
-
-        # Índices útiles para evitar duplicados y acelerar búsqueda
-        try: con.execute('CREATE INDEX IF NOT EXISTS idx_ia_leg_activo ON ia_legislacion_peru(activo, tema)')
-        except Exception: pass
-        try: con.execute('CREATE INDEX IF NOT EXISTS idx_ia_base_activo ON ia_base_conocimiento_hr(activo, rol_destino, modulo)')
-        except Exception: pass
-        for modulo, rol, preg, resp, ruta, keys in ia_hr_semillas_sistema_plus():
-            existe = con.execute('SELECT id FROM ia_base_conocimiento_hr WHERE UPPER(pregunta_clave)=UPPER(?) AND rol_destino=? LIMIT 1', (preg, rol)).fetchone()
-            if not existe:
-                con.execute("""INSERT INTO ia_base_conocimiento_hr(modulo,rol_destino,pregunta_clave,respuesta,ruta,palabras_clave,activo,fecha_registro,registrado_por)
-                               VALUES(?,?,?,?,?,?,1,?,?)""", (modulo,rol,preg,resp,ruta,keys,now_txt(),'SISTEMA'))
-        for tema, preg, resp, base, det, keys in ia_hr_semillas_legales_plus():
-            existe = con.execute('SELECT id FROM ia_legislacion_peru WHERE UPPER(pregunta_clave)=UPPER(?) LIMIT 1', (preg,)).fetchone()
-            if not existe:
-                con.execute("""INSERT INTO ia_legislacion_peru(tema,pregunta_clave,respuesta,base_legal,detalle_legal,palabras_clave,activo,fecha_actualizacion)
-                               VALUES(?,?,?,?,?,?,1,?)""", (tema,preg,resp,base,det,keys,now_txt()))
-            else:
-                # actualiza claves y respuesta base solo si mantiene activo, para mejorar coincidencias de versiones previas
-                con.execute("""UPDATE ia_legislacion_peru SET tema=?, respuesta=?, base_legal=?, detalle_legal=?, palabras_clave=?, fecha_actualizacion=? WHERE id=?""",
-                            (tema, resp, base, det, keys, now_txt(), existe['id']))
-        con.commit()
-
-
-def ia_buscar_base_conocimiento(pregunta, rol, modulo=''):
-    try:
-        with db() as con:
-            if rol == 'admin':
-                rows = con.execute("SELECT * FROM ia_base_conocimiento_hr WHERE activo=1").fetchall()
-            else:
-                rows = con.execute("""SELECT * FROM ia_base_conocimiento_hr
-                                      WHERE activo=1 AND rol_destino IN ('ambos', ?)""", (rol,)).fetchall()
-        if not rows:
-            return None
-        ranked = sorted(rows, key=lambda r: ia_score(pregunta + ' ' + modulo, r), reverse=True)
-        top_score = ia_score(pregunta + ' ' + modulo, ranked[0]) if ranked else 0
-        if ranked and top_score >= 2:
-            r = ranked[0]
-            ruta = f"<p><b>Ruta sugerida:</b> <a href='{h(r['ruta'])}'>{h(r['ruta'])}</a></p>" if clean(r['ruta']) else ''
-            visible_rol = 'Administrador / Trabajador' if r['rol_destino']=='ambos' else r['rol_destino'].capitalize()
-            return f"<div class='ia-result ok'><h3>{h(r['pregunta_clave'])}</h3><p>{h(r['respuesta'])}</p>{ruta}<small>Base sistema · Visible para: {h(visible_rol)}</small></div>"
-    except Exception as e:
-        return f"<div class='ia-result bad'><h3>Error base IA</h3><p>{h(e)}</p></div>"
-    return None
-
-
-def ia_buscar_legal(pregunta):
-    try:
-        with db() as con:
-            rows = con.execute('SELECT * FROM ia_legislacion_peru WHERE activo=1').fetchall()
-        if not rows:
-            return None
-        ranked = sorted(rows, key=lambda r: ia_score(pregunta, r), reverse=True)
-        top_score = ia_score(pregunta, ranked[0]) if ranked else 0
-        # Umbral bajo, pero con boost de frases y tokens evita fallback genérico.
-        if ranked and top_score >= 1:
-            r = ranked[0]
-            return f"""
-            <div class='ia-result legal'>
-              <h3>{h(r['pregunta_clave'])}</h3>
-              <p>{h(r['respuesta'])}</p>
-              <p><b>Base legal referencial:</b> {h(r['base_legal'])}</p>
-              <p class='muted'>{h(r['detalle_legal'])}</p>
-              <small>Respuesta informativa. RR.HH. debe validar régimen, jornada, fecha, documentos y caso concreto antes de aplicar.</small>
-            </div>"""
-    except Exception as e:
-        return f"<div class='ia-result bad'><h3>Error legal IA</h3><p>{h(e)}</p></div>"
-    return None
-
-
-def ia_resumen_documental(rol, dni=''):
-    with db() as con:
-        if rol == 'admin':
-            total = ia_sql_count(con, 'SELECT COUNT(*) FROM documentos')
-            pendientes = ia_sql_count(con, "SELECT COUNT(*) FROM documentos WHERE COALESCE(estado,'Pendiente') IN ('Pendiente','Aceptado','Firmado')")
-            rechazados = ia_sql_count(con, "SELECT COUNT(*) FROM documentos WHERE estado='Rechazado'")
-            leidos = ia_sql_count(con, "SELECT COUNT(*) FROM documentos WHERE COALESCE(fecha_lectura,'')<>' '")
-            rows = ia_sql_rows(con, 'SELECT tipo, COUNT(*) c FROM documentos GROUP BY tipo ORDER BY c DESC LIMIT 6')
-            detalle = ''.join([f"<li>{h(r['tipo'])}: <b>{r['c']}</b></li>" for r in rows]) or '<li>Sin documentos cargados.</li>'
-            return f"<div class='ia-result ok'><h3>Resumen documental administrador</h3><p>Total: <b>{total}</b> · Pendientes: <b>{pendientes}</b> · Leídos: <b>{leidos}</b> · Rechazados: <b>{rechazados}</b></p><ul>{detalle}</ul><p>Ruta: Gestión Documental > Subir / gestionar documentos.</p></div>"
-        dni = normalizar_dni(dni)
-        total = ia_sql_count(con, 'SELECT COUNT(*) FROM documentos WHERE dni=?', (dni,))
-        leidos = ia_sql_count(con, "SELECT COUNT(*) FROM documentos WHERE dni=? AND COALESCE(fecha_lectura,'')<>''", (dni,))
-        rows = ia_sql_rows(con, 'SELECT tipo, periodo, estado, fecha_subida FROM documentos WHERE dni=? ORDER BY id DESC LIMIT 6', (dni,))
-        detalle = ''.join([f"<li>{h(r['tipo'])} · {h(r['periodo'])} · {h(r['estado'] or 'Pendiente')}</li>" for r in rows]) or '<li>Aún no tienes documentos cargados para tu DNI.</li>'
-        return f"<div class='ia-result ok'><h3>Mis documentos</h3><p>Tienes <b>{total}</b> documento(s) cargado(s). Leídos: <b>{leidos}</b>.</p><ul>{detalle}</ul><p>Ruta: Gestión Documental > Documentos de pago / empresa / personales.</p></div>"
-
-
-def ia_hr_es_pregunta_conceptual(q):
-    return ia_keywords_hit(q, ['que es','qué es','que son','qué son','concepto','definicion','definición','explicame','explícame','cuantos tipos','cuántos tipos','cuando gano','cuándo gano','cuantos dias','cuántos días','cual es','cuál es'])
-
-
-def ia_hr_responder(pregunta, modulo='', rol=None, dni=None):
-    pregunta = clean(pregunta)
-    rol = rol or ('admin' if session.get('admin_id') else 'trabajador')
-    dni = normalizar_dni(dni or session.get('dni') or '')
-    q = ia_norm(pregunta)
-    if not pregunta:
-        return "<div class='ia-result warn'><h3>IA HR</h3><p>Escribe una pregunta. Ejemplo: ¿qué es CTS?, ¿dónde veo mis boletas?, ¿cuánto saldo tengo?</p></div>", 'vacio'
-
-    # Trabajador: bloquear consultas administrativas. Admin: acceso total.
-    admin_terms = ['cargar base','cargar trabajadores','subir saldos','cargar saldos','subir boletas masiva','sincronizar pdf','crear carpetas','reporte general','todos los trabajadores','eliminar trabajador','base trabajadores']
-    if rol != 'admin' and any(t in q for t in admin_terms):
-        return "<div class='ia-result bad'><h3>Acceso limitado</h3><p>Esa consulta corresponde a opciones administrativas. Desde tu portal puedes consultar tus boletas, documentos, saldo vacacional, solicitudes y conceptos laborales.</p></div>", 'bloqueo_rol'
-
-    # 1) Conceptos legales primero para preguntas tipo "qué es...". Evita que "qué es boletas utilidades" caiga en resumen documental.
-    if ia_hr_es_pregunta_conceptual(q):
-        r = ia_buscar_legal(pregunta)
-        if r:
-            return r, 'legal_peru'
-
-    # 2) Sistema/manual: dónde cargo, dónde veo, cómo hago.
-    r = ia_buscar_base_conocimiento(pregunta, rol, modulo)
-    if r:
-        return r, 'base_conocimiento'
-
-    # 3) Legal general aunque no pregunte "qué es".
-    legal_terms = ['cts','gratificacion','gratificaciones','utilidad','utilidades','vacacion','vacaciones','liquidacion','boleta','paternidad','maternidad','luto','fallecimiento','lactancia','subsidio','afp','onp','vida ley','sctr','jornada','horas extras','feriado','contrato','agrario','beta','mype','cas','practicante','sst','iperc','hostigamiento','teletrabajo','asignacion familiar']
-    if ia_keywords_hit(q, legal_terms):
-        r = ia_buscar_legal(pregunta)
-        if r:
-            return r, 'legal_peru'
-
-    # 4) Datos reales del sistema.
-    if any(x in q for x in ['mis boletas','mis documentos','documentos','boletas cargadas','documentos pendientes','documentos rechazados','resumen documental']) and any(x in q for x in ['tengo','ver','donde','mis','cargadas','aparece','pendiente','resumen','cuantos','cuántos']):
-        return ia_resumen_documental(rol, dni), 'datos_documental'
-    if any(x in q for x in ['vacacion','saldo','solicitud','aprobacion','dias']) and any(x in q for x in ['tengo','mis','estado','pendiente','resumen','cuanto','cuantos','cuánto','cuántos']):
-        return ia_resumen_vacacional(rol, dni), 'datos_vacacional'
-
-    # 5) Fallback por módulo.
-    if 'vac' in ia_norm(modulo):
-        return ia_resumen_vacacional(rol, dni), 'fallback_vacacional'
-    if 'doc' in ia_norm(modulo) or 'panel' in ia_norm(modulo):
-        return ia_resumen_documental(rol, dni), 'fallback_documental'
-    if rol == 'admin':
-        return "<div class='ia-result ok'><h3>IA HR Administrador</h3><p>Tienes acceso a preguntas de administrador, trabajador, datos reales y conceptos legales. Prueba: ¿qué es boleta de utilidades?, ¿dónde cargo saldos?, ¿qué es licencia por paternidad?, ¿cuántos documentos están pendientes?</p></div>", 'fallback'
-    return "<div class='ia-result ok'><h3>IA HR Trabajador</h3><p>Puedo ayudarte a revisar tus boletas, documentos, vacaciones, solicitudes y conceptos laborales. Prueba: ¿qué es CTS?, ¿cuánto saldo tengo?, ¿dónde veo mi boleta?</p></div>", 'fallback'
-
-# Inicialización PRO PLUS después de redefinir funciones.
-try:
-    asegurar_ia_hr_pro()
-    ia_hr_actualizar_base_plus('Inicio automático')
-except Exception as e:
-    print('No se pudo inicializar IA HR PRO PLUS:', e)
-
-
 @app.route('/ia_hr/api', methods=['POST'])
 @app.route('/ia_hr_ask', methods=['POST'])
 @app.route('/api/ia_hr', methods=['POST'])
@@ -1994,29 +1522,12 @@ def admin_ia_hr():
         sistema = con.execute('SELECT * FROM ia_base_conocimiento_hr WHERE activo=1 ORDER BY modulo, rol_destino, id DESC').fetchall()
         legal = con.execute('SELECT * FROM ia_legislacion_peru WHERE activo=1 ORDER BY tema, id DESC').fetchall()
         logs = con.execute('SELECT * FROM ia_hr_log ORDER BY id DESC LIMIT 30').fetchall()
-        actualizaciones = con.execute('SELECT * FROM ia_actualizaciones_hr ORDER BY id DESC LIMIT 30').fetchall()
     rows_s = ''.join([f"<tr><td>{h(r['modulo'])}</td><td>{h(r['rol_destino'])}</td><td><b>{h(r['pregunta_clave'])}</b><br><small>{h(r['palabras_clave'])}</small></td><td>{h(r['ruta'])}</td><td><a class='btn-red mini-btn' href='/admin/ia_hr/eliminar/sistema/{r['id']}'>Eliminar</a></td></tr>" for r in sistema]) or "<tr><td colspan='5'>Sin respuestas.</td></tr>"
     rows_l = ''.join([f"<tr><td>{h(r['tema'])}</td><td><b>{h(r['pregunta_clave'])}</b><br><small>{h(r['base_legal'])}</small></td><td>{h(r['fecha_actualizacion'])}</td><td><a class='btn-red mini-btn' href='/admin/ia_hr/eliminar/legal/{r['id']}'>Eliminar</a></td></tr>" for r in legal]) or "<tr><td colspan='4'>Sin base legal.</td></tr>"
     rows_log = ''.join([f"<tr><td>{h(r['fecha'])}</td><td>{h(r['rol'])}</td><td>{h(r['modulo'])}</td><td>{h(r['pregunta'])}</td><td>{h(r['respuesta_tipo'])}</td></tr>" for r in logs]) or "<tr><td colspan='5'>Sin consultas.</td></tr>"
-    rows_act = ''.join([f"<tr><td>{h(r['fecha'])}</td><td>{h(r['tipo'])}</td><td>{h(r['fuente'])}</td><td>{h(r['registros'])}</td><td>{h(r['usuario'])}</td></tr>" for r in actualizaciones]) or "<tr><td colspan='5'>Sin actualizaciones.</td></tr>"
     content=f"""
-    <div class='hero'><div class='topbar'><div><h1>Base <span class='accent'>IA HR</span></h1><div class='subtitle'>Administra el manual inteligente, la base legal Perú, PDFs normativos y revisa consultas realizadas.</div></div>
-      <div style='display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end'>
-        <a class='btn-green' href='/admin/ia_hr/actualizar_base'>Actualizar base IA</a>
-        <a class='btn' href='/admin/ia_hr/cargar_base'>Restaurar base inicial</a>
-      </div></div></div>
+    <div class='hero'><div class='topbar'><div><h1>Base <span class='accent'>IA HR</span></h1><div class='subtitle'>Administra el manual inteligente, la base legal Perú y revisa consultas realizadas.</div></div><a class='btn-green' href='/admin/ia_hr/cargar_base'>Cargar respuestas base IA</a></div></div>
     <section class='grid'>
-      <div class='card span-12'><h2>Actualizar / importar normativa IA</h2>
-        <div style='display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px'>
-          <a class='btn-green' href='/admin/ia_hr/actualizar_base'>Actualizar base IA</a>
-          <a class='btn' href='/admin/ia_hr/cargar_base'>Restaurar base legal inicial</a>
-        </div>
-        <form method='post' action='/admin/ia_hr/importar_pdf' enctype='multipart/form-data' class='ia-admin-form'>
-          <label class='full'>Importar normativa PDF<input type='file' name='pdf_normativa' accept='.pdf' required></label>
-          <label class='full'>Resumen / comentario opcional<textarea name='resumen' placeholder='Ejemplo: Compendio MTPE, Ley 31110, Reglamento Agrario, etc.'></textarea></label>
-          <button class='btn-green full'>Importar PDF como fuente IA</button>
-        </form>
-      </div>
       <div class='card span-12'><h2>Agregar respuesta del sistema</h2><form method='post' class='ia-admin-form'>
         <input type='hidden' name='tipo' value='sistema'><label>Módulo<input name='modulo' placeholder='documental / vacacional / portal'></label><label>Rol<select name='rol_destino'><option value='ambos'>Ambos</option><option value='admin'>Administrador</option><option value='trabajador'>Trabajador</option></select></label>
         <label class='full'>Pregunta clave<input name='pregunta_clave' required placeholder='¿Dónde cargo boletas?'></label><label class='full'>Respuesta<textarea name='respuesta' required></textarea></label><label>Ruta<input name='ruta' placeholder='/admin/documentos'></label><label>Palabras clave<input name='palabras_clave' placeholder='boletas pago cargar'></label><button class='btn-green full'>Guardar respuesta</button></form></div>
@@ -2025,7 +1536,6 @@ def admin_ia_hr():
       <div class='card span-12'><h2>Respuestas del sistema</h2><div class='table-wrap'><table class='c-table ia-table'><tr><th>Módulo</th><th>Rol</th><th>Pregunta</th><th>Ruta</th><th></th></tr>{rows_s}</table></div></div>
       <div class='card span-12'><h2>Base legal Perú</h2><div class='table-wrap'><table class='c-table ia-table'><tr><th>Tema</th><th>Pregunta / Base</th><th>Actualización</th><th></th></tr>{rows_l}</table></div></div>
       <div class='card span-12'><h2>Últimas consultas IA</h2><div class='table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Rol</th><th>Módulo</th><th>Pregunta</th><th>Tipo</th></tr>{rows_log}</table></div></div>
-      <div class='card span-12'><h2>Historial de actualizaciones IA</h2><div class='table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Tipo</th><th>Fuente</th><th>Registros</th><th>Usuario</th></tr>{rows_act}</table></div></div>
     </section>"""
     return render_page(content, active='IA HR')
 
@@ -2034,37 +1544,7 @@ def admin_ia_hr():
 @admin_required
 def admin_ia_hr_cargar_base():
     asegurar_ia_hr_pro()
-    total = ia_hr_actualizar_base_plus('Restauración base inicial + PRO')
-    flash(f'Base inicial IA HR restaurada/actualizada. Registros procesados: {total}.', 'ok')
-    return redirect(url_for('admin_ia_hr'))
-
-
-@app.route('/admin/ia_hr/actualizar_base')
-@admin_required
-def admin_ia_hr_actualizar_base():
-    total = ia_hr_actualizar_base_plus('Actualización manual desde botón administrador')
-    flash(f'Base IA HR actualizada correctamente. Registros procesados: {total}.', 'ok')
-    return redirect(url_for('admin_ia_hr'))
-
-
-@app.route('/admin/ia_hr/importar_pdf', methods=['POST'])
-@admin_required
-def admin_ia_hr_importar_pdf():
-    asegurar_ia_hr_pro()
-    f = request.files.get('pdf_normativa')
-    if not f or not f.filename:
-        flash('Selecciona un PDF para importar.', 'bad')
-        return redirect(url_for('admin_ia_hr'))
-    filename = secure_filename(f.filename)
-    destino_dir = UPLOAD_DIR / 'ia_normativa'
-    destino_dir.mkdir(parents=True, exist_ok=True)
-    destino = destino_dir / f"{now_file()}_{filename}"
-    f.save(destino)
-    resumen = clean(request.form.get('resumen'))
-    if not resumen:
-        resumen = f'PDF importado como fuente de consulta legal interna: {filename}. Agrega preguntas específicas para explotar su contenido.'
-    creados = ia_hr_registrar_fuente_pdf(filename, str(destino), resumen)
-    flash(f'PDF normativo importado para IA. Registros creados/actualizados: {creados}.', 'ok')
+    flash('Base inicial IA HR cargada/actualizada.', 'ok')
     return redirect(url_for('admin_ia_hr'))
 
 
@@ -2079,7 +1559,6 @@ def admin_ia_hr_eliminar(tipo, item_id):
         con.commit()
     flash('Registro IA desactivado.', 'ok')
     return redirect(url_for('admin_ia_hr'))
-
 
 # =============================
 # DB HELPERS
@@ -3372,112 +2851,6 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
 .iahr-fab{position:fixed;right:22px;bottom:22px;z-index:9998;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border-radius:999px;padding:13px 17px;box-shadow:0 18px 40px rgba(0,0,0,.35);display:flex;align-items:center;gap:8px;font-weight:900;cursor:pointer;border:1px solid rgba(255,255,255,.22)}
 .iahr-fab i{font-size:18px}.iahr-panel{position:fixed;right:22px;bottom:82px;width:min(430px,calc(100vw - 28px));max-height:70vh;z-index:9999;background:#111827;border:1px solid rgba(148,163,184,.35);border-radius:20px;box-shadow:0 25px 70px rgba(0,0,0,.48);display:none;overflow:hidden}.iahr-panel.open{display:block}.iahr-head{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;background:linear-gradient(135deg,#064e3b,#111827);border-bottom:1px solid rgba(255,255,255,.08)}.iahr-head b{display:block;color:#fff}.iahr-head small{display:block;color:#bbf7d0;font-size:11px;margin-top:3px}.iahr-head button{background:rgba(255,255,255,.12);color:#fff;border:0;border-radius:10px;width:32px;height:32px;font-size:20px;cursor:pointer}.iahr-body{padding:14px}.iahr-ex{font-size:12px;color:#cbd5e1;background:#0f172a;border:1px solid rgba(148,163,184,.25);border-radius:12px;padding:10px;margin-bottom:10px}.iahr-body textarea{width:100%;height:92px;border-radius:14px;border:1px solid #334155;background:#f8fafc;color:#0f172a;padding:12px;font-weight:700;resize:vertical}.iahr-send{width:100%;margin-top:10px;justify-content:center}.iahr-respuesta{margin-top:12px;max-height:310px;overflow:auto}.ia-result{border-radius:14px;padding:13px;border:1px solid rgba(148,163,184,.25);background:#0f172a;color:#e5e7eb}.ia-result h3{margin:0 0 8px;color:#fff}.ia-result h4{margin:10px 0 6px}.ia-result p{margin:7px 0;line-height:1.45}.ia-result ul{margin:8px 0 0 18px;padding:0}.ia-result.ok{border-color:rgba(34,197,94,.45);background:linear-gradient(135deg,rgba(6,78,59,.75),#0f172a)}.ia-result.warn{border-color:rgba(245,158,11,.5);background:linear-gradient(135deg,rgba(120,53,15,.58),#0f172a)}.ia-result.bad{border-color:rgba(239,68,68,.55);background:linear-gradient(135deg,rgba(127,29,29,.62),#0f172a)}.ia-result.legal{border-color:rgba(59,130,246,.55);background:linear-gradient(135deg,rgba(30,64,175,.58),#0f172a)}.ia-result a{color:#86efac;font-weight:900}.ia-result small,.ia-result .muted{color:#cbd5e1}.ia-admin-form{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}.ia-admin-form textarea{grid-column:1/-1;min-height:110px}.ia-admin-form .full{grid-column:1/-1}.ia-table td{vertical-align:top}@media(max-width:700px){.iahr-fab{right:14px;bottom:14px}.iahr-panel{right:14px;bottom:72px}}
 
-
-/* === CORRECCIÓN PRO: INICIO CONTRATACIÓN FIJO + DASHBOARD CLARO/COMPACTO ===
-   Evita que el panel inicial se vea como pantalla temporal.
-   Quita tarjetas negras grandes y deja métricas compactas, blancas y alineadas. */
-.admin-shell{max-width:1480px!important;margin:0 auto!important}
-.admin-header{margin-bottom:14px!important}
-.admin-title h1{font-size:28px!important;color:#08263d!important}
-.admin-title .role{color:#0ea35d!important;margin-bottom:16px!important}
-.admin-title p{color:#24364d!important;font-size:16px!important}
-.gestion-cards{
-  background:transparent!important;
-  border:0!important;
-  padding:0!important;
-  margin:10px 0 18px!important;
-  display:grid!important;
-  grid-template-columns:minmax(320px,680px)!important;
-  gap:14px!important;
-}
-.gestion-card{
-  min-height:118px!important;
-  padding:20px 22px!important;
-  border-radius:20px!important;
-  background:#ffffff!important;
-  border:1px solid #bdebdc!important;
-  box-shadow:0 14px 34px rgba(15,23,42,.08)!important;
-  display:flex!important;
-  align-items:center!important;
-  gap:18px!important;
-}
-.gestion-card h2{font-size:20px!important;margin:0 0 8px!important;color:#08263d!important}
-.gestion-card p{min-height:0!important;margin:0 0 12px!important;color:#607086!important;line-height:1.35!important}
-.gestion-icon{width:52px!important;height:52px!important;border-radius:14px!important;font-size:25px!important;box-shadow:0 12px 24px rgba(16,185,129,.16)!important}
-.gestion-card .btn-warn,.gestion-card .btn-green,.gestion-card .btn-blue{
-  padding:10px 18px!important;
-  min-width:160px!important;
-  height:42px!important;
-  border-radius:12px!important;
-  margin-top:0!important;
-}
-.dashboards-admin{
-  display:grid!important;
-  grid-template-columns:1fr!important;
-  gap:14px!important;
-  margin-top:14px!important;
-}
-.dashboard-panel{
-  padding:22px 24px!important;
-  border-radius:22px!important;
-  background:#ffffff!important;
-  border:1px solid #d9e6f0!important;
-  box-shadow:0 14px 34px rgba(15,23,42,.08)!important;
-}
-.dashboard-panel h2{
-  color:#08263d!important;
-  font-size:17px!important;
-  margin:0 0 14px!important;
-}
-.dashboard-panel .mini-grid{
-  display:grid!important;
-  grid-template-columns:repeat(3,minmax(180px,1fr))!important;
-  gap:12px!important;
-}
-.dash-metric{
-  min-height:64px!important;
-  padding:13px 14px!important;
-  background:#f8fbfd!important;
-  border:1px solid #dbe7f1!important;
-  border-radius:16px!important;
-  box-shadow:none!important;
-  color:#08263d!important;
-  display:block!important;
-  position:relative!important;
-}
-.dash-metric span{
-  display:block!important;
-  color:#607086!important;
-  font-size:12px!important;
-  margin-bottom:8px!important;
-  font-weight:900!important;
-}
-.dash-metric b{
-  color:#0b2f4a!important;
-  font-size:21px!important;
-  line-height:1!important;
-}
-.dash-metric .mi{
-  position:absolute!important;
-  right:14px!important;
-  top:50%!important;
-  bottom:auto!important;
-  transform:translateY(-50%)!important;
-  width:38px!important;
-  height:38px!important;
-  border-radius:12px!important;
-  background:linear-gradient(135deg,#16c172,#0ea35d)!important;
-  color:#06251a!important;
-  display:grid!important;
-  place-items:center!important;
-  font-size:17px!important;
-}
-.full-link{height:42px!important;margin-top:14px!important}
-@media(max-width:900px){
-  .gestion-cards,.dashboards-admin{grid-template-columns:1fr!important}
-  .dashboard-panel .mini-grid{grid-template-columns:1fr!important}
-  .gestion-card{align-items:flex-start!important}
-}
 </style>
 <script>
 function side(){return document.querySelector('.side')}
@@ -6356,16 +5729,6 @@ def admin_contratacion():
 body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
 .side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
 .login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-/* Contratación: métricas/tarjetas claras y compactas */
-.c-card,.filter-card,.table-wrap{background:#fff!important;color:#0f172a!important;border:1px solid #dbe5ee!important;box-shadow:0 12px 30px rgba(15,23,42,.08)!important}
-.c-title,h1,h2,h3{color:#0f172a!important}
-.c-table th{background:#f3f7fb!important;color:#334155!important}
-.c-table td{background:#fff!important;color:#243042!important}
-.c-table tr:nth-child(even) td{background:#f8fafc!important}
-.tile-grid{gap:16px!important;margin:18px 0!important;max-width:100%!important}
-.c-tile{min-height:120px!important;padding:18px!important;border-radius:18px!important;background:#fff!important}
-.tile-icon{width:54px!important;height:54px!important;font-size:26px!important}
-.metric,.stat,.dash-metric{background:#f8fbfd!important;color:#0f172a!important;border:1px solid #dbe5ee!important;min-height:64px!important}
 
 </style>"""
     def wrap(inner):
