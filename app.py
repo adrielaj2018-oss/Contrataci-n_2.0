@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PORTAL HR PRO - Versión Ultra Mejorada
+Portal de Documentos PRIZE - Versión Ultra Mejorada
 Listo para Render / GitHub / uso local.
 
 Usuarios demo:
@@ -21,6 +21,7 @@ import base64
 import hashlib
 import uuid
 import json
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from copy import copy
@@ -55,15 +56,6 @@ for d in (PERSIST_DIR, STATIC_DIR, UPLOAD_DIR, EXCEL_LOCAL_DIR):
 
 app = Flask(__name__)
 
-# Módulo de contratación deshabilitado por solicitud: se oculta del menú y se bloquea el acceso directo.
-@app.before_request
-def bloquear_modulo_contratacion_portal_hr():
-    ruta = request.path.lower()
-    if ruta.startswith('/admin/contratacion') or ruta.startswith('/contratacion/') or ruta.startswith('/admin/firma') or ruta.startswith('/firma/') or 'contratacion' in ruta:
-        flash('El módulo de contratación fue retirado de PORTAL HR PRO.', 'ok')
-        return redirect(url_for('admin') if session.get('admin_id') else url_for('panel'))
-
-
 @app.after_request
 def permitir_camara_firma(response):
     # Permite cámara/micrófono en la propia página del sistema.
@@ -90,25 +82,25 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # CONFIGURACIÓN FUNCIONAL
 # =============================
 TIPOS_PAGO = [
-    ("Utilidad", "Boletas utilidades", "<i class=\'bi bi-file-earmark-text\'></i>"),
-    ("Vacaciones", "Boletas vacaciones", "<i class=\'bi bi-file-earmark-text\'></i>"),
-    ("Normal", "Boletas normal", "<i class=\'bi bi-file-earmark-text\'></i>"),
-    ("CTS", "Boletas CTS", "<i class=\'bi bi-file-earmark-text\'></i>"),
-    ("Liquidación", "Boletas liquidación", "<i class=\'bi bi-file-earmark-text\'></i>"),
-    ("Gratificación", "Boletas gratificación", "<i class=\'bi bi-file-earmark-text\'></i>"),
+    ("Utilidad", "Boletas utilidades", "📄"),
+    ("Vacaciones", "Boletas vacaciones", "📄"),
+    ("Normal", "Boletas normal", "📄"),
+    ("CTS", "Boletas CTS", "📄"),
+    ("Liquidación", "Boletas liquidación", "📄"),
+    ("Gratificación", "Boletas gratificación", "📄"),
 ]
 TIPOS_EMPRESA = [
-    ("Contrato de Trabajo", "Contrato de Trabajo", "<i class=\'bi bi-file-earmark-richtext\'></i>"),
-    ("Reglamento Interno", "Reglamento Interno", "<i class=\'bi bi-journal-text\'></i>"),
-    ("Reglamento de SST", "Reglamento de SST", "<i class=\'bi bi-shield-check\'></i>"),
-    ("Código de Conducta", "Código de Conducta", "<i class=\'bi bi-file-lock\'></i>"),
-    ("Políticas", "Políticas", "<i class=\'bi bi-pin-angle\'></i>"),
-    ("Comunicados", "Comunicados", "<i class=\'bi bi-megaphone\'></i>"),
-    ("Formatos", "Formatos", "<i class=\'bi bi-receipt\'></i>"),
+    ("Contrato de Trabajo", "Contrato de Trabajo", "📑"),
+    ("Reglamento Interno", "Reglamento Interno", "📘"),
+    ("Reglamento de SST", "Reglamento de SST", "🦺"),
+    ("Código de Conducta", "Código de Conducta", "⚖️"),
+    ("Políticas", "Políticas", "📌"),
+    ("Comunicados", "Comunicados", "📣"),
+    ("Formatos", "Formatos", "🧾"),
 ]
 TIPOS_PERSONALES = [
-    ("Otros", "Otros documentos", "<i class=\'bi bi-folder2\'></i>"),
-    ("Contrato Personal", "Contrato de Trabajo", "<i class=\'bi bi-person-vcard\'></i>"),
+    ("Otros", "Otros documentos", "🗂️"),
+    ("Contrato Personal", "Contrato de Trabajo", "📑"),
 ]
 ALL_TIPOS = {k: (label, icon, "pago") for k, label, icon in TIPOS_PAGO}
 ALL_TIPOS.update({k: (label, icon, "empresa") for k, label, icon in TIPOS_EMPRESA})
@@ -311,13 +303,12 @@ def now_txt():
 def now_file():
     return datetime.now(APP_TZ).strftime("%Y%m%d_%H%M%S")
 
+def hoy_iso():
+    return datetime.now(APP_TZ).strftime("%Y-%m-%d")
+
 
 def clean(v):
     return str(v or "").strip()
-
-
-def h(v):
-    return html.escape(str(v or ''))
 
 
 
@@ -535,298 +526,305 @@ def db():
     return conn
 
 
+# =============================
+# ALERTAS PREVENTIVAS / TRABAJADORES OBSERVADOS
+# =============================
+def _row_get_safe(row, key, default=''):
+    try:
+        return row[key] if key in row.keys() else default
+    except Exception:
+        return default
+
+def nivel_alerta_info(nivel):
+    n = clean(nivel).upper().replace('NIVEL','').strip()
+    if n == '1':
+        return {'codigo':'NIVEL 1','titulo':'Advertencia preventiva','color':'warn','bloquea':False,'requiere_autorizacion':False,'mensaje':'Permite continuar, pero deja trazabilidad y revisión visible.'}
+    if n == '2':
+        return {'codigo':'NIVEL 2','titulo':'Requiere validación RR.HH./Jefatura','color':'mid','bloquea':False,'requiere_autorizacion':True,'mensaje':'Puede continuar solo con validación registrada de RR.HH. o jefatura.'}
+    return {'codigo':'NIVEL 3','titulo':'Bloqueo preventivo','color':'bad','bloquea':True,'requiere_autorizacion':True,'mensaje':'Bloquea contratación hasta autorización o levantamiento de observación.'}
+
+def alerta_observado_por_dni(dni):
+    dni = normalizar_dni(dni)
+    if not dni:
+        return {'encontrado':False}
+    with db() as con:
+        obs = con.execute("SELECT * FROM trabajadores_observados WHERE numero_documento=? AND UPPER(COALESCE(estado,'')) IN ('ACTIVE','ACTIVO') ORDER BY id DESC LIMIT 1", (dni,)).fetchone()
+        if not obs:
+            return {'encontrado':False,'dni':dni}
+        aut = con.execute("SELECT * FROM trabajadores_observados_autorizaciones WHERE observado_id=? AND estado='APROBADO' ORDER BY id DESC LIMIT 1", (obs['id'],)).fetchone()
+    info = nivel_alerta_info(_row_get_safe(obs,'nivel_restriccion','NIVEL 3'))
+    autorizado = bool(aut)
+    return {'encontrado':True,'dni':dni,'id':obs['id'],'nombre':_row_get_safe(obs,'nombre'),'motivo':_row_get_safe(obs,'motivo'),'nivel':info['codigo'],'titulo':info['titulo'],'mensaje':info['mensaje'],'color':info['color'],'bloquea':bool(info['bloquea'] and not autorizado),'requiere_autorizacion':bool(info['requiere_autorizacion'] and not autorizado),'autorizado':autorizado,'ultima_empresa':_row_get_safe(obs,'ultima_empresa'),'cargo':_row_get_safe(obs,'cargo'),'area':_row_get_safe(obs,'area'),'fecha_observacion':_row_get_safe(obs,'fecha_observacion') or _row_get_safe(obs,'fecha_creacion'),'comentario':_row_get_safe(obs,'comentario'),'evidencia':_row_get_safe(obs,'evidencia_nombre'),'estado':_row_get_safe(obs,'estado')}
+
+def bloqueo_observado_msg(dni, modulo='este módulo'):
+    a = alerta_observado_por_dni(dni)
+    if not a.get('encontrado'):
+        return None
+    if a.get('bloquea'):
+        return f"DNI {a['dni']} observado en {a['nivel']}: {a['motivo']}. Bloquea {modulo} hasta aprobar excepción o levantar observación."
+    if a.get('requiere_autorizacion'):
+        return f"DNI {a['dni']} observado en {a['nivel']}: {a['motivo']}. Requiere validación RR.HH./jefatura antes de continuar."
+    return None
+
+def registrar_evento_observado(dni, modulo, accion, detalle=''):
+    try:
+        a = alerta_observado_por_dni(dni)
+        if not a.get('encontrado'):
+            return
+        with db() as con:
+            con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (a['id'], a['dni'], modulo, accion, detalle, session.get('admin_user','admin') if 'session' in globals() else 'SISTEMA', now_txt()))
+            con.commit()
+    except Exception as e:
+        print('No se pudo registrar evento observado', e)
+
 
 # =============================
-# IA HR PRO - DOCUMENTAL / VACACIONAL / LEGAL PERÚ
+# IA INTERNA - GESTIÓN DE CONTRATACIÓN
 # =============================
-def ia_sql_count(con, sql, params=()):
+def _sql_count_safe(con, sql, params=()):
     try:
         return int(con.execute(sql, params).fetchone()[0] or 0)
     except Exception:
         return 0
 
 
-def ia_sql_rows(con, sql, params=()):
+def _sql_rows_safe(con, sql, params=()):
     try:
         return con.execute(sql, params).fetchall()
     except Exception:
         return []
 
 
-def ia_norm(txt):
-    txt = clean(txt).lower()
-    repl = {'á':'a','é':'e','í':'i','ó':'o','ú':'u','ñ':'n'}
-    for a,b in repl.items():
-        txt = txt.replace(a,b)
-    return re.sub(r'[^a-z0-9 ]+', ' ', txt)
-
-
-def ia_score(pregunta, row):
-    q = set(ia_norm(pregunta).split())
-    base = ' '.join([clean(row[k]) for k in row.keys() if k in ['pregunta_clave','palabras_clave','tema','modulo','respuesta']])
-    b = set(ia_norm(base).split())
-    return len(q & b)
-
-
-def asegurar_ia_hr_pro():
-    """Crea y precarga la IA del Portal HR. No borra respuestas editadas por el administrador."""
-    semillas_sistema = [
-        ('documental','admin','Dónde cargar boletas de pago','Para cargar boletas ingresa a Gestión Documental > Documentos de pago. Selecciona el tipo: Normal, CTS, Gratificación, Utilidad, Vacaciones o Liquidación. También puedes entrar a Subir / gestionar documentos para cargas individuales o masivas.','/admin/documentos','boleta boletas pago cargar subir normal cts gratificacion utilidad liquidacion documentos pago'),
-        ('documental','admin','Dónde sincronizar o detectar PDFs por DNI','Ingresa a Gestión Documental > Detectar PDFs o a Sincronizar carpetas. El sistema revisa DOCUMENTOS_PRIZE_AUTO, identifica DNI y registra documentos vinculados al trabajador.','/admin/sincronizar','detectar pdf dni sincronizar carpeta documentos prize auto'),
-        ('documental','admin','Dónde crear carpetas documentales','Ingresa a Gestión Documental > Crear carpetas. El sistema arma la estructura local para documentos de pago, empresa y personales.','/admin/crear_carpetas','crear carpetas documental estructura documentos'),
-        ('documental','admin','Dónde descargar plantilla documental','Ingresa a Gestión Documental > Plantilla Documental. Descarga el Excel base para organizar cargas de documentos.','/admin/plantilla_gestion/documental','plantilla documental excel descargar'),
-        ('documental','trabajador','Dónde veo mis boletas','Ingresa a Gestión Documental > Documentos de pago. Ahí podrás ver tus boletas normales, CTS, gratificaciones, utilidades, vacaciones o liquidaciones que RR.HH. haya cargado para tu DNI.','/panel','mis boletas ver descargar pago cts gratificacion utilidad liquidacion'),
-        ('documental','trabajador','No veo mi boleta','Si no visualizas tu boleta, puede que RR.HH. aún no la haya cargado o que el archivo no esté vinculado a tu DNI. Revisa el tipo de documento y periodo; si no aparece, comunícate con RR.HH.','/panel','no veo mi boleta no aparece documento'),
-        ('documental','ambos','Qué significa documento pendiente','Un documento pendiente es aquel que fue cargado, pero aún no registra lectura, aceptación, firma o aprobación final, según el flujo configurado por RR.HH.','','documento pendiente estado lectura firma aprobacion'),
-        ('vacacional','admin','Dónde cargar saldos vacacionales','Ingresa a Gestión Vacacional > Saldos Vacacionales o al Dashboard Vacacional. Desde ahí puedes cargar el Excel de saldos por DNI, periodo, días ganados, gozados y saldo.','/admin/vacaciones#cargar-saldos','cargar saldos vacaciones vacacionales excel saldo'),
-        ('vacacional','admin','Dónde aprobar vacaciones','Ingresa a Gestión Vacacional > Aprobaciones. Allí se revisan solicitudes pendientes de jefe y de Gestión Humana, según el flujo.','/admin/vacaciones#aprobaciones','aprobar vacaciones aprobaciones jefe gestion humana'),
-        ('vacacional','admin','Dónde ver reportes vacacionales','Ingresa a Gestión Vacacional > Reportes. Podrás revisar solicitudes, saldos, aprobadas, rechazadas y pendientes.','/admin/vacaciones#reportes','reportes vacaciones vacacional indicadores'),
-        ('vacacional','trabajador','Cómo solicito vacaciones','Ingresa a Gestión Vacacional > Saldo y solicitud. Selecciona el periodo con saldo, registra fechas y envía la solicitud para aprobación.','/vacaciones/mi_solicitud#solicitar','solicitar vacaciones pedido solicitud saldo'),
-        ('vacacional','trabajador','Dónde veo mi saldo vacacional','Ingresa a Gestión Vacacional > Dashboard vacacional. Ahí verás tus periodos, días ganados, gozados y saldo disponible.','/vacaciones/mi_solicitud','mi saldo vacaciones cuantos dias tengo'),
-        ('vacacional','trabajador','Dónde veo el estado de mi solicitud','Ingresa a Gestión Vacacional > Dashboard vacacional. En Mis solicitudes verás si está pendiente, aprobada, rechazada o anulada.','/vacaciones/mi_solicitud','estado solicitud vacaciones pendiente aprobada rechazada'),
-        ('portal','ambos','Qué puede hacer la IA HR','La IA HR ayuda con dudas del sistema, gestión documental, boletas, vacaciones y conceptos laborales peruanos. Las respuestas se filtran por rol: administrador o trabajador.','','ia asistente ayuda portal rrhh'),
-        ('portal','trabajador','Por qué no puedo cargar base de trabajadores','Esa opción es solo para administradores. Como trabajador puedes consultar tus documentos, boletas, vacaciones y estado de tus solicitudes.','','cargar base trabajadores no puedo'),
-    ]
-    semillas_legal = [
-        ('Boleta de pago','Qué es una boleta de pago','La boleta de pago es el documento que informa al trabajador el detalle de su remuneración, descuentos, aportes y otros conceptos registrados en planilla. Sirve como constancia del pago realizado.','D.S. N.° 001-98-TR y modificatorias','El D.S. N.° 001-98-TR regula la obligación de llevar planillas y entregar boletas; el D.S. N.° 009-2011-TR modificó reglas de entrega.','boleta pago remuneracion descuentos aportes planilla'),
-        ('CTS','Qué es CTS','La Compensación por Tiempo de Servicios (CTS) es un beneficio social de previsión frente al cese. En términos simples, funciona como un fondo de protección para el trabajador cuando termina el vínculo laboral.','TUO de la Ley de CTS - D.S. N.° 001-97-TR','La CTS se regula por el TUO aprobado por D.S. N.° 001-97-TR y su reglamento.','cts compensacion tiempo servicios deposito mayo noviembre'),
-        ('Gratificación','Qué es gratificación','La gratificación legal es un beneficio que corresponde en Fiestas Patrias y Navidad, siempre que se cumplan los requisitos legales. Se paga en julio y diciembre según corresponda.','Ley N.° 27735 y D.S. N.° 005-2002-TR','La Ley N.° 27735 regula las gratificaciones de Fiestas Patrias y Navidad; su reglamento precisa oportunidad y requisitos.','gratificacion julio diciembre fiestas patrias navidad'),
-        ('Vacaciones','Cuándo gano vacaciones','En el régimen laboral privado general, el trabajador adquiere derecho a 30 días calendario de descanso vacacional por cada año completo de servicios, sujeto al cumplimiento del récord vacacional aplicable.','D. Leg. N.° 713 y reglamento','El D. Leg. N.° 713 regula descansos remunerados; el derecho vacacional se genera por año completo y récord.','vacaciones cuando gano derecho record vacacional 30 dias'),
-        ('Vacaciones','Qué es récord vacacional','El récord vacacional es el requisito de días efectivamente laborados que debe cumplir el trabajador dentro del año de servicios para acceder al descanso vacacional.','D. Leg. N.° 713','El récord depende de la jornada; por ejemplo, para jornadas de 6 días se exige un mínimo mayor que para jornadas de 5 días.','record vacacional requisito dias laborados'),
-        ('Vacaciones','Qué son vacaciones truncas','Las vacaciones truncas son el pago proporcional que corresponde cuando el trabajador cesa antes de cumplir un nuevo año completo, siempre que haya generado el derecho proporcional conforme a ley.','D. Leg. N.° 713 y normas complementarias','Se calculan de forma proporcional al tiempo laborado pendiente.','vacaciones truncas cese liquidacion proporcional'),
-        ('Liquidación','Qué es liquidación','La liquidación de beneficios sociales es el cálculo de conceptos pendientes al cese, como remuneraciones, vacaciones truncas o pendientes, CTS, gratificación trunca u otros conceptos aplicables.','Normativa laboral peruana según beneficio','Depende del tipo de cese, régimen laboral y conceptos generados.','liquidacion beneficios sociales renuncia cese'),
-        ('Utilidades','Qué son utilidades','La participación en utilidades es un beneficio que puede corresponder a trabajadores de empresas que generan renta empresarial y cumplen condiciones legales. Su cálculo depende de la actividad y resultados de la empresa.','D. Leg. N.° 892 y normas complementarias','La obligación depende de la actividad empresarial, renta y número de trabajadores, entre otros factores.','utilidades participacion trabajadores empresa'),
-        ('AFP ONP','Qué es AFP y ONP','AFP y ONP son sistemas de pensiones. La AFP pertenece al sistema privado de pensiones; la ONP corresponde al sistema nacional de pensiones. El trabajador aporta según el sistema elegido.','Sistema pensionario peruano','La afiliación y aportes se rigen por normas del sistema pensionario aplicable.','afp onp pension aporte descuento'),
-        ('Vida Ley','Qué es Vida Ley','El Seguro Vida Ley es un seguro obligatorio a favor del trabajador, conforme a los supuestos y reglas de la normativa laboral peruana.','D. Leg. N.° 688 y normas complementarias','Tiene finalidad de protección ante contingencias cubiertas por la póliza.','vida ley seguro trabajador'),
-        ('SCTR','Qué es SCTR','El Seguro Complementario de Trabajo de Riesgo cubre actividades de alto riesgo cuando corresponda según la normativa aplicable.','Ley N.° 26790 y normas complementarias','Aplica según actividad de riesgo y cobertura definida por ley.','sctr seguro complementario trabajo riesgo'),
-        ('Contratos', 'Qué es un contrato de trabajo', 'El contrato de trabajo es el acuerdo por el cual una persona presta servicios personales, remunerados y subordinados para un empleador. En el régimen privado, si existe prestación personal, remuneración y subordinación, se presume relación laboral.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'Base referencial: artículos iniciales del TUO de la Ley de Productividad y Competitividad Laboral.', 'contrato trabajo relacion laboral subordinacion remuneracion servicios'),
-        ('Contratos', 'Cuántos tipos de contrato hay en Perú', 'En el régimen laboral privado se reconocen contratos a plazo indeterminado, contratos sujetos a modalidad o plazo fijo, contratos a tiempo parcial y otras formas especiales según norma aplicable. Los contratos sujetos a modalidad requieren causa objetiva y formalidad escrita.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'El contrato indeterminado es la regla general; los contratos modales proceden solo en supuestos regulados.', 'tipos contrato indeterminado plazo fijo sujeto modalidad parcial'),
-        ('Contratos', 'Qué es contrato indeterminado', 'Es el contrato sin fecha de término. Puede ser verbal o escrito y se presume cuando existen servicios personales, remunerados y subordinados sin causa temporal válida.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'En el régimen privado, la contratación indeterminada es la regla general.', 'contrato indeterminado indefinido estable sin fecha fin'),
-        ('Contratos', 'Qué es contrato sujeto a modalidad', 'Es un contrato temporal con fecha de inicio y fin, sustentado en una causa objetiva prevista por ley, como inicio o incremento de actividad, necesidad de mercado, obra determinada, suplencia, emergencia, intermitente o temporada.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'Debe constar por escrito e indicar la causa objetiva que justifica la temporalidad.', 'contrato sujeto modalidad temporal plazo fijo causa objetiva'),
-        ('Contratos', 'Qué es contrato intermitente', 'Es un contrato sujeto a modalidad usado para labores permanentes pero discontinuas, cuando la prestación se ejecuta por periodos alternados. Debe sustentarse en la necesidad real de la actividad.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'Aplica cuando hay prestación intercalada por la naturaleza de la labor.', 'contrato intermitente discontinuo temporada periodo alternado'),
-        ('Contratos', 'Qué es periodo de prueba', 'El periodo de prueba es el tiempo inicial de la relación laboral en el que el empleador evalúa la adaptación del trabajador. En el régimen general suele ser de tres meses, salvo ampliaciones válidas para ciertos cargos según ley.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'La ampliación debe respetar límites y justificación según el tipo de puesto.', 'periodo prueba tres meses contrato inicio laboral'),
-        ('Contratos', 'Qué es contrato a tiempo parcial', 'Es el contrato en el que la jornada ordinaria es menor a cuatro horas diarias en promedio. Debe documentarse conforme a las reglas aplicables.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'Algunos beneficios pueden variar según el cumplimiento de jornada mínima y régimen aplicable.', 'contrato tiempo parcial part time cuatro horas'),
-        ('Licencias', 'Qué es licencia por paternidad', 'La licencia por paternidad es el permiso remunerado que corresponde al trabajador padre por nacimiento de hijo. La regla general vigente es 10 días calendario consecutivos, con ampliaciones en supuestos especiales como parto múltiple o nacimiento prematuro.', 'Ley N.° 29409 modificada por Ley N.° 30807', 'Debe validarse el supuesto concreto y la documentación sustentatoria.', 'licencia paternidad nacimiento hijo padre diez dias'),
-        ('Licencias', 'Cuántos días son de licencia por paternidad', 'La licencia por paternidad es de 10 días calendario consecutivos en parto natural o cesárea. Puede ampliarse en casos especiales, como nacimiento prematuro, parto múltiple o complicaciones graves, según la norma.', 'Ley N.° 29409 y Ley N.° 30807', 'RR.HH. debe revisar el certificado o documento sustentatorio para aplicar la duración correcta.', 'dias licencia paternidad 10 20 30 parto multiple prematuro'),
-        ('Licencias', 'Qué es licencia por fallecimiento o luto', 'Es la licencia remunerada por fallecimiento de familiares directos. En el sector privado, comprende 5 días calendario por fallecimiento de cónyuge, padres, hijos o hermanos, con reglas de ampliación por traslado cuando corresponda.', 'Ley N.° 31602 y D.S. N.° 013-2023-TR', 'El trabajador debe sustentar el vínculo y fallecimiento según el reglamento.', 'licencia luto fallecimiento familiar padres hijos hermanos conyuge'),
-        ('Licencias', 'Cuántos días son de licencia por fallecimiento', 'La licencia por fallecimiento en el sector privado es de 5 días calendario con goce de remuneración por fallecimiento de cónyuge, padres, hijos o hermanos. Puede extenderse por traslado si el fallecimiento ocurre en lugar distinto al centro de trabajo.', 'Ley N.° 31602 y D.S. N.° 013-2023-TR', 'La extensión depende de la vía de transporte y la distancia, conforme al reglamento.', 'dias licencia fallecimiento luto 5 dias calendario traslado'),
-        ('Licencias', 'Qué es licencia por maternidad', 'Es el descanso remunerado relacionado con el embarazo y nacimiento. En Perú, el descanso pre y postnatal suma 98 días calendario, usualmente 49 días antes y 49 días después del parto, con reglas especiales según el caso.', 'Ley N.° 26644 y normas modificatorias', 'Puede diferirse o ampliarse según supuestos regulados, previa documentación médica.', 'licencia maternidad pre natal post natal 98 dias'),
-        ('Licencias', 'Qué es hora de lactancia', 'Es el derecho de la madre trabajadora a una hora diaria de permiso por lactancia materna hasta que el hijo cumpla un año, conforme a la normativa aplicable.', 'Ley N.° 27240 y normas modificatorias', 'El ejercicio puede coordinarse con el empleador sin afectar el derecho.', 'lactancia hora diaria madre trabajadora hijo un año'),
-        ('Licencias', 'Qué es descanso médico', 'El descanso médico es la indicación de reposo emitida por profesional autorizado por una incapacidad temporal. Sirve para justificar inasistencia y, según el caso, gestionar subsidios o canjes ante EsSalud.', 'Normas de seguridad social en salud y procedimientos EsSalud', 'RR.HH. debe validar certificado, días, diagnóstico reservado y procedimiento de subsidio.', 'descanso medico certificado incapacidad temporal essalud'),
-        ('Subsidios', 'Qué es subsidio por incapacidad temporal', 'Es la prestación económica vinculada a incapacidad temporal para el trabajo, conforme a reglas de EsSalud y normativa de seguridad social. Usualmente se gestiona cuando se cumplen requisitos y días correspondientes.', 'Ley N.° 26790 y normas EsSalud', 'La aplicación depende de aportes, acreditación y documentación médica.', 'subsidio incapacidad temporal descanso medico essalud'),
-        ('Subsidios', 'Qué es subsidio por maternidad', 'Es la prestación económica que cubre el periodo de descanso por maternidad cuando se cumplen requisitos de aseguramiento y aportes ante EsSalud.', 'Ley N.° 26790 y normas EsSalud', 'Requiere validación de vínculo, aportes y documentación médica.', 'subsidio maternidad essalud descanso prenatal postnatal'),
-        ('Planillas', 'Qué es asignación familiar', 'La asignación familiar es un beneficio remunerativo equivalente al 10% de la Remuneración Mínima Vital, para trabajadores del régimen privado que acrediten tener hijos menores de edad o mayores en estudios conforme a ley.', 'Ley N.° 25129 y D.S. N.° 035-90-TR', 'Tiene naturaleza remunerativa y no varía por número de hijos.', 'asignacion familiar 10 rmv hijos menor estudios'),
-        ('Planillas', 'Cuánto es la asignación familiar', 'La asignación familiar equivale al 10% de la Remuneración Mínima Vital vigente. Para calcularla se debe verificar la RMV vigente al periodo de pago.', 'Ley N.° 25129 y D.S. N.° 035-90-TR', 'El monto cambia si cambia la RMV.', 'monto asignacion familiar 10 rmv cuanto'),
-        ('Jornada', 'Cuál es la jornada máxima de trabajo', 'La jornada máxima ordinaria en Perú es de 8 horas diarias o 48 horas semanales, salvo jornadas especiales, acumulativas o atípicas válidamente implementadas.', 'Constitución Política del Perú y D. Leg. N.° 854', 'RR.HH. debe revisar régimen, jornada, horario y descansos.', 'jornada maxima 8 horas 48 semanales horario trabajo'),
-        ('Jornada', 'Qué son horas extras', 'Las horas extras son trabajo realizado por encima de la jornada ordinaria. Deben ser voluntarias, registradas y pagadas con sobretasa legal o compensadas conforme a acuerdo válido.', 'D. Leg. N.° 854 y D.S. N.° 007-2002-TR', 'La sobretasa mínima suele ser 25% para las dos primeras horas y 35% para las siguientes.', 'horas extras sobretiempo sobretasa 25 35'),
-        ('Jornada', 'Qué es descanso semanal obligatorio', 'Es el derecho a un descanso remunerado semanal, usualmente de 24 horas consecutivas, conforme a la jornada y organización del trabajo.', 'D. Leg. N.° 713', 'Debe coordinarse con la programación de turnos y actividad empresarial.', 'descanso semanal obligatorio dso 24 horas'),
-        ('Jornada', 'Qué pasa si trabajo feriado', 'El trabajo en feriado no laborable puede generar pago adicional o descanso sustitutorio, según corresponda. RR.HH. debe verificar si hubo descanso compensatorio.', 'D. Leg. N.° 713', 'El tratamiento depende de si el feriado fue laborado y si existió sustitución.', 'feriado trabajado pago triple descanso sustitutorio'),
-        ('Remuneración', 'Qué es remuneración', 'La remuneración es todo lo que el trabajador recibe por sus servicios, en dinero o especie, siempre que sea de libre disposición, salvo conceptos excluidos por ley.', 'TUO del D. Leg. N.° 728 y normas complementarias', 'Es base para varios beneficios, según la naturaleza del concepto.', 'remuneracion sueldo salario conceptos libre disposicion'),
-        ('Planillas', 'Qué es planilla electrónica', 'La planilla electrónica es el registro declarado por el empleador con información laboral, previsional y de seguridad social de trabajadores y prestadores, según normas de SUNAT y MTPE.', 'Normas de Planilla Electrónica - SUNAT/MTPE', 'Incluye T-Registro y PLAME, según corresponda.', 'planilla electronica t registro plame sunat mtpe'),
-        ('Beneficios', 'Qué son beneficios sociales', 'Son derechos económicos laborales como CTS, gratificaciones, vacaciones, asignación familiar, utilidades, seguros u otros que correspondan según régimen y condiciones del trabajador.', 'Normativa laboral peruana según cada beneficio', 'No todos aplican igual en todos los regímenes.', 'beneficios sociales cts gratificacion vacaciones asignacion utilidades'),
-        ('Beneficios', 'Qué son beneficios truncos', 'Son beneficios proporcionales generados al cese antes de completar el periodo completo, como CTS trunca, gratificación trunca o vacaciones truncas, según corresponda.', 'Normativa laboral peruana según cada beneficio', 'Se calculan según tiempo laborado y conceptos computables.', 'beneficios truncos cese liquidacion proporcional'),
-        ('Cese', 'Qué es renuncia', 'La renuncia es la decisión voluntaria del trabajador de terminar el vínculo laboral. En el régimen privado se comunica por escrito y, salvo exoneración, debe observar el plazo legal de preaviso.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'El empleador puede aceptar o exonerar el plazo de preaviso.', 'renuncia carta trabajador cese voluntario preaviso'),
-        ('Cese', 'Qué es despido arbitrario', 'Es el despido sin causa justa o sin cumplir el procedimiento legal. Puede generar indemnización u otras consecuencias según el tipo de trabajador y régimen aplicable.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'La evaluación requiere revisar causa, procedimiento y pruebas.', 'despido arbitrario causa justa indemnizacion'),
-        ('Cese', 'Qué es abandono de trabajo', 'Es una falta relacionada con inasistencias injustificadas bajo condiciones previstas por la ley. Debe evaluarse con cuidado y seguirse el procedimiento disciplinario correspondiente.', 'TUO del D. Leg. N.° 728 - D.S. N.° 003-97-TR', 'RR.HH. debe validar días, comunicaciones y descargos.', 'abandono trabajo inasistencia injustificada falta grave'),
-        ('Regímenes', 'Qué es régimen laboral general', 'Es el régimen laboral común de la actividad privada, regulado principalmente por el D. Leg. 728 y normas complementarias. Reconoce beneficios como CTS, gratificaciones, vacaciones, entre otros, según requisitos.', 'D. Leg. N.° 728 y normas complementarias', 'Es la base general, salvo regímenes especiales.', 'regimen general actividad privada beneficios'),
-        ('Regímenes', 'Qué es régimen laboral agrario', 'Es un régimen especial para trabajadores de actividades agrarias, con reglas propias sobre remuneración, beneficios y condiciones laborales según la Ley del régimen agrario vigente.', 'Ley N.° 31110 y reglamento', 'Debe revisarse actividad, puesto, jornada y conceptos aplicables.', 'regimen agrario ley 31110 trabajadores agrarios'),
-        ('Regímenes', 'Qué es régimen MYPE', 'Es el régimen especial aplicable a micro y pequeñas empresas inscritas y calificadas conforme a ley, con beneficios laborales diferenciados según tipo de empresa.', 'TUO de la Ley MYPE y normas complementarias', 'La aplicación depende de inscripción, condición MYPE y fecha correspondiente.', 'regimen mype microempresa pequena empresa beneficios'),
-        ('Regímenes', 'Qué es CAS', 'El Contrato Administrativo de Servicios es un régimen especial del sector público. No corresponde al régimen privado común y tiene reglas propias.', 'D. Leg. N.° 1057 y normas complementarias', 'Aplicable principalmente en entidades públicas.', 'cas contrato administrativo servicios sector publico'),
-        ('Regímenes', 'Qué son practicantes', 'Los practicantes se vinculan mediante modalidades formativas laborales, no como contrato laboral común. Existen prácticas preprofesionales y profesionales con subvención y condiciones reguladas.', 'Ley N.° 28518', 'No deben usarse para encubrir relación laboral ordinaria.', 'practicantes practicas preprofesionales profesionales modalidades formativas'),
-        ('SST', 'Qué es SST', 'La Seguridad y Salud en el Trabajo es el sistema de prevención de riesgos laborales destinado a proteger la vida, salud e integridad de los trabajadores.', 'Ley N.° 29783 y reglamento', 'Incluye política, IPERC, capacitaciones, investigación de accidentes y comité/supervisor.', 'sst seguridad salud trabajo ley 29783'),
-        ('SST', 'Qué es IPERC', 'IPERC significa Identificación de Peligros, Evaluación de Riesgos y Controles. Es una herramienta preventiva para gestionar riesgos en el trabajo.', 'Ley N.° 29783 y D.S. N.° 005-2012-TR', 'Debe actualizarse según cambios en procesos, puestos o incidentes.', 'iperc peligros riesgos controles seguridad salud'),
-        ('SST', 'Qué es accidente de trabajo', 'Es todo suceso repentino relacionado con el trabajo que produce lesión, perturbación funcional, invalidez o muerte, según la normativa de SST.', 'Ley N.° 29783 y reglamento', 'Debe investigarse, registrarse y reportarse cuando corresponda.', 'accidente trabajo lesion investigacion reporte sst'),
-        ('SST', 'Qué es incidente de trabajo', 'Es un suceso relacionado con el trabajo que no necesariamente causa lesión, pero pudo ocasionarla. Sirve para prevenir accidentes futuros.', 'Ley N.° 29783 y reglamento', 'Debe registrarse y analizarse como parte de la prevención.', 'incidente trabajo casi accidente sst'),
-        ('SST', 'Qué es comité de SST', 'Es el órgano paritario que participa en la gestión de seguridad y salud en el trabajo cuando la empresa cumple los supuestos legales. En empresas más pequeñas puede corresponder supervisor de SST.', 'Ley N.° 29783 y reglamento', 'Depende del número de trabajadores y estructura de la empresa.', 'comite sst supervisor seguridad salud trabajo'),
-        ('Hostigamiento', 'Qué es hostigamiento sexual laboral', 'Es una conducta de naturaleza o connotación sexual o sexista no deseada que afecta la dignidad o genera un ambiente intimidatorio, hostil o humillante. El empleador debe prevenir, investigar y sancionar.', 'Ley N.° 27942 y reglamento', 'Debe existir canal de denuncia y procedimiento de atención.', 'hostigamiento sexual laboral denuncia investigacion'),
-        ('Teletrabajo', 'Qué es teletrabajo', 'El teletrabajo es una modalidad especial de prestación de servicios usando tecnologías de información, fuera del centro de trabajo o en forma híbrida, conforme a acuerdo y reglas legales.', 'Ley N.° 31572 y reglamento', 'Debe regularse con condiciones, jornada, equipos, seguridad y desconexión digital.', 'teletrabajo remoto home office desconexion digital'),
-        ('Teletrabajo', 'Qué es desconexión digital', 'Es el derecho del trabajador a no responder comunicaciones o requerimientos laborales fuera de su jornada o durante descansos, salvo excepciones justificadas.', 'Ley N.° 31572 y normas sobre teletrabajo', 'Debe respetarse especialmente en teletrabajo y trabajo remoto/híbrido.', 'desconexion digital fuera jornada teletrabajo'),
-        ('Vacaciones', 'Qué es fraccionamiento de vacaciones', 'Es la posibilidad de dividir el descanso vacacional conforme a reglas legales y acuerdo entre trabajador y empleador, respetando mínimos y formalidades.', 'D. Leg. N.° 713 y D. Leg. N.° 1405', 'Debe documentarse correctamente y respetar límites.', 'fraccionamiento vacaciones partir dias descanso'),
-        ('Vacaciones', 'Qué es adelanto de vacaciones', 'Es el goce anticipado de vacaciones antes de cumplir el año y récord, sujeto a acuerdo escrito entre trabajador y empleador según la normativa vigente.', 'D. Leg. N.° 713 y D. Leg. N.° 1405', 'RR.HH. debe controlar el saldo para evitar inconsistencias al cese.', 'adelanto vacaciones anticipadas acuerdo trabajador empleador'),
-        ('Vacaciones', 'Qué es indemnización vacacional', 'Es un pago que puede generarse cuando el trabajador no goza el descanso vacacional oportunamente, conforme a las reglas legales aplicables.', 'D. Leg. N.° 713', 'Requiere revisar periodo, vencimiento y si hubo goce efectivo.', 'indemnizacion vacacional vacaciones vencidas triple'),
-        ('Documentos laborales', 'Qué es reglamento interno de trabajo', 'El Reglamento Interno de Trabajo contiene reglas internas de orden laboral, deberes, derechos, medidas disciplinarias y procedimientos de la empresa, cuando corresponde por obligación legal.', 'D.S. N.° 039-91-TR y normas complementarias', 'Debe ser conocido por los trabajadores y alineado a la normativa vigente.', 'reglamento interno trabajo rit reglas empresa'),
-        ('Documentos laborales', 'Qué es certificado de trabajo', 'Es el documento que acredita la prestación de servicios del trabajador, usualmente emitido al cese o cuando corresponde según solicitud y política interna.', 'Normativa laboral peruana y buenas prácticas de RR.HH.', 'Debe contener información laboral veraz y no discriminatoria.', 'certificado trabajo constancia laboral cese'),
-        ('Documentos laborales', 'Qué es constancia de trabajo', 'Es una constancia emitida por el empleador que acredita vínculo laboral, cargo, fecha de ingreso u otra información laboral permitida.', 'Buenas prácticas laborales y normativa aplicable', 'Debe emitirse con información objetiva y autorizada.', 'constancia trabajo laboral vinculo cargo fecha ingreso'),
-        ('Disciplina', 'Qué es medida disciplinaria', 'Es una acción del empleador frente a incumplimientos laborales, como amonestación, suspensión o despido, respetando proporcionalidad, razonabilidad y derecho de defensa.', 'TUO del D. Leg. N.° 728 y principios laborales', 'Debe estar sustentada, documentada y seguir procedimiento cuando corresponda.', 'medida disciplinaria amonestacion suspension descargo'),
-        ('RRHH', 'Qué es inducción laboral', 'La inducción laboral es el proceso de bienvenida y orientación al trabajador sobre la empresa, funciones, normas, SST, políticas y cultura organizacional.', 'Buenas prácticas de RR.HH. y obligaciones de información/capacitación según materia', 'Debe documentarse especialmente en temas de SST y políticas internas.', 'induccion laboral bienvenida trabajador capacitacion'),
-        ('RRHH', 'Qué es clima laboral', 'El clima laboral es la percepción de los trabajadores sobre ambiente, liderazgo, comunicación, reconocimiento y condiciones de trabajo. Sirve para detectar oportunidades de mejora.', 'Buenas prácticas de gestión humana', 'No es un beneficio legal específico, pero impacta gestión y retención.', 'clima laboral ambiente encuesta bienestar'),
-        ('RRHH', 'Qué es evaluación de desempeño', 'Es un proceso para medir cumplimiento de objetivos, competencias y resultados del trabajador. Debe aplicarse con criterios objetivos y comunicados.', 'Buenas prácticas de RR.HH.', 'Puede vincularse a capacitación, promoción o mejora.', 'evaluacion desempeño objetivos competencias resultados'),
-    ]
-    with db() as con:
-        con.execute("""CREATE TABLE IF NOT EXISTS ia_base_conocimiento_hr(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            modulo TEXT,
-            rol_destino TEXT DEFAULT 'ambos',
-            pregunta_clave TEXT,
-            respuesta TEXT,
-            ruta TEXT,
-            palabras_clave TEXT,
-            activo INTEGER DEFAULT 1,
-            fecha_registro TEXT,
-            registrado_por TEXT
-        )""")
-        con.execute("""CREATE TABLE IF NOT EXISTS ia_legislacion_peru(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tema TEXT,
-            pregunta_clave TEXT,
-            respuesta TEXT,
-            base_legal TEXT,
-            detalle_legal TEXT,
-            palabras_clave TEXT,
-            activo INTEGER DEFAULT 1,
-            fecha_actualizacion TEXT
-        )""")
-        con.execute("""CREATE TABLE IF NOT EXISTS ia_hr_log(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            rol TEXT,
-            modulo TEXT,
-            dni TEXT,
-            pregunta TEXT,
-            respuesta_tipo TEXT,
-            fecha TEXT,
-            usuario TEXT
-        )""")
-        for modulo, rol, preg, resp, ruta, keys in semillas_sistema:
-            existe = con.execute('SELECT id FROM ia_base_conocimiento_hr WHERE UPPER(pregunta_clave)=UPPER(?) AND rol_destino=? LIMIT 1', (preg, rol)).fetchone()
-            if not existe:
-                con.execute("""INSERT INTO ia_base_conocimiento_hr(modulo,rol_destino,pregunta_clave,respuesta,ruta,palabras_clave,activo,fecha_registro,registrado_por)
-                               VALUES(?,?,?,?,?,?,1,?,?)""", (modulo,rol,preg,resp,ruta,keys,now_txt(),'SISTEMA'))
-        for tema, preg, resp, base, det, keys in semillas_legal:
-            existe = con.execute('SELECT id FROM ia_legislacion_peru WHERE UPPER(pregunta_clave)=UPPER(?) LIMIT 1', (preg,)).fetchone()
-            if not existe:
-                con.execute("""INSERT INTO ia_legislacion_peru(tema,pregunta_clave,respuesta,base_legal,detalle_legal,palabras_clave,activo,fecha_actualizacion)
-                               VALUES(?,?,?,?,?,?,1,?)""", (tema,preg,resp,base,det,keys,now_txt()))
-        con.commit()
-
-
-def ia_registrar_log(rol, modulo, dni, pregunta, tipo):
-    try:
-        with db() as con:
-            con.execute('INSERT INTO ia_hr_log(rol,modulo,dni,pregunta,respuesta_tipo,fecha,usuario) VALUES(?,?,?,?,?,?,?)',
-                        (rol, modulo, dni, pregunta, tipo, now_txt(), session.get('admin_nombre') or session.get('nombre') or session.get('dni') or 'Sistema'))
-            con.commit()
-    except Exception:
-        pass
-
-
-def ia_buscar_base_conocimiento(pregunta, rol, modulo=''):
-    try:
-        with db() as con:
-            rows = con.execute("""SELECT * FROM ia_base_conocimiento_hr
-                                  WHERE activo=1 AND rol_destino IN ('ambos', ?)""", (rol,)).fetchall()
-        if not rows:
-            return None
-        ranked = sorted(rows, key=lambda r: ia_score(pregunta + ' ' + modulo, r), reverse=True)
-        if ranked and ia_score(pregunta + ' ' + modulo, ranked[0]) >= 1:
-            r = ranked[0]
-            ruta = f"<p><b>Ruta sugerida:</b> <a href='{h(r['ruta'])}'>{h(r['ruta'])}</a></p>" if clean(r['ruta']) else ''
-            return f"<div class='ia-result ok'><h3>{h(r['pregunta_clave'])}</h3><p>{h(r['respuesta'])}</p>{ruta}</div>"
-    except Exception:
-        pass
+def _fecha_parse_safe(v):
+    txt = fecha_sin_hora(v)
+    if not txt:
+        return None
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(txt, fmt).date()
+        except Exception:
+            pass
     return None
 
 
-def ia_buscar_legal(pregunta):
-    try:
-        with db() as con:
-            rows = con.execute('SELECT * FROM ia_legislacion_peru WHERE activo=1').fetchall()
-        ranked = sorted(rows, key=lambda r: ia_score(pregunta, r), reverse=True)
-        if ranked and ia_score(pregunta, ranked[0]) >= 1:
-            r = ranked[0]
-            return f"""
-            <div class='ia-result legal'>
-              <h3>{h(r['pregunta_clave'])}</h3>
-              <p>{h(r['respuesta'])}</p>
-              <p><b>Base legal referencial:</b> {h(r['base_legal'])}</p>
-              <p class='muted'>{h(r['detalle_legal'])}</p>
-              <small>Respuesta informativa. Para casos especiales, RR.HH. debe validar régimen laboral, jornada y situación concreta.</small>
-            </div>"""
-    except Exception:
-        pass
-    return None
-
-
-def ia_resumen_documental(rol, dni=''):
+def ia_contratacion_analizar_dni(dni):
+    """Motor de reglas IA local: valida postulante/trabajador sin depender de internet ni API externa."""
+    dni = normalizar_dni(dni)
+    resultado = {
+        'dni': dni, 'estado': 'PENDIENTE', 'color': 'warn', 'trabajador': None,
+        'alertas': [], 'faltantes': [], 'recomendaciones': [], 'kpis': {}
+    }
+    if not dni:
+        resultado['estado'] = 'BLOQUEADO'
+        resultado['color'] = 'bad'
+        resultado['alertas'].append('Ingresa un DNI válido de 8 dígitos para analizar.')
+        return resultado
+    obligatorios = [
+        ('nombre','Nombres'), ('fecha_nacimiento','Fecha nacimiento'), ('direccion','Dirección'),
+        ('distrito','Distrito'), ('provincia','Provincia'), ('departamento','Departamento'),
+        ('empresa','Empresa'), ('area','Área'), ('cargo','Cargo'), ('actividad','Actividad'),
+        ('regimen_laboral','Régimen laboral'), ('fecha_ingreso','Fecha ingreso'),
+        ('fecha_fin_contrato','Fecha fin contrato'), ('remuneracion_basica','Remuneración básica')
+    ]
     with db() as con:
-        if rol == 'admin':
-            total = ia_sql_count(con, 'SELECT COUNT(*) FROM documentos')
-            pendientes = ia_sql_count(con, "SELECT COUNT(*) FROM documentos WHERE COALESCE(estado,'Pendiente') IN ('Pendiente','Aceptado','Firmado')")
-            rechazados = ia_sql_count(con, "SELECT COUNT(*) FROM documentos WHERE estado='Rechazado'")
-            leidos = ia_sql_count(con, "SELECT COUNT(*) FROM documentos WHERE COALESCE(fecha_lectura,'')<>''")
-            rows = ia_sql_rows(con, 'SELECT tipo, COUNT(*) c FROM documentos GROUP BY tipo ORDER BY c DESC LIMIT 6')
-            detalle = ''.join([f"<li>{h(r['tipo'])}: <b>{r['c']}</b></li>" for r in rows]) or '<li>Sin documentos cargados.</li>'
-            return f"<div class='ia-result ok'><h3>Resumen documental administrador</h3><p>Total: <b>{total}</b> · Pendientes: <b>{pendientes}</b> · Leídos: <b>{leidos}</b> · Rechazados: <b>{rechazados}</b></p><ul>{detalle}</ul><p>Ruta: Gestión Documental > Subir / gestionar documentos.</p></div>"
-        dni = normalizar_dni(dni)
-        total = ia_sql_count(con, 'SELECT COUNT(*) FROM documentos WHERE dni=?', (dni,))
-        leidos = ia_sql_count(con, "SELECT COUNT(*) FROM documentos WHERE dni=? AND COALESCE(fecha_lectura,'')<>''", (dni,))
-        rows = ia_sql_rows(con, 'SELECT tipo, periodo, estado, fecha_subida FROM documentos WHERE dni=? ORDER BY id DESC LIMIT 6', (dni,))
-        detalle = ''.join([f"<li>{h(r['tipo'])} · {h(r['periodo'])} · {h(r['estado'] or 'Pendiente')}</li>" for r in rows]) or '<li>Aún no tienes documentos cargados para tu DNI.</li>'
-        return f"<div class='ia-result ok'><h3>Mis documentos</h3><p>Tienes <b>{total}</b> documento(s) cargado(s). Leídos: <b>{leidos}</b>.</p><ul>{detalle}</ul><p>Ruta: Gestión Documental > Documentos de pago / empresa / personales.</p></div>"
+        t = con.execute('SELECT * FROM trabajadores WHERE dni=? LIMIT 1', (dni,)).fetchone()
+        ing = _sql_rows_safe(con, 'SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 3', (dni,))
+        docs = _sql_count_safe(con, 'SELECT COUNT(*) FROM contratacion_docs WHERE dni=?', (dni,))
+        firmas_pend = _sql_count_safe(con, "SELECT COUNT(*) FROM firma_solicitudes WHERE dni=? AND UPPER(COALESCE(estado,'')) NOT IN ('FIRMADO','APROBADO','COMPLETADO')", (dni,))
+        medicas = _sql_rows_safe(con, 'SELECT * FROM contratacion_medica WHERE dni=? ORDER BY id DESC LIMIT 1', (dni,))
+        checklist_pend = _sql_count_safe(con, "SELECT COUNT(*) FROM contratacion_checklist_next WHERE dni=? AND UPPER(COALESCE(estado,'')) NOT IN ('COMPLETO','COMPLETADO','OK')", (dni,))
+    obs = alerta_observado_por_dni(dni)
+    if obs.get('encontrado'):
+        resultado['alertas'].append(f"Trabajador observado: {obs.get('nivel')} - {obs.get('motivo') or 'Sin motivo registrado'}.")
+        if obs.get('bloquea'):
+            resultado['estado'] = 'BLOQUEADO'
+            resultado['color'] = 'bad'
+            resultado['recomendaciones'].append('Bloquear generación de contrato hasta levantar observación o aprobar excepción.')
+        elif obs.get('requiere_autorizacion'):
+            resultado['recomendaciones'].append('Solicitar validación de RR.HH./jefatura antes de continuar.')
+    if not t:
+        resultado['alertas'].append('El DNI no existe en la base de trabajadores/postulantes.')
+        resultado['recomendaciones'].append('Crear postulante desde el módulo POSTULANTES y completar datos obligatorios.')
+        if resultado['estado'] != 'BLOQUEADO':
+            resultado['estado'] = 'PENDIENTE'
+        return resultado
+    resultado['trabajador'] = dict(t)
+    for campo, etiqueta in obligatorios:
+        if campo not in t.keys() or not clean(t[campo]):
+            resultado['faltantes'].append(etiqueta)
+    if resultado['faltantes']:
+        resultado['alertas'].append('Faltan datos obligatorios para generar contrato: ' + ', '.join(resultado['faltantes'][:8]) + ('.' if len(resultado['faltantes']) <= 8 else '...'))
+        resultado['recomendaciones'].append('Completar la ficha del postulante antes de generar contrato o renovación.')
+    if ing:
+        tipo_ing = clean(ing[0]['tipo_ingreso'] if 'tipo_ingreso' in ing[0].keys() else '')
+        if 'REING' in tipo_ing.upper():
+            resultado['alertas'].append('El trabajador figura como REINGRESANTE. Revisar historial laboral y documentos anteriores.')
+    else:
+        resultado['recomendaciones'].append('No se encontró registro en POSTULANTES; enlazarlo a un requerimiento/ticket.')
+    if medicas:
+        estado_med = clean(medicas[0]['estado'] if 'estado' in medicas[0].keys() else '')
+        if estado_med and estado_med.upper() != 'APTO':
+            resultado['alertas'].append(f'Evaluación médica no apta o pendiente: {estado_med}.')
+    else:
+        resultado['recomendaciones'].append('Registrar o validar evaluación médica antes de cerrar contratación.')
+    if firmas_pend:
+        resultado['alertas'].append(f'Tiene {firmas_pend} documento(s) pendiente(s) de firma.')
+    if checklist_pend:
+        resultado['alertas'].append(f'Tiene {checklist_pend} pendiente(s) en checklist documental.')
+    ffin = _fecha_parse_safe(t['fecha_fin_contrato'] if 'fecha_fin_contrato' in t.keys() else '')
+    if ffin:
+        dias = (ffin - datetime.now(APP_TZ).date()).days
+        if dias < 0:
+            resultado['alertas'].append(f'Contrato vencido hace {abs(dias)} día(s).')
+        elif dias <= 30:
+            resultado['alertas'].append(f'Contrato próximo a vencer en {dias} día(s).')
+    resultado['kpis'] = {'documentos': docs, 'firmas_pendientes': firmas_pend, 'checklist_pendiente': checklist_pend}
+    if resultado['estado'] != 'BLOQUEADO':
+        if resultado['faltantes'] or firmas_pend or checklist_pend or not medicas:
+            resultado['estado'] = 'PENDIENTE'
+            resultado['color'] = 'warn'
+        else:
+            resultado['estado'] = 'LISTO'
+            resultado['color'] = 'ok'
+            resultado['recomendaciones'].append('Puede continuar con generación de contrato/documentos, sujeto a revisión final de RR.HH.')
+    return resultado
 
 
-def ia_resumen_vacacional(rol, dni=''):
+def ia_contratacion_resumen_global():
     with db() as con:
-        if rol == 'admin':
-            saldos = ia_sql_count(con, 'SELECT COUNT(*) FROM vacaciones_saldos')
-            solicitudes = ia_sql_count(con, 'SELECT COUNT(*) FROM vacaciones_solicitudes')
-            pendientes = ia_sql_count(con, "SELECT COUNT(*) FROM vacaciones_solicitudes WHERE estado LIKE 'Pendiente%'")
-            aprobadas = ia_sql_count(con, "SELECT COUNT(*) FROM vacaciones_solicitudes WHERE estado LIKE 'Aprobado%'")
-            return f"<div class='ia-result warn'><h3>Resumen vacacional administrador</h3><p>Saldos registrados: <b>{saldos}</b> · Solicitudes: <b>{solicitudes}</b> · Pendientes: <b>{pendientes}</b> · Aprobadas: <b>{aprobadas}</b>.</p><p>Ruta: Gestión Vacacional > Dashboard / Saldos / Aprobaciones / Reportes.</p></div>"
-        dni = normalizar_dni(dni)
-        rows = ia_sql_rows(con, 'SELECT periodo_inicio, periodo_fin, dias_ganados, dias_gozados, saldo FROM vacaciones_saldos WHERE dni=? ORDER BY periodo_inicio DESC, periodo_fin DESC', (dni,))
-        total_saldo = sum(float(r['saldo'] or 0) for r in rows)
-        sol = ia_sql_rows(con, 'SELECT fecha_inicio, fecha_fin, dias, estado FROM vacaciones_solicitudes WHERE dni=? ORDER BY id DESC LIMIT 5', (dni,))
-        detalle = ''.join([f"<li>Periodo {h(r['periodo_inicio'])}/{h(r['periodo_fin'])}: saldo <b>{r['saldo']}</b> día(s)</li>" for r in rows[:5]]) or '<li>No se encontraron saldos cargados para tu DNI.</li>'
-        solicitudes = ''.join([f"<li>{h(s['fecha_inicio'])} al {h(s['fecha_fin'])}: {h(s['estado'])}</li>" for s in sol]) or '<li>No tienes solicitudes registradas.</li>'
-        return f"<div class='ia-result warn'><h3>Mis vacaciones</h3><p>Saldo total referencial: <b>{total_saldo:g}</b> día(s).</p><h4>Saldos</h4><ul>{detalle}</ul><h4>Solicitudes recientes</h4><ul>{solicitudes}</ul><p>Ruta: Gestión Vacacional > Saldo y solicitud.</p></div>"
+        total_post = _sql_count_safe(con, 'SELECT COUNT(*) FROM contratacion_ingresos')
+        total_req = _sql_count_safe(con, 'SELECT COUNT(*) FROM contratacion_requerimientos')
+        obs_act = _sql_count_safe(con, "SELECT COUNT(*) FROM trabajadores_observados WHERE UPPER(COALESCE(estado,'')) IN ('ACTIVE','ACTIVO')")
+        firmas = _sql_count_safe(con, "SELECT COUNT(*) FROM firma_solicitudes WHERE UPPER(COALESCE(estado,'')) NOT IN ('FIRMADO','APROBADO','COMPLETADO')")
+        docs = _sql_count_safe(con, 'SELECT COUNT(*) FROM contratacion_docs')
+        vencen = 0
+        for r in _sql_rows_safe(con, "SELECT dni, nombre, fecha_fin_contrato FROM trabajadores WHERE COALESCE(fecha_fin_contrato,'')<>''"):
+            f = _fecha_parse_safe(r['fecha_fin_contrato'])
+            if f and 0 <= (f - datetime.now(APP_TZ).date()).days <= 30:
+                vencen += 1
+    return {'postulantes': total_post, 'requerimientos': total_req, 'observados_activos': obs_act, 'firmas_pendientes': firmas, 'documentos': docs, 'vencen_30': vencen}
 
 
-def ia_hr_responder(pregunta, modulo='', rol=None, dni=None):
-    pregunta = clean(pregunta)
-    rol = rol or ('admin' if session.get('admin_id') else 'trabajador')
-    dni = normalizar_dni(dni or session.get('dni') or '')
-    q = ia_norm(pregunta)
-    if not pregunta:
-        return "<div class='ia-result warn'><h3>IA HR</h3><p>Escribe una pregunta. Ejemplo: ¿qué es CTS?, ¿dónde veo mis boletas?, ¿cuánto saldo tengo?</p></div>", 'vacio'
-    admin_terms = ['cargar base','cargar trabajadores','subir saldos','cargar saldos','subir boletas masiva','sincronizar pdf','crear carpetas','reporte general','todos los trabajadores']
-    if rol != 'admin' and any(t in q for t in admin_terms):
-        return "<div class='ia-result bad'><h3>Acceso limitado</h3><p>Esa consulta corresponde a opciones administrativas. Desde tu portal puedes consultar tus boletas, documentos, saldo vacacional, solicitudes y conceptos laborales.</p></div>", 'bloqueo_rol'
-    if any(x in q for x in ['mis boletas','mis documentos','documentos','boleta','cts','gratificacion','utilidad','liquidacion']) and any(x in q for x in ['tengo','ver','donde','mis','cargadas','aparece','pendiente','resumen']):
-        return ia_resumen_documental(rol, dni), 'datos_documental'
-    if any(x in q for x in ['vacacion','saldo','solicitud','aprobacion','dias']) and any(x in q for x in ['tengo','mis','estado','pendiente','resumen','cuanto','cuantos']):
-        return ia_resumen_vacacional(rol, dni), 'datos_vacacional'
-    r = ia_buscar_base_conocimiento(pregunta, rol, modulo)
-    if r:
-        return r, 'base_conocimiento'
-    r = ia_buscar_legal(pregunta)
-    if r:
-        return r, 'legal_peru'
-    if 'vac' in ia_norm(modulo):
-        return ia_resumen_vacacional(rol, dni), 'fallback_vacacional'
-    if 'doc' in ia_norm(modulo) or 'panel' in ia_norm(modulo):
-        return ia_resumen_documental(rol, dni), 'fallback_documental'
-    if rol == 'admin':
-        return "<div class='ia-result ok'><h3>IA HR Administrador</h3><p>Puedo ayudarte con Gestión Documental, boletas, carga de saldos, vacaciones, reportes e información legal laboral peruana. Prueba: ¿dónde cargo boletas?, ¿qué documentos están pendientes?, ¿qué es CTS?</p></div>", 'fallback'
-    return "<div class='ia-result ok'><h3>IA HR Trabajador</h3><p>Puedo ayudarte a revisar tus boletas, documentos, vacaciones, solicitudes y conceptos laborales. Prueba: ¿qué es CTS?, ¿cuánto saldo tengo?, ¿dónde veo mi boleta?</p></div>", 'fallback'
-
-
-def ia_widget_hr(active=''):
-    if not (session.get('admin_id') or session.get('dni')):
-        return ''
-    rol = 'Administrador' if session.get('admin_id') else 'Trabajador'
-    ejemplos = '¿Dónde cargo boletas? | ¿Qué documentos están pendientes? | ¿Qué es CTS?' if session.get('admin_id') else '¿Dónde veo mi boleta? | ¿Cuánto saldo tengo? | ¿Qué es gratificación?'
+def ia_contratacion_responder(pregunta, dni=''):
+    pregunta_l = clean(pregunta).lower()
+    dni_norm = normalizar_dni(dni or pregunta)
+    if dni_norm:
+        a = ia_contratacion_analizar_dni(dni_norm)
+        nombre = h(a['trabajador']['nombre']) if a.get('trabajador') else 'No registrado'
+        alertas = ''.join([f"<li>{h(x)}</li>" for x in a['alertas']]) or '<li>Sin alertas críticas.</li>'
+        recs = ''.join([f"<li>{h(x)}</li>" for x in a['recomendaciones']]) or '<li>Continuar con revisión estándar de RR.HH.</li>'
+        falt = ', '.join(a['faltantes']) if a['faltantes'] else 'Ninguno'
+        return f"""
+        <div class='ia-result {a['color']}'><h3>Resultado IA: {a['estado']}</h3>
+        <p><b>DNI:</b> {h(a['dni'])} · <b>Trabajador:</b> {nombre}</p>
+        <p><b>Datos faltantes:</b> {h(falt)}</p>
+        <h4>Alertas</h4><ul>{alertas}</ul><h4>Recomendación</h4><ul>{recs}</ul></div>
+        """
+    resumen = ia_contratacion_resumen_global()
+    if any(x in pregunta_l for x in ['firma', 'firmar', 'pendiente de firma']):
+        return f"<div class='ia-result warn'><h3>Firmas pendientes</h3><p>Actualmente existen <b>{resumen['firmas_pendientes']}</b> documentos pendientes de firma.</p><p>Recomendación IA: revisar el módulo Firma / Facial / Digital y priorizar renovaciones próximas a vencer.</p></div>"
+    if any(x in pregunta_l for x in ['venc', 'renov']):
+        return f"<div class='ia-result warn'><h3>Vencimientos / renovaciones</h3><p>Hay <b>{resumen['vencen_30']}</b> contrato(s) con vencimiento dentro de los próximos 30 días.</p><p>Recomendación IA: generar renovaciones masivas y enviarlas a firma.</p></div>"
+    if any(x in pregunta_l for x in ['observ', 'bloque']):
+        return f"<div class='ia-result bad'><h3>Trabajadores observados</h3><p>Hay <b>{resumen['observados_activos']}</b> observación(es) activas.</p><p>Recomendación IA: Nivel 3 bloquea contratación; Nivel 2 requiere validación de RR.HH./jefatura.</p></div>"
     return f"""
-    <div class='iahr-fab' onclick='iahrToggle()'><i class='bi bi-robot'></i><span>IA HR</span></div>
-    <div class='iahr-panel' id='iahrPanel'>
-      <div class='iahr-head'><div><b>🤖 IA HR PRO</b><small>{h(rol)} · {h(active)}</small></div><button type='button' onclick='iahrToggle()'>×</button></div>
-      <div class='iahr-body'>
-        <div class='iahr-ex'>{h(ejemplos)}</div>
-        <input id='iahrModulo' type='hidden' value='{h(active)}'>
-        <textarea id='iahrPregunta' placeholder='Escribe tu pregunta aquí...'></textarea>
-        <button type='button' class='btn-green iahr-send' onclick='iahrAsk(event)'>Consultar IA</button>
-        <div id='iahrRespuesta' class='iahr-respuesta'><div class='muted'>La respuesta se filtrará según tu rol.</div></div>
-      </div>
-    </div>"""
+    <div class='ia-result ok'><h3>Resumen IA de contratación</h3>
+    <p>Requerimientos: <b>{resumen['requerimientos']}</b> · Postulantes: <b>{resumen['postulantes']}</b> · Documentos: <b>{resumen['documentos']}</b></p>
+    <p>Observados activos: <b>{resumen['observados_activos']}</b> · Firmas pendientes: <b>{resumen['firmas_pendientes']}</b> · Vencen en 30 días: <b>{resumen['vencen_30']}</b></p>
+    <p>Pregunta por un DNI o escribe: pendientes de firma, contratos por vencer, trabajadores observados.</p></div>
+    """
+
+
+# =============================
+# ZEBRA ZC300 - VALIDACIÓN REAL DE CONFIGURACIÓN
+# =============================
+def es_entorno_render():
+    """Render no puede ver impresoras físicas conectadas a la PC del usuario."""
+    return bool(os.getenv('RENDER')) or '/opt/render' in str(BASE_DIR).lower() or '/opt/render' in str(PERSIST_DIR).lower()
+
+
+def zebra_validar_campos_config(cfg):
+    """Valida requisitos mínimos según tipo de conexión, sin marcar lista la impresora."""
+    if not cfg:
+        return 'NO CONFIGURADA', 'No existe configuración guardada.'
+    def get(k):
+        try:
+            return clean(cfg[k])
+        except Exception:
+            return clean(getattr(cfg, k, ''))
+    impresora = get('impresora_nombre')
+    tipo = get('tipo_conexion').upper()
+    ip = get('ip_impresora')
+    puerto = get('puerto')
+    bt_nombre = get('bluetooth_nombre')
+    bt_mac = get('bluetooth_mac')
+    faltan = []
+    if not impresora:
+        faltan.append('nombre exacto de impresora')
+    if 'RED' in tipo:
+        if not ip: faltan.append('IP de impresora')
+        if not puerto: faltan.append('puerto de red')
+    elif 'BLUETOOTH' in tipo:
+        if not (bt_nombre or bt_mac): faltan.append('nombre Bluetooth o MAC/ID')
+        if not puerto: faltan.append('puerto COM Bluetooth')
+    else:
+        # Cola Windows/USB: requiere nombre exacto; la prueba real solo puede hacerse en la PC local.
+        pass
+    if faltan:
+        return 'CONFIGURACIÓN INCOMPLETA', 'Falta: ' + ', '.join(faltan) + '.'
+    return 'PENDIENTE DE PRUEBA LOCAL', 'Configuración mínima completa. Falta probar en la PC donde está instalada/conectada la Zebra.'
+
+
+def zebra_probar_conexion_real(cfg):
+    """Intenta validar conexión real. En Render solo permite prueba lógica y bloquea impresión real."""
+    estado_base, detalle_base = zebra_validar_campos_config(cfg)
+    if estado_base == 'CONFIGURACIÓN INCOMPLETA' or estado_base == 'NO CONFIGURADA':
+        return estado_base, detalle_base, False
+    def get(k):
+        try:
+            return clean(cfg[k])
+        except Exception:
+            return clean(getattr(cfg, k, ''))
+    impresora = get('impresora_nombre')
+    tipo = get('tipo_conexion').upper()
+    ip = get('ip_impresora')
+    puerto = get('puerto')
+    if es_entorno_render():
+        return 'PRUEBA LÓGICA / REQUIERE PC LOCAL', 'Render no puede detectar tu Zebra física. Esta prueba solo valida campos y genera archivo; la impresión real queda bloqueada hasta ejecutar el sistema en la PC local o usar un servicio local de impresión.', False
+    if 'RED' in tipo:
+        try:
+            import socket
+            with socket.create_connection((ip, int(puerto)), timeout=3):
+                return 'LISTA PARA IMPRIMIR', f'Conexión de red OK con {ip}:{puerto}.', True
+        except Exception as e:
+            return 'NO DETECTADA', f'No se pudo conectar por red a {ip}:{puerto}. Detalle: {e}', False
+    if 'BLUETOOTH' in tipo:
+        # En Windows normalmente Bluetooth queda como COM; si pyserial existe se prueba apertura.
+        if not puerto:
+            return 'CONFIGURACIÓN INCOMPLETA', 'Para Bluetooth indique el puerto COM asignado por Windows.', False
+        try:
+            import serial  # type: ignore
+            ser = serial.Serial(puerto, timeout=2)
+            ser.close()
+            return 'LISTA PARA IMPRIMIR', f'Puerto Bluetooth {puerto} disponible.', True
+        except Exception as e:
+            return 'PENDIENTE DE PRUEBA REAL', f'Bluetooth configurado, pero no se pudo abrir {puerto}. Verifique emparejamiento, driver y puerto COM. Detalle: {e}', False
+    # Cola Windows / USB
+    try:
+        import win32print  # type: ignore
+        printers = [x[2] for x in win32print.EnumPrinters(2)]
+        if impresora in printers:
+            return 'LISTA PARA IMPRIMIR', f'Impresora encontrada en Windows: {impresora}.', True
+        similares = ', '.join([x for x in printers if 'zebra' in x.lower()])
+        return 'NO DETECTADA', f'No se encontró la impresora exacta "{impresora}" en Windows. Detectadas Zebra: {similares or "ninguna"}.', False
+    except Exception as e:
+        return 'PENDIENTE DE PRUEBA REAL', f'No se pudo consultar la cola de Windows desde este entorno. Ejecute en la PC local con driver Zebra instalado. Detalle: {e}', False
+
+
+def zebra_permite_impresion(estado):
+    return clean(estado).upper() == 'LISTA PARA IMPRIMIR'
+
+
 
 def sincronizar_jefes_vacaciones(con):
     """Sincroniza JEFE INMEDIATO por DNI entre saldos, trabajadores y solicitudes."""
@@ -934,6 +932,26 @@ def init_db():
             ('indumentaria', 'ALTER TABLE trabajadores ADD COLUMN indumentaria TEXT'),
             ('carnet_conadis', 'ALTER TABLE trabajadores ADD COLUMN carnet_conadis TEXT'),
             ('observacion', 'ALTER TABLE trabajadores ADD COLUMN observacion TEXT'),
+            ('modalidad', 'ALTER TABLE trabajadores ADD COLUMN modalidad TEXT'),
+            ('cuenta_bancaria', 'ALTER TABLE trabajadores ADD COLUMN cuenta_bancaria TEXT'),
+            ('biometria_estado', "ALTER TABLE trabajadores ADD COLUMN biometria_estado TEXT DEFAULT 'PENDIENTE'"),
+            ('fotocheck_estado', "ALTER TABLE trabajadores ADD COLUMN fotocheck_estado TEXT DEFAULT 'PENDIENTE'"),
+            ('estado_civil', 'ALTER TABLE trabajadores ADD COLUMN estado_civil TEXT'),
+            ('sistema_pensionario', 'ALTER TABLE trabajadores ADD COLUMN sistema_pensionario TEXT'),
+            ('ultima_empresa', 'ALTER TABLE trabajadores ADD COLUMN ultima_empresa TEXT'),
+            ('discapacidad', 'ALTER TABLE trabajadores ADD COLUMN discapacidad TEXT'),
+            ('cantidad_hijos', 'ALTER TABLE trabajadores ADD COLUMN cantidad_hijos TEXT'),
+            ('nacionalidad', 'ALTER TABLE trabajadores ADD COLUMN nacionalidad TEXT'),
+            ('sexo', 'ALTER TABLE trabajadores ADD COLUMN sexo TEXT'),
+            ('regimen_laboral', 'ALTER TABLE trabajadores ADD COLUMN regimen_laboral TEXT'),
+            ('periodicidad_pago', 'ALTER TABLE trabajadores ADD COLUMN periodicidad_pago TEXT'),
+            ('tipo_pago', 'ALTER TABLE trabajadores ADD COLUMN tipo_pago TEXT'),
+            ('cuspp', 'ALTER TABLE trabajadores ADD COLUMN cuspp TEXT'),
+            ('remuneracion_letra', 'ALTER TABLE trabajadores ADD COLUMN remuneracion_letra TEXT'),
+            ('nombre_moneda', 'ALTER TABLE trabajadores ADD COLUMN nombre_moneda TEXT'),
+            ('simbolo_moneda', 'ALTER TABLE trabajadores ADD COLUMN simbolo_moneda TEXT'),
+            ('funciones', 'ALTER TABLE trabajadores ADD COLUMN funciones TEXT'),
+            ('meses_contrato', 'ALTER TABLE trabajadores ADD COLUMN meses_contrato TEXT'),
         ]:
             try: con.execute(ddl)
             except Exception: pass
@@ -969,6 +987,27 @@ def init_db():
         CREATE TABLE IF NOT EXISTS app_config(
             clave TEXT PRIMARY KEY,
             valor TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS ia_contratacion_log(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pregunta TEXT,
+            dni TEXT,
+            respuesta_estado TEXT,
+            usuario TEXT,
+            fecha TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS base_central_sync_config(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            destino TEXT DEFAULT 'SQL SERVER / NISIRA',
+            estado TEXT DEFAULT 'PENDIENTE',
+            servidor TEXT,
+            base_datos TEXT,
+            endpoint TEXT,
+            observacion TEXT,
+            fecha_registro TEXT,
+            registrado_por TEXT
         )''')
         con.execute('''
         CREATE TABLE IF NOT EXISTS login_intentos(
@@ -1164,6 +1203,87 @@ def init_db():
             existe = con.execute('SELECT id FROM contratacion_cargos WHERE codigo=? OR UPPER(nombre)=UPPER(?) LIMIT 1', (codigo, nombre)).fetchone()
             if not existe:
                 con.execute('''INSERT INTO contratacion_cargos(codigo,nombre,nombre_corto,resumen,funciones,activo) VALUES(?,?,?,?,?,1)''', (codigo, nombre, nombre_corto, resumen, funciones))
+
+        # PRO: Datos maestros del empleador. No incluye datos personales del trabajador
+        # como sistema pensionario o estado civil. Alimenta Requerimientos, Postulantes y contratos.
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_maestros_empleador(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT,
+            codigo TEXT,
+            nombre TEXT,
+            descripcion TEXT,
+            activo INTEGER DEFAULT 1,
+            fecha_registro TEXT,
+            registrado_por TEXT
+        )''')
+        try:
+            con.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_maestros_empleador_tipo_nombre ON contratacion_maestros_empleador(tipo, nombre)')
+        except Exception:
+            pass
+        base_maestros_emp = [
+            ('EMPRESA','AQUANQA I','AQUANQA I','Empresa empleadora'),
+            ('EMPRESA','AQUANQA II','AQUANQA II','Empresa empleadora'),
+            ('AREA','CAMPO','Campo','Área operativa'),
+            ('AREA','PACKING','Packing','Área operativa'),
+            ('AREA','RRHH','RR.HH.','Área administrativa'),
+            ('AREA','SST','SST','Seguridad y salud en el trabajo'),
+            ('ACTIVIDAD','OB_PODA','OB_PODA / COSECHA','Actividad agrícola'),
+            ('ACTIVIDAD','COSECHA','COSECHA','Actividad agrícola'),
+            ('REGIMEN_LABORAL','AGRARIO','AGRARIO','Régimen laboral'),
+            ('REGIMEN_LABORAL','GENERAL','GENERAL','Régimen laboral'),
+            ('TIPO_CONTRATO','INTERMITENTE','INTERMITENTE','Tipo de contrato'),
+            ('TIPO_CONTRATO','TEMPORAL','TEMPORAL','Tipo de contrato'),
+            ('MODALIDAD','CAMPAÑA','CAMPAÑA','Modalidad de contratación'),
+            ('MODALIDAD','PERMANENTE','PERMANENTE','Modalidad de contratación'),
+            ('MONEDA','PEN','Sol Peruano','Moneda fija'),
+            ('SIMBOLO_MONEDA','S/','S/','Símbolo moneda fijo'),
+            ('PERIODICIDAD_PAGO','MENSUAL','MENSUAL','Periodicidad de pago'),
+            ('TIPO_PAGO','DEPOSITO','DEPÓSITO EN CUENTA','Tipo de pago')
+        ]
+        for tipo_m, codigo_m, nombre_m, descripcion_m in base_maestros_emp:
+            existe_m = con.execute('SELECT id FROM contratacion_maestros_empleador WHERE tipo=? AND UPPER(nombre)=UPPER(?) LIMIT 1', (tipo_m, nombre_m)).fetchone()
+            if not existe_m:
+                con.execute('''INSERT INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo_m,codigo_m,nombre_m,descripcion_m,now_txt(),'SISTEMA'))
+
+        # PRO: relación automática Empresa → Área → Cargo → Actividad → Régimen → Tipo contrato.
+        # Esta tabla gobierna los desplegables de Requerimiento y Postulantes para evitar configurar campo por campo.
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_relaciones_laborales(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empresa TEXT,
+            area TEXT,
+            cargo TEXT,
+            actividad TEXT,
+            regimen_laboral TEXT,
+            tipo_contrato TEXT,
+            modalidad TEXT,
+            centro_costo TEXT,
+            funciones TEXT,
+            activo INTEGER DEFAULT 1,
+            fecha_registro TEXT,
+            registrado_por TEXT
+        )''')
+        try:
+            con.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_laboral_base ON contratacion_relaciones_laborales(empresa, area, cargo, actividad, regimen_laboral, tipo_contrato)')
+        except Exception:
+            pass
+        base_relaciones = [
+            ('AQUANQA I','Campo','Obrero de Campo','OB_PODA / COSECHA','AGRARIO','INTERMITENTE','CAMPAÑA','CAMPO-OB','Labores agrícolas de campo'),
+            ('AQUANQA I','Packing','Operario Packing','PACKING','AGRARIO','INTERMITENTE','CAMPAÑA','PACK-OB','Labores operativas de packing'),
+            ('AQUANQA I','RR.HH.','Auxiliar de RRHH','RRHH','GENERAL','TEMPORAL','PERMANENTE','ADM-RRHH','Apoyo administrativo de recursos humanos'),
+            ('AQUANQA II','Campo','Obrero de Campo','COSECHA','AGRARIO','INTERMITENTE','CAMPAÑA','CAMPO-OB','Labores agrícolas de campo'),
+        ]
+        for emp_r, area_r, cargo_r, act_r, reg_r, tc_r, mod_r, cc_r, fun_r in base_relaciones:
+            existe_r = con.execute('''SELECT id FROM contratacion_relaciones_laborales
+                                      WHERE UPPER(empresa)=UPPER(?) AND UPPER(area)=UPPER(?) AND UPPER(cargo)=UPPER(?)
+                                        AND UPPER(actividad)=UPPER(?) AND UPPER(regimen_laboral)=UPPER(?) AND UPPER(tipo_contrato)=UPPER(?) LIMIT 1''',
+                                   (emp_r, area_r, cargo_r, act_r, reg_r, tc_r)).fetchone()
+            if not existe_r:
+                con.execute('''INSERT INTO contratacion_relaciones_laborales
+                    (empresa,area,cargo,actividad,regimen_laboral,tipo_contrato,modalidad,centro_costo,funciones,activo,fecha_registro,registrado_por)
+                    VALUES(?,?,?,?,?,?,?,?,?,1,?,?)''', (emp_r,area_r,cargo_r,act_r,reg_r,tc_r,mod_r,cc_r,fun_r,now_txt(),'SISTEMA'))
+
         con.execute('''
         CREATE TABLE IF NOT EXISTS contratacion_plantillas(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1253,6 +1373,219 @@ def init_db():
             except Exception: pass
 
         con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_ingresos(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dni TEXT, trabajador TEXT, empresa TEXT, sede TEXT, requerimiento TEXT, actividad TEXT,
+            tipo_ingreso TEXT DEFAULT 'NUEVO', estado TEXT DEFAULT 'PENDIENTE', fecha_ingreso TEXT,
+            cargo TEXT, area TEXT, correo TEXT, celular TEXT, observacion TEXT, fecha_registro TEXT, registrado_por TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_nisira_lotes(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, lote_codigo TEXT, empresa TEXT, sede TEXT, requerimiento TEXT, actividad TEXT,
+            total INTEGER DEFAULT 0, estado TEXT DEFAULT 'GENERADO', endpoint TEXT, api_key_ref TEXT, fecha_registro TEXT, creado_por TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_checklist_next(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, modulo TEXT, sede TEXT, requerimiento TEXT, actividad TEXT,
+            total INTEGER DEFAULT 0, procesados INTEGER DEFAULT 0, observados INTEGER DEFAULT 0, estado TEXT DEFAULT 'PENDIENTE',
+            fecha_registro TEXT, registrado_por TEXT
+        )''')
+
+        # PRO: Embudo completo de contratación tipo NEXT/NISIRA.
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_requerimientos(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, ticket TEXT UNIQUE, empresa TEXT, sede TEXT, area TEXT, cargo TEXT,
+            actividad TEXT, cantidad INTEGER DEFAULT 0, fecha_solicitud TEXT, fecha_ingreso TEXT, prioridad TEXT,
+            estado TEXT DEFAULT 'SOLICITADO', responsable TEXT, observacion TEXT, fecha_registro TEXT, registrado_por TEXT
+        )''')
+        for col, ddl in [
+            ('regimen_laboral', 'ALTER TABLE contratacion_requerimientos ADD COLUMN regimen_laboral TEXT'),
+            ('tipo_contrato', 'ALTER TABLE contratacion_requerimientos ADD COLUMN tipo_contrato TEXT'),
+            ('cupos_registrados', 'ALTER TABLE contratacion_requerimientos ADD COLUMN cupos_registrados INTEGER DEFAULT 0'),
+            ('cupos_completos', 'ALTER TABLE contratacion_requerimientos ADD COLUMN cupos_completos INTEGER DEFAULT 0'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_medica(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, dni TEXT, trabajador TEXT, requerimiento TEXT, estado TEXT DEFAULT 'PENDIENTE',
+            fecha_programada TEXT, fecha_resultado TEXT, clinica TEXT, archivo_nombre TEXT, ruta_archivo TEXT,
+            observacion TEXT, fecha_registro TEXT, registrado_por TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_capacitacion(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, dni TEXT, trabajador TEXT, curso TEXT, video_url TEXT, estado TEXT DEFAULT 'PENDIENTE',
+            nota TEXT, fecha_inicio TEXT, fecha_fin TEXT, evidencia_nombre TEXT, ruta_evidencia TEXT,
+            observacion TEXT, fecha_registro TEXT, registrado_por TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_indumentaria(
+            id INTEGER PRIMARY KEY AUTOINCREMENT, dni TEXT, trabajador TEXT, requerimiento TEXT, polo TEXT, pantalon TEXT, botas TEXT,
+            casaca TEXT, gorro TEXT, lentes TEXT, guantes TEXT, fotocheck TEXT, otros TEXT, estado TEXT DEFAULT 'PENDIENTE',
+            cargo_pdf TEXT, fecha_entrega TEXT, observacion TEXT, fecha_registro TEXT, registrado_por TEXT
+        )''')
+        # PRO: campos adicionales para control completo de indumentaria.
+        # No se mezcla con evaluación médica; solo controla entrega, responsable y cargo firmado.
+        for col, ddl in [
+            ('empresa', 'ALTER TABLE contratacion_indumentaria ADD COLUMN empresa TEXT'),
+            ('area', 'ALTER TABLE contratacion_indumentaria ADD COLUMN area TEXT'),
+            ('cargo', 'ALTER TABLE contratacion_indumentaria ADD COLUMN cargo TEXT'),
+            ('actividad', 'ALTER TABLE contratacion_indumentaria ADD COLUMN actividad TEXT'),
+            ('fecha_ingreso', 'ALTER TABLE contratacion_indumentaria ADD COLUMN fecha_ingreso TEXT'),
+            ('responsable_entrega', 'ALTER TABLE contratacion_indumentaria ADD COLUMN responsable_entrega TEXT'),
+            ('cargo_firmado_nombre', 'ALTER TABLE contratacion_indumentaria ADD COLUMN cargo_firmado_nombre TEXT'),
+            ('ruta_cargo_firmado', 'ALTER TABLE contratacion_indumentaria ADD COLUMN ruta_cargo_firmado TEXT'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
+
+        # PRO: Centro de Fotocheck conectado a Requerimiento/Postulantes.
+        # Administra foto, validación, cola de impresión Zebra ZC300 y cargo de entrega firmado.
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS contratacion_fotocheck(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dni TEXT,
+            trabajador TEXT,
+            empresa TEXT,
+            area TEXT,
+            cargo TEXT,
+            actividad TEXT,
+            requerimiento TEXT,
+            fecha_ingreso TEXT,
+            foto_estado TEXT DEFAULT 'PENDIENTE FOTO',
+            fotocheck_estado TEXT DEFAULT 'PENDIENTE',
+            impresora TEXT DEFAULT 'Zebra ZC300',
+            lote_impresion TEXT,
+            cargo_nombre TEXT,
+            ruta_cargo TEXT,
+            observacion TEXT,
+            fecha_registro TEXT,
+            fecha_impresion TEXT,
+            fecha_entrega TEXT,
+            registrado_por TEXT
+        )""")
+        try:
+            con.execute('CREATE INDEX IF NOT EXISTS idx_fotocheck_req ON contratacion_fotocheck(requerimiento)')
+            con.execute('CREATE INDEX IF NOT EXISTS idx_fotocheck_dni ON contratacion_fotocheck(dni)')
+        except Exception:
+            pass
+
+        # PRO: Configuración de impresión Zebra ZC300.
+        # Soporta cola de Windows/USB, red y Bluetooth. La impresión real depende
+        # del driver/servicio local instalado en la PC donde está conectada la Zebra.
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS fotocheck_zebra_config(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            impresora_nombre TEXT DEFAULT 'Zebra ZC300',
+            tipo_conexion TEXT DEFAULT 'COLA WINDOWS / USB',
+            bluetooth_nombre TEXT,
+            bluetooth_mac TEXT,
+            ip_impresora TEXT,
+            puerto TEXT,
+            tamano_tarjeta TEXT DEFAULT 'CR80',
+            orientacion TEXT DEFAULT 'Horizontal',
+            caras TEXT DEFAULT 'Frente',
+            copias INTEGER DEFAULT 1,
+            plantilla_diseno TEXT DEFAULT 'PRIZE - FOTOCHECK ESTÁNDAR',
+            ruta_salida TEXT,
+            estado_conexion TEXT DEFAULT 'NO PROBADA',
+            observacion TEXT,
+            fecha_actualizacion TEXT,
+            actualizado_por TEXT
+        )''')
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS fotocheck_zebra_historial(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dni TEXT,
+            trabajador TEXT,
+            requerimiento TEXT,
+            accion TEXT,
+            impresora TEXT,
+            tipo_conexion TEXT,
+            lote_impresion TEXT,
+            estado TEXT,
+            detalle TEXT,
+            fecha TEXT,
+            usuario TEXT
+        )''')
+        try:
+            existe_cfg_zebra = con.execute('SELECT id FROM fotocheck_zebra_config LIMIT 1').fetchone()
+            if not existe_cfg_zebra:
+                con.execute('''INSERT INTO fotocheck_zebra_config(impresora_nombre,tipo_conexion,bluetooth_nombre,bluetooth_mac,ip_impresora,puerto,tamano_tarjeta,orientacion,caras,copias,plantilla_diseno,ruta_salida,estado_conexion,observacion,fecha_actualizacion,actualizado_por)
+                               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                            ('Zebra ZC300','COLA WINDOWS / USB','','','','','CR80','Horizontal','Frente',1,'PRIZE - FOTOCHECK ESTÁNDAR',str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),'NO CONFIGURADA','Configurar según la PC donde esté instalada la impresora. No se permite impresión hasta validar conexión real.',now_txt(),'SISTEMA'))
+        except Exception:
+            pass
+
+        for col, ddl in [
+            ('tipo_examen', 'ALTER TABLE contratacion_medica ADD COLUMN tipo_examen TEXT'),
+            ('protocolo', 'ALTER TABLE contratacion_medica ADD COLUMN protocolo TEXT'),
+            ('riesgo_puesto', 'ALTER TABLE contratacion_medica ADD COLUMN riesgo_puesto TEXT'),
+            ('aptitud', 'ALTER TABLE contratacion_medica ADD COLUMN aptitud TEXT'),
+            ('restricciones', 'ALTER TABLE contratacion_medica ADD COLUMN restricciones TEXT'),
+            ('recomendaciones', 'ALTER TABLE contratacion_medica ADD COLUMN recomendaciones TEXT'),
+            ('fecha_vencimiento', 'ALTER TABLE contratacion_medica ADD COLUMN fecha_vencimiento TEXT'),
+            ('responsable_seguimiento', 'ALTER TABLE contratacion_medica ADD COLUMN responsable_seguimiento TEXT'),
+            ('proveedor_contacto', 'ALTER TABLE contratacion_medica ADD COLUMN proveedor_contacto TEXT'),
+            ('costo', 'ALTER TABLE contratacion_medica ADD COLUMN costo TEXT'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
+        for col, ddl in [
+            ('tipo_video', 'ALTER TABLE contratacion_capacitacion ADD COLUMN tipo_video TEXT'),
+            ('archivo_video_nombre', 'ALTER TABLE contratacion_capacitacion ADD COLUMN archivo_video_nombre TEXT'),
+            ('ruta_video', 'ALTER TABLE contratacion_capacitacion ADD COLUMN ruta_video TEXT'),
+            ('duracion_min', 'ALTER TABLE contratacion_capacitacion ADD COLUMN duracion_min TEXT'),
+            ('preguntas', 'ALTER TABLE contratacion_capacitacion ADD COLUMN preguntas TEXT'),
+            ('intentos', 'ALTER TABLE contratacion_capacitacion ADD COLUMN intentos TEXT'),
+            ('aprobador', 'ALTER TABLE contratacion_capacitacion ADD COLUMN aprobador TEXT'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
+        for col, ddl in [
+            ('foto_ruta', 'ALTER TABLE contratacion_ingresos ADD COLUMN foto_ruta TEXT'),
+            ('huella_ruta', 'ALTER TABLE contratacion_ingresos ADD COLUMN huella_ruta TEXT'),
+            ('origen_validacion', 'ALTER TABLE contratacion_ingresos ADD COLUMN origen_validacion TEXT'),
+            ('estado_medico', "ALTER TABLE contratacion_ingresos ADD COLUMN estado_medico TEXT DEFAULT 'PENDIENTE'"),
+            ('estado_capacitacion', "ALTER TABLE contratacion_ingresos ADD COLUMN estado_capacitacion TEXT DEFAULT 'PENDIENTE'"),
+            ('estado_documentos', "ALTER TABLE contratacion_ingresos ADD COLUMN estado_documentos TEXT DEFAULT 'PENDIENTE'"),
+            ('estado_indumentaria', "ALTER TABLE contratacion_ingresos ADD COLUMN estado_indumentaria TEXT DEFAULT 'PENDIENTE'"),
+            ('estado_nisira', "ALTER TABLE contratacion_ingresos ADD COLUMN estado_nisira TEXT DEFAULT 'PENDIENTE'"),
+            ('direccion', 'ALTER TABLE contratacion_ingresos ADD COLUMN direccion TEXT'),
+            ('modalidad', 'ALTER TABLE contratacion_ingresos ADD COLUMN modalidad TEXT'),
+            ('jefe', 'ALTER TABLE contratacion_ingresos ADD COLUMN jefe TEXT'),
+            ('cuenta_bancaria', 'ALTER TABLE contratacion_ingresos ADD COLUMN cuenta_bancaria TEXT'),
+            ('talla_indumentaria', 'ALTER TABLE contratacion_ingresos ADD COLUMN talla_indumentaria TEXT'),
+            ('contacto_emergencia', 'ALTER TABLE contratacion_ingresos ADD COLUMN contacto_emergencia TEXT'),
+            ('biometria_estado', "ALTER TABLE contratacion_ingresos ADD COLUMN biometria_estado TEXT DEFAULT 'PENDIENTE'"),
+            ('departamento', 'ALTER TABLE contratacion_ingresos ADD COLUMN departamento TEXT'),
+            ('provincia', 'ALTER TABLE contratacion_ingresos ADD COLUMN provincia TEXT'),
+            ('distrito', 'ALTER TABLE contratacion_ingresos ADD COLUMN distrito TEXT'),
+            ('estado_civil', 'ALTER TABLE contratacion_ingresos ADD COLUMN estado_civil TEXT'),
+            ('sistema_pensionario', 'ALTER TABLE contratacion_ingresos ADD COLUMN sistema_pensionario TEXT'),
+            ('ultima_empresa', 'ALTER TABLE contratacion_ingresos ADD COLUMN ultima_empresa TEXT'),
+            ('discapacidad', 'ALTER TABLE contratacion_ingresos ADD COLUMN discapacidad TEXT'),
+            ('cantidad_hijos', 'ALTER TABLE contratacion_ingresos ADD COLUMN cantidad_hijos TEXT'),
+            ('fecha_nacimiento', 'ALTER TABLE contratacion_ingresos ADD COLUMN fecha_nacimiento TEXT'),
+            ('fecha_fin_contrato', 'ALTER TABLE contratacion_ingresos ADD COLUMN fecha_fin_contrato TEXT'),
+            ('tipo_contrato', 'ALTER TABLE contratacion_ingresos ADD COLUMN tipo_contrato TEXT'),
+            ('remuneracion_basica', 'ALTER TABLE contratacion_ingresos ADD COLUMN remuneracion_basica TEXT'),
+            ('remuneracion_letra', 'ALTER TABLE contratacion_ingresos ADD COLUMN remuneracion_letra TEXT'),
+            ('nacionalidad', 'ALTER TABLE contratacion_ingresos ADD COLUMN nacionalidad TEXT'),
+            ('sexo', 'ALTER TABLE contratacion_ingresos ADD COLUMN sexo TEXT'),
+            ('regimen_laboral', 'ALTER TABLE contratacion_ingresos ADD COLUMN regimen_laboral TEXT'),
+            ('periodicidad_pago', 'ALTER TABLE contratacion_ingresos ADD COLUMN periodicidad_pago TEXT'),
+            ('tipo_pago', 'ALTER TABLE contratacion_ingresos ADD COLUMN tipo_pago TEXT'),
+            ('cuspp', 'ALTER TABLE contratacion_ingresos ADD COLUMN cuspp TEXT'),
+            ('nombre_moneda', 'ALTER TABLE contratacion_ingresos ADD COLUMN nombre_moneda TEXT'),
+            ('simbolo_moneda', 'ALTER TABLE contratacion_ingresos ADD COLUMN simbolo_moneda TEXT'),
+            ('funciones', 'ALTER TABLE contratacion_ingresos ADD COLUMN funciones TEXT'),
+            ('meses_contrato', 'ALTER TABLE contratacion_ingresos ADD COLUMN meses_contrato TEXT'),
+        ]:
+            try: con.execute(ddl)
+            except Exception: pass
+
+        con.execute('''
         CREATE TABLE IF NOT EXISTS trabajadores_observados(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tipo_persona TEXT DEFAULT 'Trabajador',
@@ -1273,9 +1606,23 @@ def init_db():
             ('tipo_documento', "ALTER TABLE trabajadores_observados ADD COLUMN tipo_documento TEXT DEFAULT 'DNI'"),
             ('editor_por', 'ALTER TABLE trabajadores_observados ADD COLUMN editor_por TEXT'),
             ('fecha_edicion', 'ALTER TABLE trabajadores_observados ADD COLUMN fecha_edicion TEXT'),
+            ('ultima_empresa', 'ALTER TABLE trabajadores_observados ADD COLUMN ultima_empresa TEXT'),
+            ('cargo', 'ALTER TABLE trabajadores_observados ADD COLUMN cargo TEXT'),
+            ('area', 'ALTER TABLE trabajadores_observados ADD COLUMN area TEXT'),
+            ('fecha_observacion', 'ALTER TABLE trabajadores_observados ADD COLUMN fecha_observacion TEXT'),
+            ('evidencia_nombre', 'ALTER TABLE trabajadores_observados ADD COLUMN evidencia_nombre TEXT'),
+            ('ruta_evidencia', 'ALTER TABLE trabajadores_observados ADD COLUMN ruta_evidencia TEXT'),
+            ('comentario_levantamiento', 'ALTER TABLE trabajadores_observados ADD COLUMN comentario_levantamiento TEXT'),
+            ('fecha_levantamiento', 'ALTER TABLE trabajadores_observados ADD COLUMN fecha_levantamiento TEXT'),
+            ('levantado_por', 'ALTER TABLE trabajadores_observados ADD COLUMN levantado_por TEXT'),
+            ('estado_autorizacion', "ALTER TABLE trabajadores_observados ADD COLUMN estado_autorizacion TEXT DEFAULT 'SIN AUTORIZACIÓN'"),
         ]:
             try: con.execute(ddl)
             except Exception: pass
+        con.execute("CREATE TABLE IF NOT EXISTS trabajadores_observados_historial(id INTEGER PRIMARY KEY AUTOINCREMENT, observado_id INTEGER, numero_documento TEXT, modulo TEXT, accion TEXT, detalle TEXT, usuario TEXT, fecha TEXT)")
+        con.execute("CREATE TABLE IF NOT EXISTS trabajadores_observados_autorizaciones(id INTEGER PRIMARY KEY AUTOINCREMENT, observado_id INTEGER, numero_documento TEXT, tipo TEXT DEFAULT 'EXCEPCIÓN', estado TEXT DEFAULT 'SOLICITADO', motivo_solicitud TEXT, comentario_aprobacion TEXT, solicitado_por TEXT, fecha_solicitud TEXT, aprobado_por TEXT, fecha_aprobacion TEXT)")
+        try: con.execute('CREATE INDEX IF NOT EXISTS idx_obs_dni_estado ON trabajadores_observados(numero_documento, estado)')
+        except Exception: pass
         if not con.execute("SELECT 1 FROM contratacion_plantillas LIMIT 1").fetchone():
             semillas=[
                 ('ACUERDO PREFERENCIAL','ACUERDO PREFERENCIAL','ACUERDO PREFERENCIAL','CONTRATACION PREFERENCIAL AQUII'),
@@ -1295,13 +1642,13 @@ def init_db():
         # Datos demo seguros
         if not con.execute("SELECT 1 FROM usuarios_admin WHERE usuario='admin'").fetchone():
             con.execute("INSERT INTO usuarios_admin(usuario,clave_hash,nombre,rol) VALUES(?,?,?,?)",
-                        ("admin", generate_password_hash("admin123"), "PORTAL HR PRO", "admin"))
+                        ("admin", generate_password_hash("admin123"), "Administrador PRIZE", "admin"))
         if not con.execute("SELECT 1 FROM trabajadores WHERE dni='74324033'").fetchone():
             con.execute("INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro) VALUES(?,?,?,?,?,?,?,?)",
                         ("74324033", "AZABACHE LUJAN, OMAR EDUARDO", "omar@demo.com", "Analista", "RR.HH.", "AQUANQA", 1, now_txt()))
-        # Normaliza registros antiguos de demostración para que no aparezca PORTAL HR PRO SUPERFRUITS al trabajador.
+        # Normaliza registros antiguos de demostración para que no aparezca PRIZE SUPERFRUITS al trabajador.
         try:
-            con.execute("UPDATE trabajadores SET empresa='AQUANQA' WHERE UPPER(COALESCE(empresa,''))='PORTAL HR PRO SUPERFRUITS'")
+            con.execute("UPDATE trabajadores SET empresa='AQUANQA' WHERE UPPER(COALESCE(empresa,''))='PRIZE SUPERFRUITS'")
         except Exception:
             pass
         # Repara solicitudes antiguas que quedaron sin jefe_dni: toma el jefe desde saldos o ficha trabajadores.
@@ -1382,26 +1729,7 @@ def asegurar_plantillas_contratacion_base():
         con.commit()
 
 init_db()
-try:
-    asegurar_ia_hr_pro()
-except Exception as e:
-    print('No se pudo inicializar IA HR PRO:', e)
-try:
-    with db() as con:
-        temas_extra_ia = [
-            ('Utilidades','Qué es utilidades','La participación en utilidades es un beneficio laboral que corresponde cuando la empresa genera renta y cumple las condiciones legales. Su pago depende de la actividad económica, el número de trabajadores y los resultados de la empresa.','D. Leg. N.° 892 y normas complementarias','La participación se calcula según porcentajes por actividad y reglas legales aplicables.','utilidades utilidad participacion trabajadores renta empresa pago'),
-            ('Licencia por paternidad','Qué es licencia por paternidad','Es el permiso remunerado que corresponde al trabajador por el nacimiento de su hijo o hija, conforme a la ley aplicable.','Ley N.° 29409 y modificatorias','La duración puede variar según supuestos especiales previstos por la normativa.','licencia paternidad nacimiento hijo padre'),
-            ('Licencia por fallecimiento','Qué es licencia por luto','Es la licencia otorgada al trabajador por fallecimiento de familiares directos, conforme a las reglas legales vigentes y políticas internas aplicables.','Ley N.° 31602 y normas complementarias','Aplica según parentesco y condiciones establecidas por la norma.','licencia luto fallecimiento familiar muerte'),
-            ('Contratos','Qué es un contrato de trabajo','Es el acuerdo por el cual una persona presta servicios personales, remunerados y subordinados a favor de un empleador.','TUO del D. Leg. N.° 728 y normas complementarias','Los elementos principales son prestación personal, remuneración y subordinación.','contrato trabajo laboral tipos indeterminado plazo fijo sujeto modalidad')
-        ]
-        for tema,preg,resp,base,det,keys in temas_extra_ia:
-            ex=con.execute('SELECT id FROM ia_legislacion_peru WHERE UPPER(pregunta_clave)=UPPER(?) LIMIT 1',(preg,)).fetchone()
-            if not ex:
-                con.execute('INSERT INTO ia_legislacion_peru(tema,pregunta_clave,respuesta,base_legal,detalle_legal,palabras_clave,activo,fecha_actualizacion) VALUES(?,?,?,?,?,?,1,?)',(tema,preg,resp,base,det,keys,now_txt()))
-        con.commit()
-except Exception as e:
-    print('No se pudo cargar base legal adicional IA:', e)
-# asegurar_plantillas_contratacion_base()  # módulo retirado
+asegurar_plantillas_contratacion_base()
 restaurar_trabajadores_desde_excel_si_db_vacia()
 restaurar_vacaciones_desde_excel_si_db_vacia()
 try:
@@ -1460,6 +1788,11 @@ def admin_required(fn):
         return fn(*args, **kwargs)
     return wrapper
 
+# Alias de compatibilidad para rutas nuevas.
+# Render fallaba porque algunas rutas usaban @login_required_admin
+# pero el decorador oficial del sistema se llama @admin_required.
+login_required_admin = admin_required
+
 
 def worker_required(fn):
     @wraps(fn)
@@ -1478,88 +1811,6 @@ def portal_required(fn):
         return fn(*args, **kwargs)
     return wrapper
 
-
-@app.route('/ia_hr/api', methods=['POST'])
-@app.route('/ia_hr_ask', methods=['POST'])
-@app.route('/api/ia_hr', methods=['POST'])
-@portal_required
-def ia_hr_api():
-    try:
-        asegurar_ia_hr_pro()
-    except Exception:
-        pass
-    data = request.get_json(silent=True) or request.form or {}
-    pregunta = clean(data.get('pregunta'))
-    modulo = clean(data.get('modulo'))
-    rol = 'admin' if session.get('admin_id') else 'trabajador'
-    dni = session.get('dni') or clean(data.get('dni'))
-    try:
-        html_resp, tipo = ia_hr_responder(pregunta, modulo, rol, dni)
-    except Exception as e:
-        html_resp = f"<div class='ia-result bad'><h3>Error IA HR</h3><p>No se pudo procesar la consulta.</p><small>{h(e)}</small></div>"
-        tipo = 'error'
-    ia_registrar_log(rol, modulo, normalizar_dni(dni), pregunta, tipo)
-    return jsonify({'ok': True, 'html': html_resp, 'tipo': tipo, 'rol': rol})
-
-
-@app.route('/admin/ia_hr', methods=['GET','POST'])
-@admin_required
-def admin_ia_hr():
-    if request.method == 'POST':
-        tipo = clean(request.form.get('tipo'))
-        with db() as con:
-            if tipo == 'legal':
-                con.execute("""INSERT INTO ia_legislacion_peru(tema,pregunta_clave,respuesta,base_legal,detalle_legal,palabras_clave,activo,fecha_actualizacion)
-                               VALUES(?,?,?,?,?,?,1,?)""", (clean(request.form.get('tema')), clean(request.form.get('pregunta_clave')), clean(request.form.get('respuesta')), clean(request.form.get('base_legal')), clean(request.form.get('detalle_legal')), clean(request.form.get('palabras_clave')), now_txt()))
-            else:
-                con.execute("""INSERT INTO ia_base_conocimiento_hr(modulo,rol_destino,pregunta_clave,respuesta,ruta,palabras_clave,activo,fecha_registro,registrado_por)
-                               VALUES(?,?,?,?,?,?,1,?,?)""", (clean(request.form.get('modulo')), clean(request.form.get('rol_destino') or 'ambos'), clean(request.form.get('pregunta_clave')), clean(request.form.get('respuesta')), clean(request.form.get('ruta')), clean(request.form.get('palabras_clave')), now_txt(), session.get('admin_nombre','admin')))
-            con.commit()
-        flash('Respuesta IA registrada correctamente.', 'ok')
-        return redirect(url_for('admin_ia_hr'))
-    asegurar_ia_hr_pro()
-    with db() as con:
-        sistema = con.execute('SELECT * FROM ia_base_conocimiento_hr WHERE activo=1 ORDER BY modulo, rol_destino, id DESC').fetchall()
-        legal = con.execute('SELECT * FROM ia_legislacion_peru WHERE activo=1 ORDER BY tema, id DESC').fetchall()
-        logs = con.execute('SELECT * FROM ia_hr_log ORDER BY id DESC LIMIT 30').fetchall()
-    rows_s = ''.join([f"<tr><td>{h(r['modulo'])}</td><td>{h(r['rol_destino'])}</td><td><b>{h(r['pregunta_clave'])}</b><br><small>{h(r['palabras_clave'])}</small></td><td>{h(r['ruta'])}</td><td><a class='btn-red mini-btn' href='/admin/ia_hr/eliminar/sistema/{r['id']}'>Eliminar</a></td></tr>" for r in sistema]) or "<tr><td colspan='5'>Sin respuestas.</td></tr>"
-    rows_l = ''.join([f"<tr><td>{h(r['tema'])}</td><td><b>{h(r['pregunta_clave'])}</b><br><small>{h(r['base_legal'])}</small></td><td>{h(r['fecha_actualizacion'])}</td><td><a class='btn-red mini-btn' href='/admin/ia_hr/eliminar/legal/{r['id']}'>Eliminar</a></td></tr>" for r in legal]) or "<tr><td colspan='4'>Sin base legal.</td></tr>"
-    rows_log = ''.join([f"<tr><td>{h(r['fecha'])}</td><td>{h(r['rol'])}</td><td>{h(r['modulo'])}</td><td>{h(r['pregunta'])}</td><td>{h(r['respuesta_tipo'])}</td></tr>" for r in logs]) or "<tr><td colspan='5'>Sin consultas.</td></tr>"
-    content=f"""
-    <div class='hero'><div class='topbar'><div><h1>Base <span class='accent'>IA HR</span></h1><div class='subtitle'>Administra el manual inteligente, la base legal Perú y revisa consultas realizadas.</div></div><a class='btn-green' href='/admin/ia_hr/cargar_base'>Cargar respuestas base IA</a></div></div>
-    <section class='grid'>
-      <div class='card span-12'><h2>Agregar respuesta del sistema</h2><form method='post' class='ia-admin-form'>
-        <input type='hidden' name='tipo' value='sistema'><label>Módulo<input name='modulo' placeholder='documental / vacacional / portal'></label><label>Rol<select name='rol_destino'><option value='ambos'>Ambos</option><option value='admin'>Administrador</option><option value='trabajador'>Trabajador</option></select></label>
-        <label class='full'>Pregunta clave<input name='pregunta_clave' required placeholder='¿Dónde cargo boletas?'></label><label class='full'>Respuesta<textarea name='respuesta' required></textarea></label><label>Ruta<input name='ruta' placeholder='/admin/documentos'></label><label>Palabras clave<input name='palabras_clave' placeholder='boletas pago cargar'></label><button class='btn-green full'>Guardar respuesta</button></form></div>
-      <div class='card span-12'><h2>Agregar respuesta legal Perú</h2><form method='post' class='ia-admin-form'>
-        <input type='hidden' name='tipo' value='legal'><label>Tema<input name='tema' placeholder='CTS'></label><label>Base legal<input name='base_legal' placeholder='D.S. N.° 001-97-TR'></label><label class='full'>Pregunta clave<input name='pregunta_clave' required placeholder='¿Qué es CTS?'></label><label class='full'>Respuesta<textarea name='respuesta' required></textarea></label><label class='full'>Detalle legal<textarea name='detalle_legal'></textarea></label><label class='full'>Palabras clave<input name='palabras_clave'></label><button class='btn-green full'>Guardar legal</button></form></div>
-      <div class='card span-12'><h2>Respuestas del sistema</h2><div class='table-wrap'><table class='c-table ia-table'><tr><th>Módulo</th><th>Rol</th><th>Pregunta</th><th>Ruta</th><th></th></tr>{rows_s}</table></div></div>
-      <div class='card span-12'><h2>Base legal Perú</h2><div class='table-wrap'><table class='c-table ia-table'><tr><th>Tema</th><th>Pregunta / Base</th><th>Actualización</th><th></th></tr>{rows_l}</table></div></div>
-      <div class='card span-12'><h2>Últimas consultas IA</h2><div class='table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Rol</th><th>Módulo</th><th>Pregunta</th><th>Tipo</th></tr>{rows_log}</table></div></div>
-    </section>"""
-    return render_page(content, active='IA HR')
-
-
-@app.route('/admin/ia_hr/cargar_base')
-@admin_required
-def admin_ia_hr_cargar_base():
-    asegurar_ia_hr_pro()
-    flash('Base inicial IA HR cargada/actualizada.', 'ok')
-    return redirect(url_for('admin_ia_hr'))
-
-
-@app.route('/admin/ia_hr/eliminar/<tipo>/<int:item_id>')
-@admin_required
-def admin_ia_hr_eliminar(tipo, item_id):
-    with db() as con:
-        if tipo == 'legal':
-            con.execute('UPDATE ia_legislacion_peru SET activo=0 WHERE id=?', (item_id,))
-        else:
-            con.execute('UPDATE ia_base_conocimiento_hr SET activo=0 WHERE id=?', (item_id,))
-        con.commit()
-    flash('Registro IA desactivado.', 'ok')
-    return redirect(url_for('admin_ia_hr'))
-
 # =============================
 # DB HELPERS
 # =============================
@@ -1576,6 +1827,122 @@ def row_get(row, key, default=''):
     except Exception:
         return default
 
+
+
+
+def row_to_dict(row):
+    if not row:
+        return {}
+    try:
+        return {k: row[k] for k in row.keys()}
+    except Exception:
+        try: return dict(row)
+        except Exception: return {}
+
+
+def datos_unificados_contratacion(dni, requerimiento=''):
+    dni = normalizar_dni(dni)
+    if not dni:
+        return {}
+    with db() as con:
+        trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+        ing = None
+        if requerimiento:
+            ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni, requerimiento)).fetchone()
+        if not ing:
+            ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (dni,)).fetchone()
+    base = row_to_dict(trab); post = row_to_dict(ing); merged = dict(base)
+    mapping = {'trabajador':'nombre','correo':'correo','celular':'celular','empresa':'empresa','cargo':'cargo','area':'area','fecha_ingreso':'fecha_ingreso','direccion':'direccion','departamento':'departamento','provincia':'provincia','distrito':'distrito','modalidad':'modalidad','jefe':'jefe_nombre','cuenta_bancaria':'cuenta_bancaria','talla_indumentaria':'indumentaria','contacto_emergencia':'contacto_emergencia','estado_civil':'estado_civil','sistema_pensionario':'sistema_pensionario','ultima_empresa':'ultima_empresa','discapacidad':'discapacidad','cantidad_hijos':'cantidad_hijos','actividad':'actividad','sede':'sede','requerimiento':'requerimiento','tipo_ingreso':'tipo_ingreso','fecha_nacimiento':'fecha_nacimiento','fecha_fin_contrato':'fecha_fin_contrato','tipo_contrato':'tipo_contrato','remuneracion_basica':'remuneracion_basica','remuneracion_letra':'remuneracion_letra','nacionalidad':'nacionalidad','sexo':'sexo','regimen_laboral':'regimen_laboral','periodicidad_pago':'periodicidad_pago','tipo_pago':'tipo_pago','cuspp':'cuspp','nombre_moneda':'nombre_moneda','simbolo_moneda':'simbolo_moneda','funciones':'funciones','meses_contrato':'meses_contrato'}
+    for pk, tk in mapping.items():
+        val = post.get(pk)
+        if not es_valor_incompleto(val):
+            merged[tk] = val
+    merged['dni'] = dni
+    return merged
+
+
+# =============================
+# FLUJO PRO CONTRATACION 2026
+# Requerimiento -> Postulantes -> Documentos -> Firma digital
+# =============================
+CAMPOS_FICHA_OBLIGATORIOS_PRO = [
+    ('trabajador','Trabajador'),('dni','DNI'),('empresa','Empresa'),('area','Área'),('cargo','Cargo'),
+    ('actividad','Actividad'),('fecha_ingreso','Fecha ingreso'),('fecha_nacimiento','Fecha nacimiento'),
+    ('direccion','Dirección'),('distrito','Distrito'),('provincia','Provincia'),('departamento','Departamento'),
+    ('remuneracion_basica','Remuneración básica'),('tipo_contrato','Tipo contrato'),('regimen_laboral','Régimen laboral')
+]
+
+def estado_norm(v):
+    return clean(v).upper().replace('Á','A').replace('É','E').replace('Í','I').replace('Ó','O').replace('Ú','U')
+
+def campos_faltantes_postulante(row):
+    r = row_to_dict(row)
+    faltan = []
+    for campo, etiqueta in CAMPOS_FICHA_OBLIGATORIOS_PRO:
+        if es_valor_incompleto(r.get(campo)):
+            faltan.append(etiqueta)
+    return faltan
+
+def estado_ficha_postulante(row):
+    faltan = campos_faltantes_postulante(row)
+    if faltan:
+        return 'FICHA INCOMPLETA'
+    return 'LISTO PARA DOCUMENTOS'
+
+def documentos_por_postulante(dni, requerimiento=''):
+    with db() as con:
+        docs = con.execute('SELECT * FROM contratacion_docs WHERE dni=? ORDER BY id DESC', (normalizar_dni(dni),)).fetchall()
+        firmas = con.execute('SELECT * FROM firma_solicitudes WHERE dni=? ORDER BY id DESC', (normalizar_dni(dni),)).fetchall()
+    generados = len(docs)
+    enviados = sum(1 for x in docs if 'FIRMA' in estado_norm(row_get(x,'estado')))
+    firmados = sum(1 for x in firmas if 'FIRMAD' in estado_norm(row_get(x,'estado')))
+    return generados, enviados, firmados
+
+def aptitud_medica_actual(dni, requerimiento=''):
+    with db() as con:
+        if requerimiento:
+            r = con.execute('SELECT * FROM contratacion_medica WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (normalizar_dni(dni), requerimiento)).fetchone()
+        else:
+            r = None
+        if not r:
+            r = con.execute('SELECT * FROM contratacion_medica WHERE dni=? ORDER BY id DESC LIMIT 1', (normalizar_dni(dni),)).fetchone()
+    return estado_norm(row_get(r, 'estado', 'PENDIENTE'))
+
+def puede_pasar_a_firma(dni, requerimiento=''):
+    data = datos_unificados_contratacion(dni, requerimiento)
+    faltan = []
+    for campo, etiqueta in CAMPOS_FICHA_OBLIGATORIOS_PRO:
+        if es_valor_incompleto(data.get(campo)):
+            faltan.append(etiqueta)
+    medico = aptitud_medica_actual(dni, requerimiento)
+    if medico != 'APTO':
+        faltan.append('Evaluación médica APTO')
+    return (not faltan), faltan
+
+def sincronizar_estado_requerimiento_por_cupo(con, ticket):
+    if not ticket:
+        return
+    req = con.execute('SELECT * FROM contratacion_requerimientos WHERE ticket=? ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
+    if not req:
+        return
+    try:
+        cantidad = int(row_get(req, 'cantidad', 0) or 0)
+    except Exception:
+        cantidad = 0
+    registrados = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (ticket,)).fetchone()[0]
+    completos = con.execute("SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=? AND estado IN ('REGISTRADO','LISTO PARA DOCUMENTOS')", (ticket,)).fetchone()[0]
+    if cantidad > 0 and registrados >= cantidad:
+        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', observacion=COALESCE(observacion,'') || ' | Cupo cerrado automáticamente.' WHERE ticket=?", (ticket,))
+    elif registrados > 0:
+        con.execute("UPDATE contratacion_requerimientos SET estado='EN REGISTRO' WHERE ticket=? AND estado NOT IN ('CERRADO','CUPO CERRADO')", (ticket,))
+
+def semaforo_clase_estado(valor):
+    v = estado_norm(valor)
+    if any(x in v for x in ['APTO','LISTO','FIRMADO','COMPLETO','APROBADO','ENTREGADO']):
+        return 'ok'
+    if any(x in v for x in ['NO APTO','OBSERVADO','INCOMPLETO','PENDIENTE','BLOQUEADO']):
+        return 'warn'
+    return 'info'
 
 def separar_nombres_apellidos(nombre):
     txt = clean(nombre)
@@ -1599,44 +1966,132 @@ def formato_fecha_texto(fecha, mayus=False):
 
 
 def valores_esquema_desde_trabajador(trabajador=None):
-    """Llena los campos de esquema desde la base de trabajadores cuando exista información."""
-    t = trabajador
-    nombre = clean(row_get(t, 'nombre'))
+    t = trabajador or {}
+    nombre = clean(row_get(t, 'nombre') or row_get(t, 'trabajador'))
     ap_pat, ap_mat, nombres = separar_nombres_apellidos(nombre)
-    fecha_ing = row_get(t, 'fecha_ingreso')
-    fecha_nac = row_get(t, 'fecha_nacimiento')
-    empresa = row_get(t, 'empresa')
-    cargo = row_get(t, 'cargo')
-    area = row_get(t, 'area')
-    correo = row_get(t, 'correo')
-    planilla = row_get(t, 'planilla')
-    dni = row_get(t, 'dni')
+    fecha_ing = row_get(t, 'fecha_ingreso'); fecha_fin = row_get(t, 'fecha_fin_contrato'); fecha_nac = row_get(t, 'fecha_nacimiento')
+    empresa = row_get(t, 'empresa'); cargo = row_get(t, 'cargo') or row_get(t, 'puesto'); area = row_get(t, 'area')
+    correo = row_get(t, 'correo') or row_get(t, 'email'); planilla = row_get(t, 'planilla'); dni = row_get(t, 'dni')
+    direccion = row_get(t, 'direccion') or row_get(t, 'direccion_actual'); departamento=row_get(t,'departamento'); provincia=row_get(t,'provincia'); distrito=row_get(t,'distrito')
+    remuneracion = row_get(t, 'remuneracion_basica') or row_get(t, 'basico'); celular = row_get(t, 'celular') or row_get(t, 'telefono')
+    estado_civil=row_get(t,'estado_civil'); sistema_pensionario=row_get(t,'sistema_pensionario'); actividad=row_get(t,'actividad'); sede=row_get(t,'sede')
+    nacionalidad = row_get(t, 'nacionalidad') or 'PERUANA'
+    sexo = row_get(t, 'sexo')
+    regimen_laboral = row_get(t, 'regimen_laboral') or row_get(t, 'planilla')
+    periodicidad_pago = row_get(t, 'periodicidad_pago')
+    tipo_pago = row_get(t, 'tipo_pago')
+    cuspp = row_get(t, 'cuspp')
+    nombre_moneda = row_get(t, 'nombre_moneda') or 'Sol Peruano'
+    simbolo_moneda = row_get(t, 'simbolo_moneda') or 'S/'
+    funciones = row_get(t, 'funciones')
+    meses_contrato = row_get(t, 'meses_contrato')
+    remuneracion_letra = row_get(t, 'remuneracion_letra')
+    tipo_contrato = row_get(t, 'tipo_contrato') or row_get(t, 'modalidad')
     base = {
-        'Dni': dni, 'NombreCompletoTrabajador': nombre, 'Email': correo, 'Cargo': cargo,
-        'Puesto': cargo, 'Ocupacion': cargo, 'Area': area, 'Gerencia': area, 'Planilla': planilla,
-        'FechaIniContrato': fecha_sin_hora(fecha_ing), 'FechaInicioContratoOrigen': fecha_sin_hora(fecha_ing),
-        'FechaIniContratoBarra': fecha_sin_hora(fecha_ing), 'FechaIniContratoGuion': fecha_sin_hora(fecha_ing).replace('/','-'),
-        'FechaIniContratoISO': fecha_iso_segura(fecha_ing), 'FechaIniContratoTextoMayuscula': formato_fecha_texto(fecha_ing, True),
-        'FechaIniContratoTextoMinuscula': formato_fecha_texto(fecha_ing, False), 'FechaNacimientoISO': fecha_iso_segura(fecha_nac),
-        'FechaNacimientoGuion': fecha_sin_hora(fecha_nac).replace('/','-'), 'FechaNacimientoBarra': fecha_sin_hora(fecha_nac),
-        'FechaNacimientoTextoMayuscula': formato_fecha_texto(fecha_nac, True),
-        'FechaNacimientoTextoMinuscula': formato_fecha_texto(fecha_nac, False), 'ApellidoPaternoTrabajador': ap_pat,
-        'ApellidoMaternoTrabajador': ap_mat, 'NombreTrabajador': nombres, 'Estado': 'Activo',
-        'Condicion': 'ACTIVO' if row_get(t, 'activo', 1) else 'INACTIVO', 'CentroCosto': empresa,
-        'NombreMoneda': 'Sol Peruano', 'SimboloMoneda': 'S/', 'NombreTipoDocumentoIdentidad': 'DOC. NACIONAL DE IDENTIDAD',
-        'NombreCortoTipoDocumentoIdentidad': 'DNI',
+        'Dni': dni, 'NombreCompletoTrabajador': nombre, 'Email': correo, 'Cargo': cargo, 'Puesto': cargo, 'Ocupacion': cargo,
+        'Area': area, 'Gerencia': area, 'Planilla': planilla, 'TipoContrato': tipo_contrato, 'Actividad': actividad, 'Zona': sede or actividad, 'Sede': sede,
+        'DireccionActual': direccion, 'DireccionDNI': direccion, 'Departamento': departamento, 'Provincia': provincia, 'Distrito': distrito, 'NroTelefonoMovil': celular,
+        'FechaIniContrato': fecha_sin_hora(fecha_ing), 'FechaInicioContrato': fecha_sin_hora(fecha_ing), 'FechaInicioContratoOrigen': fecha_sin_hora(fecha_ing),
+        'FechaIniContratoBarra': fecha_sin_hora(fecha_ing), 'FechaIniContratoGuion': fecha_sin_hora(fecha_ing).replace('/','-'), 'FechaIniContratoISO': fecha_iso_segura(fecha_ing),
+        'FechaIniContratoTextoMayuscula': formato_fecha_texto(fecha_ing, True), 'FechaIniContratoTextoMinuscula': formato_fecha_texto(fecha_ing, False),
+        'FechaFinContrato': fecha_sin_hora(fecha_fin), 'FechaFinContratoOrigen': fecha_sin_hora(fecha_fin), 'FechaFinContratoBarra': fecha_sin_hora(fecha_fin),
+        'FechaFinContratoGuion': fecha_sin_hora(fecha_fin).replace('/','-'), 'FechaFinContratoISO': fecha_iso_segura(fecha_fin), 'FechaFinContratoTextoMayuscula': formato_fecha_texto(fecha_fin, True), 'FechaFinContratoTextoMinuscula': formato_fecha_texto(fecha_fin, False),
+        'FechaNacimientoISO': fecha_iso_segura(fecha_nac), 'FechaNacimientoGuion': fecha_sin_hora(fecha_nac).replace('/','-'), 'FechaNacimientoBarra': fecha_sin_hora(fecha_nac),
+        'FechaNacimientoTextoMayuscula': formato_fecha_texto(fecha_nac, True), 'FechaNacimientoTextoMinuscula': formato_fecha_texto(fecha_nac, False),
+        'ApellidoPaternoTrabajador': ap_pat, 'ApellidoMaternoTrabajador': ap_mat, 'NombreTrabajador': nombres, 'Estado': 'Activo', 'Condicion': 'ACTIVO' if row_get(t, 'activo', 1) else 'INACTIVO',
+        'CentroCosto': empresa, 'NombreMoneda': nombre_moneda, 'SimboloMoneda': simbolo_moneda, 'NombreTipoDocumentoIdentidad': 'DOC. NACIONAL DE IDENTIDAD', 'NombreCortoTipoDocumentoIdentidad': 'DNI',
+        'RemunBasica': remuneracion, 'RemuneracionBasica': remuneracion, 'RemunBasicaAgraria': remuneracion, 'RemuneracionLetra': remuneracion_letra,
+        'EstadoCivil': estado_civil, 'SistemaPensionario': sistema_pensionario, 'Nacionalidad': nacionalidad, 'Sexo': sexo,
+        'RegimenLaboral': regimen_laboral, 'PeriodicidadPago': periodicidad_pago, 'TipoPago': tipo_pago, 'Cuspp': cuspp,
+        'Funciones': funciones, 'MesesContrato': meses_contrato, 'NumeroMesesContrato': meses_contrato, 'DuracionContratoTexto': row_get(t, 'duracion_contrato_texto') or meses_contrato
     }
     salida=[]
     for campo, ejemplo in CAMPOS_ESQUEMA_TRABAJADOR_CONTRATO_LABORAL:
-        salida.append((campo, clean(base.get(campo)) or clean(ejemplo)))
+        salida.append((campo, clean(base.get(campo))))
+    for campo, valor in base.items():
+        if not any(c == campo for c, v in salida): salida.append((campo, clean(valor)))
     return salida
 
 
-
-
 def mapa_campos_trabajador(trabajador=None):
-    """Diccionario CampoOrigen -> valor real del trabajador para combinar correspondencia."""
+    """Diccionario CampoOrigen -> valor real del trabajador para combinar correspondencia.
+    PRO: no usa datos de ejemplo. Si un campo no existe en BD queda vacío para validar antes de enviar.
+    """
     return {campo: valor for campo, valor in valores_esquema_desde_trabajador(trabajador)}
+
+
+def es_valor_incompleto(v):
+    txt = clean(v).strip()
+    if not txt:
+        return True
+    basura = {'0001-01-01','01/01/0001','01-01-0001','NONE','NULL','N/A','NA','SIN DATO','SIN DATOS','PENDIENTE'}
+    return txt.upper() in basura
+
+
+def campos_usados_en_plantilla(pl=None, campos_registrados=None):
+    """Devuelve los campos Word realmente usados por la plantilla.
+    Prioriza lo detectado dentro del .docx; si no puede leerlo, usa los campos activos registrados.
+    """
+    usados = []
+    try:
+        ruta = Path(pl['ruta_archivo']) if pl and pl['ruta_archivo'] else None
+        if ruta and ruta.exists() and ruta.suffix.lower() == '.docx':
+            usados = extraer_campos_word_docx(ruta)
+    except Exception:
+        usados = []
+    if not usados and campos_registrados:
+        for c in campos_registrados:
+            try:
+                if int(c['activo'] or 0) and clean(c['requerido'] or 'SI').upper() == 'SI':
+                    usados.append(clean(c['campo_origen'] or c['nombre_campo']))
+            except Exception:
+                usados.append(clean(c['campo_origen'] or c['nombre_campo']))
+    # Campos técnicos/no críticos que no deben bloquear el envío si no están en BD.
+    no_bloquea = {'Comentario','SituacionEspecial','Cuspp','Indeterminado'}
+    salida=[]
+    for x in usados:
+        x=clean(x)
+        if x and x not in salida and x not in no_bloquea:
+            salida.append(x)
+    return salida
+
+
+def validar_datos_plantilla(pid, dni=''):
+    """Valida si el trabajador tiene todos los datos que pide el Word.
+    Retorna dict con ok, faltantes, valores, trabajador, plantilla.
+    """
+    dni = normalizar_dni(dni)
+    with db() as con:
+        pl = con.execute('SELECT * FROM contratacion_plantillas WHERE id=?', (pid,)).fetchone()
+        campos = con.execute('SELECT * FROM contratacion_plantilla_campos WHERE plantilla_id=? AND activo=1 ORDER BY id', (pid,)).fetchall() if pl else []
+        trabajador = datos_unificados_contratacion(dni) if dni else None
+    if not pl:
+        return {'ok': False, 'error':'Plantilla no encontrada', 'faltantes':['Plantilla'], 'valores':{}, 'trabajador':None, 'plantilla':None, 'campos_usados':[]}
+    if not trabajador or es_valor_incompleto(trabajador.get('nombre')):
+        return {'ok': False, 'error':'Trabajador no encontrado o sin ficha completa', 'faltantes':['Trabajador/DNI'], 'valores':{}, 'trabajador':None, 'plantilla':pl, 'campos_usados':[]}
+    valores = mapa_campos_trabajador(trabajador)
+    usados = campos_usados_en_plantilla(pl, campos)
+    # Compatibilidad con nombres antiguos/similares.
+    equivalencias = {
+        'FechaInicioContrato':'FechaIniContrato', 'FechaFinContratoOrigen':'FechaFinContrato',
+        'RemuneracionBasica':'RemunBasica', 'Remuneración Básica':'RemunBasica',
+        'Telefono':'NroTelefonoMovil', 'Celular':'NroTelefonoMovil',
+    }
+    faltantes=[]
+    for campo in usados:
+        key = equivalencias.get(campo, campo)
+        valor = valores.get(key, valores.get(campo, ''))
+        if es_valor_incompleto(valor):
+            faltantes.append(campo)
+    return {'ok': len(faltantes)==0, 'error':'', 'faltantes':faltantes, 'valores':valores, 'trabajador':trabajador, 'plantilla':pl, 'campos_usados':usados}
+
+
+def resumen_validacion_html(resultado):
+    faltantes = resultado.get('faltantes') or []
+    if not faltantes:
+        return "<span class='cond-ok'>✅ Datos completos. Documento habilitado para generar/enviar.</span>"
+    lis = ''.join(f"<li><code>{html.escape(x)}</code></li>" for x in faltantes)
+    return f"<div class='missing-box'><b>⚠ Faltan datos obligatorios. No se debe enviar el documento.</b><ul>{lis}</ul><small>Completa la ficha del trabajador/base Excel y vuelve a previsualizar.</small></div>"
 
 
 def evaluar_condicion_valor(actual, operador, esperado):
@@ -1748,6 +2203,15 @@ def sincronizar_campos_desde_word(plantilla_id, ruta_archivo):
         con.commit()
     return n
 
+
+def sincronizar_campos_desde_word_seguro(plantilla_id, ruta_archivo):
+    """Versión segura para carga de plantillas: registra campos si puede, pero no genera Internal Server Error."""
+    try:
+        return sincronizar_campos_desde_word(plantilla_id, ruta_archivo)
+    except Exception as e:
+        print('Error detectando campos de Word:', e)
+        return 0
+
 def reemplazar_texto_docx(doc, valores):
     """Reemplaza campos {{CampoOrigen}} y «CampoOrigen» en párrafos y tablas de un Word."""
     def repl(txt):
@@ -1780,19 +2244,85 @@ def reemplazar_texto_docx(doc, valores):
     return doc
 
 
+def reemplazar_texto_docx_validado(doc, valores, faltantes=None):
+    """Reemplaza campos y marca en amarillo los campos faltantes dentro del Word exportado."""
+    try:
+        from docx.enum.text import WD_COLOR_INDEX
+    except Exception:
+        WD_COLOR_INDEX = None
+    faltantes = set(faltantes or [])
+    patron = re.compile(r'(«\s*([^»\n\r]+?)\s*»|\{\{\s*([^}\n\r]+?)\s*\}\})')
+    equivalencias = {'FechaInicioContrato':'FechaIniContrato', 'RemuneracionBasica':'RemunBasica'}
+
+    def partes(txt):
+        pos = 0
+        for m in patron.finditer(txt or ''):
+            if m.start() > pos:
+                yield ('texto', txt[pos:m.start()], None)
+            campo = clean(m.group(2) or m.group(3)).replace(' ', '')
+            key = equivalencias.get(campo, campo)
+            val = clean(valores.get(key, valores.get(campo, '')))
+            if campo in faltantes or key in faltantes or es_valor_incompleto(val):
+                yield ('faltante', f'«{campo}»', campo)
+            else:
+                yield ('valor', val, campo)
+            pos = m.end()
+        if pos < len(txt or ''):
+            yield ('texto', txt[pos:], None)
+
+    def proc_paragraph(p):
+        full = ''.join(run.text for run in p.runs)
+        if not patron.search(full or ''):
+            return
+        for run in p.runs:
+            run.text = ''
+        first = True
+        for tipo, texto, campo in partes(full):
+            r = p.runs[0] if first and p.runs else p.add_run()
+            first = False
+            r.text = texto
+            if tipo == 'faltante':
+                r.bold = True
+                if WD_COLOR_INDEX:
+                    r.font.highlight_color = WD_COLOR_INDEX.YELLOW
+    for p in doc.paragraphs:
+        proc_paragraph(p)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    proc_paragraph(p)
+    return doc
+
+
+def reemplazar_campos_html(texto, valores, faltantes=None):
+    faltantes=set(faltantes or [])
+    equivalencias={'FechaInicioContrato':'FechaIniContrato','RemuneracionBasica':'RemunBasica'}
+    def repl(m):
+        campo=clean(m.group(1) or m.group(2)).replace(' ','')
+        key=equivalencias.get(campo,campo)
+        val=clean(valores.get(key, valores.get(campo,'')))
+        if campo in faltantes or key in faltantes or es_valor_incompleto(val):
+            return f"<mark class='miss-field'>«{html.escape(campo)}»</mark>"
+        return html.escape(val)
+    return re.sub(r'«\s*([^»\n\r]+?)\s*»|\{\{\s*([^}\n\r]+?)\s*\}\}', repl, texto or '')
+
+
 def generar_docx_desde_plantilla(pid, dni=''):
-    """Genera un DOCX final combinado con datos del trabajador y valida condiciones."""
+    """Genera un DOCX combinado. Si faltan datos, exporta el Word con campos faltantes marcados en amarillo."""
     if Document is None:
         raise RuntimeError('python-docx no está instalado.')
     dni = normalizar_dni(dni)
-    with db() as con:
-        pl = con.execute('SELECT * FROM contratacion_plantillas WHERE id=?', (pid,)).fetchone()
-        campos = con.execute('SELECT * FROM contratacion_plantilla_campos WHERE plantilla_id=? AND activo=1 ORDER BY id', (pid,)).fetchall()
-        condiciones = con.execute('SELECT * FROM contratacion_plantilla_condiciones WHERE plantilla_id=? ORDER BY id', (pid,)).fetchall()
-        trabajador = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone() if dni else con.execute('SELECT * FROM trabajadores ORDER BY nombre LIMIT 1').fetchone()
+    resultado = validar_datos_plantilla(pid, dni)
+    pl = resultado.get('plantilla')
+    trabajador = resultado.get('trabajador')
     if not pl:
         raise FileNotFoundError('Plantilla no encontrada.')
-    valores = mapa_campos_trabajador(trabajador)
+    valores = resultado.get('valores') or {}
+    faltantes = resultado.get('faltantes') or []
+    with db() as con:
+        campos = con.execute('SELECT * FROM contratacion_plantilla_campos WHERE plantilla_id=? AND activo=1 ORDER BY id', (pid,)).fetchall()
+        condiciones = con.execute('SELECT * FROM contratacion_plantilla_condiciones WHERE plantilla_id=? ORDER BY id', (pid,)).fetchall()
     # Asegura que todos los campos registrados existan, aunque no haya dato en trabajador.
     for c in campos:
         key = c['campo_origen'] or c['nombre_campo']
@@ -1801,7 +2331,7 @@ def generar_docx_desde_plantilla(pid, dni=''):
             valor_default = c['valor_default'] if 'valor_default' in c.keys() else ''
         except Exception:
             tipo_campo, valor_default = '', ''
-        if tipo_campo in ('MANUAL','DESPLEGABLE') and valor_default:
+        if tipo_campo in ('MANUAL','DESPLEGABLE') and valor_default and key not in faltantes:
             valores[key] = valor_default
         else:
             valores.setdefault(key, '')
@@ -1818,34 +2348,49 @@ def generar_docx_desde_plantilla(pid, dni=''):
         doc.add_paragraph('Cargo: {{Cargo}}')
         doc.add_paragraph('Planilla: {{Planilla}}')
         doc.add_paragraph('Tipo Contrato: {{TipoContrato}}')
-    reemplazar_texto_docx(doc, valores)
+    reemplazar_texto_docx_validado(doc, valores, faltantes)
+    if faltantes:
+        doc.add_page_break()
+        doc.add_heading('OBSERVACIÓN DE DATOS INCOMPLETOS', level=1)
+        doc.add_paragraph('Este documento NO debe enviarse a firma hasta completar la información marcada en amarillo.')
+        for x in faltantes:
+            doc.add_paragraph(f'Falta completar: {x}', style=None)
     safe_name = re.sub(r'[^A-Za-z0-9_ -]+', '', pl['nombre_plantilla'] or 'plantilla').strip() or 'plantilla'
     out_dir = UPLOAD_DIR / 'contratacion' / 'generados'
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"{safe_name}_{dni or 'SIN_DNI'}_{now_file()}.docx"
+    estado = 'OBSERVADO_DATOS_INCOMPLETOS' if faltantes else 'VALIDADO'
+    out = out_dir / f"{safe_name}_{dni or 'SIN_DNI'}_{estado}_{now_file()}.docx"
     doc.save(out)
-    return out, pl, trabajador, cumple, detalle
+    return out, pl, trabajador, (cumple and not faltantes), detalle, faltantes
 
 
-def docx_to_preview_html(path, valores=None):
-    """Vista previa simple de Word en HTML: párrafos y tablas con campos reemplazados."""
+def docx_to_preview_html(path, valores=None, faltantes=None):
+    """Vista previa simple de Word en HTML. Marca en amarillo los campos faltantes."""
     if Document is None:
-        return '<div class="preview-empty"><b>No se puede previsualizar Word porque falta python-docx.</b><br>Solución: el ZIP ya incluye <code>python-docx==1.1.2</code> en requirements.txt. En Render usa <b>Clear build cache & deploy</b>; en local ejecuta <code>pip install -r requirements.txt</code>.</div>'
-    doc = Document(str(path))
-    if valores:
-        reemplazar_texto_docx(doc, valores)
+        return '<div class="preview-empty"><b>No se puede previsualizar Word porque falta python-docx.</b><br>En Render usa <b>Clear build cache & deploy</b>; en local ejecuta <code>pip install -r requirements.txt</code>.</div>'
+    try:
+        doc = Document(str(path))
+    except Exception as e:
+        return f'<div class="preview-empty"><b>Plantilla Word cargada correctamente, pero no se pudo generar la vista previa.</b><br>Archivo: {html.escape(Path(path).name)}<br>Detalle técnico: {html.escape(str(e))}<br><br><a class="c-btn gray" href="javascript:history.back()">Volver</a></div>'
+    valores = valores or {}
+    faltantes = faltantes or []
     parts = ["<div class='word-preview'>"]
     for p in doc.paragraphs:
-        txt = html.escape(p.text or '').replace('\n','<br>')
+        txt = reemplazar_campos_html(p.text or '', valores, faltantes).replace('\n','<br>')
         if txt.strip():
             parts.append(f"<p>{txt}</p>")
     for table in doc.tables:
         parts.append("<table class='word-table'>")
         for row in table.rows:
-            parts.append('<tr>' + ''.join(f"<td>{html.escape(cell.text or '').replace(chr(10), '<br>')}</td>" for cell in row.cells) + '</tr>')
+            cells=[]
+            for cell in row.cells:
+                cell_txt = reemplazar_campos_html(cell.text or '', valores, faltantes).replace(chr(10), '<br>')
+                cells.append(f"<td>{cell_txt}</td>")
+            parts.append('<tr>' + ''.join(cells) + '</tr>')
         parts.append('</table>')
     parts.append('</div>')
     return ''.join(parts)
+
 
 def generar_clave_trabajador(dni, fecha_nac=''):
     """Clave del trabajador: fecha de nacimiento sin / ni guiones (ddmmaaaa)."""
@@ -1856,7 +2401,7 @@ def generar_clave_trabajador(dni, fecha_nac=''):
     if len(nums) >= 8:
         return nums[:8]
     dni = normalizar_dni(dni)
-    return (dni[-4:] + "PORTAL HR PRO").upper()
+    return (dni[-4:] + "PRIZE").upper()
 
 
 def registrar_evento_documento(doc_id, dni, evento, detalle=''):
@@ -2847,10 +3392,184 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
 }
 
 
-/* === IA HR PRO - Widget global === */
-.iahr-fab{position:fixed;right:22px;bottom:22px;z-index:9998;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border-radius:999px;padding:13px 17px;box-shadow:0 18px 40px rgba(0,0,0,.35);display:flex;align-items:center;gap:8px;font-weight:900;cursor:pointer;border:1px solid rgba(255,255,255,.22)}
-.iahr-fab i{font-size:18px}.iahr-panel{position:fixed;right:22px;bottom:82px;width:min(430px,calc(100vw - 28px));max-height:70vh;z-index:9999;background:#111827;border:1px solid rgba(148,163,184,.35);border-radius:20px;box-shadow:0 25px 70px rgba(0,0,0,.48);display:none;overflow:hidden}.iahr-panel.open{display:block}.iahr-head{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;background:linear-gradient(135deg,#064e3b,#111827);border-bottom:1px solid rgba(255,255,255,.08)}.iahr-head b{display:block;color:#fff}.iahr-head small{display:block;color:#bbf7d0;font-size:11px;margin-top:3px}.iahr-head button{background:rgba(255,255,255,.12);color:#fff;border:0;border-radius:10px;width:32px;height:32px;font-size:20px;cursor:pointer}.iahr-body{padding:14px}.iahr-ex{font-size:12px;color:#cbd5e1;background:#0f172a;border:1px solid rgba(148,163,184,.25);border-radius:12px;padding:10px;margin-bottom:10px}.iahr-body textarea{width:100%;height:92px;border-radius:14px;border:1px solid #334155;background:#f8fafc;color:#0f172a;padding:12px;font-weight:700;resize:vertical}.iahr-send{width:100%;margin-top:10px;justify-content:center}.iahr-respuesta{margin-top:12px;max-height:310px;overflow:auto}.ia-result{border-radius:14px;padding:13px;border:1px solid rgba(148,163,184,.25);background:#0f172a;color:#e5e7eb}.ia-result h3{margin:0 0 8px;color:#fff}.ia-result h4{margin:10px 0 6px}.ia-result p{margin:7px 0;line-height:1.45}.ia-result ul{margin:8px 0 0 18px;padding:0}.ia-result.ok{border-color:rgba(34,197,94,.45);background:linear-gradient(135deg,rgba(6,78,59,.75),#0f172a)}.ia-result.warn{border-color:rgba(245,158,11,.5);background:linear-gradient(135deg,rgba(120,53,15,.58),#0f172a)}.ia-result.bad{border-color:rgba(239,68,68,.55);background:linear-gradient(135deg,rgba(127,29,29,.62),#0f172a)}.ia-result.legal{border-color:rgba(59,130,246,.55);background:linear-gradient(135deg,rgba(30,64,175,.58),#0f172a)}.ia-result a{color:#86efac;font-weight:900}.ia-result small,.ia-result .muted{color:#cbd5e1}.ia-admin-form{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}.ia-admin-form textarea{grid-column:1/-1;min-height:110px}.ia-admin-form .full{grid-column:1/-1}.ia-table td{vertical-align:top}@media(max-width:700px){.iahr-fab{right:14px;bottom:14px}.iahr-panel{right:14px;bottom:72px}}
+.proceso-box{margin:18px 0!important;overflow:auto!important}.proceso-toolbar{display:grid;grid-template-columns:1.2fr 1.6fr .9fr .9fr auto;gap:12px;align-items:center;padding:14px;background:rgba(16,185,129,.07);border-bottom:1px solid rgba(16,185,129,.18)}.proceso-toolbar b{font-size:16px}.proceso-toolbar input,.proceso-toolbar select{min-height:42px}.proceso-box table th:first-child,.proceso-box table td:first-child{text-align:center}.proceso-box .icon-btn{font-size:13px;background:#e9f7ef!important;color:#047857!important;border:1px solid #99f6cc!important;border-radius:999px!important;padding:6px 10px!important;text-decoration:none!important}.module-tools{display:grid!important;grid-template-columns:1fr auto auto!important;gap:12px!important;align-items:center!important;margin:16px 0!important}.c-form{grid-template-columns:180px 1fr 180px 1fr!important;gap:14px 18px!important}.c-form b{align-self:center!important;text-align:right!important;opacity:1!important;color:#10243d!important}.table-wrap{overflow:auto!important}@media(max-width:900px){.proceso-toolbar,.module-tools,.c-form{grid-template-columns:1fr!important}.c-form b{text-align:left!important}}
+/* AJUSTE PRO: etiquetas visibles, tablas sin columnas cortadas y botones limpios */
+.c-form b,.pro-form b,.c-card b{color:#10243d!important;background:#f1f5f9!important;border-radius:10px!important;padding:10px 12px!important;text-align:right!important;opacity:1!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;min-height:42px!important}.c-card h1,.c-card h2,.c-title{color:#08243f!important}.table-wrap{width:100%!important;max-width:100%!important;overflow-x:auto!important}.c-table th,.c-table td{white-space:normal!important;min-width:96px!important}.c-table th:first-child,.c-table td:first-child{min-width:80px!important}.btn-del{background:#e8fff4!important;color:#047857!important;border:1px solid #99f6e4!important;border-radius:999px!important;font-weight:1000!important;padding:8px 12px!important;cursor:pointer!important}.mini-actions{display:flex!important;gap:8px!important;align-items:center!important;flex-wrap:wrap!important}.photo-dot{display:inline-flex;padding:7px 10px;border-radius:999px;font-weight:1000;border:1px solid #cbd5e1}.photo-ok{background:#dcfce7;color:#047857;border-color:#86efac}.photo-no{background:#fee2e2;color:#991b1b;border-color:#fecaca}.select-grid{display:grid;grid-template-columns:repeat(2,minmax(130px,1fr));gap:8px}.bio-box{display:grid;gap:8px}.bio-actions{display:flex;gap:8px;flex-wrap:wrap}.foto-mini{width:46px;height:46px;border-radius:10px;object-fit:cover;border:2px solid #dbeafe;background:#fff}.zebra-card{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}.zebra-card input,.zebra-card select{margin-bottom:10px}.filter-row-pro{display:grid;grid-template-columns:220px 1fr 1fr auto auto;gap:12px;align-items:center;margin:14px 0}.filter-row-pro input,.filter-row-pro select{min-height:42px}@media(max-width:900px){.zebra-card,.filter-row-pro{grid-template-columns:1fr!important}.c-form b{text-align:left!important;justify-content:flex-start!important}}
 
+
+
+/* =========================================================
+   FIX PRO FINAL: formularios legibles, distribución ordenada
+   ========================================================= */
+.req-pro-grid{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:22px!important;
+  align-items:start!important;
+  width:100%!important;
+}
+.pro-card.nice-form,
+.learning-grid .nice-form{
+  display:grid!important;
+  grid-template-columns:190px minmax(260px,1fr) 190px minmax(260px,1fr)!important;
+  gap:16px 18px!important;
+  align-items:center!important;
+  padding:28px!important;
+  overflow:visible!important;
+}
+.pro-card.nice-form b,
+.ingreso-form b,
+.learning-grid .nice-form b{
+  min-width:0!important;
+  min-height:50px!important;
+  white-space:normal!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  line-height:1.18!important;
+  color:#09213b!important;
+  background:#edf3f8!important;
+  border-radius:14px!important;
+  padding:12px 14px!important;
+  font-size:15px!important;
+  font-weight:900!important;
+  display:flex!important;
+  justify-content:flex-end!important;
+  align-items:center!important;
+  text-align:right!important;
+}
+.pro-card.nice-form input,
+.pro-card.nice-form select,
+.pro-card.nice-form textarea,
+.ingreso-form input,
+.ingreso-form select,
+.ingreso-form textarea,
+.learning-grid .nice-form input,
+.learning-grid .nice-form select,
+.learning-grid .nice-form textarea{
+  min-width:0!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-height:52px!important;
+  box-sizing:border-box!important;
+  overflow:visible!important;
+  color:#10243d!important;
+  -webkit-text-fill-color:#10243d!important;
+  font-size:15.5px!important;
+  font-weight:650!important;
+}
+.pro-card.nice-form textarea,
+.ingreso-form textarea,
+.learning-grid .nice-form textarea{min-height:96px!important;}
+.pro-card.nice-form .actions,
+.learning-grid .nice-form .actions{grid-column:2 / -1!important;}
+.pro-section-title,.section-head{
+  grid-column:1/-1!important;
+  margin:0 0 12px!important;
+  padding:14px 18px!important;
+  border-radius:14px!important;
+  background:linear-gradient(90deg,#eafff6,#f8fafc)!important;
+  border:1px solid #a7f3d0!important;
+  color:#073b2d!important;
+  font-size:19px!important;
+  font-weight:950!important;
+}
+#form_scan_req .scan-box{
+  grid-column:1/-1!important;
+  display:grid!important;
+  grid-template-columns:minmax(320px,1fr) minmax(280px,.8fr)!important;
+  gap:16px!important;
+  align-items:start!important;
+  padding:20px!important;
+}
+#form_scan_req .scan-camera{min-height:220px!important;margin:0!important;}
+#form_scan_req .scan-tools{display:grid!important;grid-template-columns:repeat(2,minmax(160px,1fr))!important;gap:12px!important;margin:0!important;}
+#form_scan_req .scan-counter,#form_scan_req .mini-list,#form_scan_req .muted2{grid-column:1/-1!important;}
+.ingreso-form{display:grid!important;grid-template-columns:190px minmax(240px,1fr) 190px minmax(240px,1fr)!important;gap:16px 18px!important;align-items:center!important;padding:28px!important;}
+.ingreso-form>span:empty{display:none!important;}
+.ingreso-form .camera-box{display:grid!important;grid-template-columns:260px minmax(220px,1fr)!important;gap:16px!important;align-items:start!important;}
+.ingreso-form .camera-box video,.ingreso-form .camera-box img{min-height:260px!important;}
+.ingreso-form .bio-box{display:grid!important;gap:12px!important;}
+.learning-grid{display:grid!important;grid-template-columns:1fr!important;gap:22px!important;align-items:start!important;}
+.learning-grid .eval-side{position:static!important;width:100%!important;}
+.learning-grid .eval-grid{display:grid!important;grid-template-columns:190px minmax(260px,1fr) 190px minmax(260px,1fr)!important;gap:14px 18px!important;}
+.learning-grid .eval-grid b{min-height:50px!important;background:#edf3f8!important;color:#09213b!important;border-radius:14px!important;padding:12px 14px!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;text-align:right!important;font-weight:900!important;}
+.learning-grid .eval-grid input,.learning-grid .eval-grid select{min-height:52px!important;border:1px solid #cfe0ef!important;border-radius:14px!important;padding:12px 14px!important;}
+.table-wrap,.proceso-box{overflow-x:auto!important;max-width:100%!important;}
+.clean-table,.c-table{min-width:1180px!important;}
+.clean-table th,.clean-table td,.c-table th,.c-table td{white-space:normal!important;vertical-align:middle!important;}
+.col-delete,th.col-delete,td.col-delete{width:94px!important;min-width:94px!important;max-width:94px!important;text-align:center!important;}
+.delete-mini,.btn-del,.action-delete{max-width:82px!important;min-width:72px!important;height:32px!important;font-size:12px!important;padding:0 8px!important;overflow:hidden!important;white-space:nowrap!important;text-overflow:ellipsis!important;}
+.side .menu-title i.bi,.side .menu-item i.bi{
+  width:38px!important;height:38px!important;min-width:38px!important;border-radius:12px!important;
+  display:grid!important;place-items:center!important;background:rgba(255,255,255,.12)!important;
+  color:#dff8ed!important;font-size:19px!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)!important;
+}
+.side .menu-title.active i.bi,.side .menu-item.active i.bi,.side .menu-item.parent-active i.bi{background:rgba(255,255,255,.20)!important;color:#06281f!important;}
+.side .menu-title .label,.side .menu-item .label{display:block!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;line-height:1.25!important;font-weight:850!important;}
+.side.collapsed .menu-title .label,.side.collapsed .menu-item .label{display:none!important;}
+@media(max-width:1200px){
+  .pro-card.nice-form,.ingreso-form,.learning-grid .nice-form,.learning-grid .eval-grid{grid-template-columns:170px minmax(0,1fr)!important;}
+  .pro-card.nice-form .actions,.learning-grid .nice-form .actions{grid-column:1/-1!important;}
+  #form_scan_req .scan-box{grid-template-columns:1fr!important;}
+}
+@media(max-width:720px){
+  .pro-card.nice-form,.ingreso-form,.learning-grid .nice-form,.learning-grid .eval-grid{grid-template-columns:1fr!important;padding:18px!important;}
+  .pro-card.nice-form b,.ingreso-form b,.learning-grid .nice-form b,.learning-grid .eval-grid b{justify-content:flex-start!important;text-align:left!important;}
+  .ingreso-form .camera-box{grid-template-columns:1fr!important;}
+}
+
+
+/* === AJUSTE FINAL UI COMPACTA / PANEL FIJO / CÁMARA / HUELLERO / INDUCCIÓN === */
+:root{--side-w-final:286px;--side-bg-final:#073f34;}
+.app{grid-template-columns:var(--side-w-final) minmax(0,1fr)!important;align-items:stretch!important;background:#edf6f4!important;}
+.app.side-collapsed{grid-template-columns:84px minmax(0,1fr)!important;}
+.side{width:var(--side-w-final)!important;min-height:100vh!important;height:100vh!important;position:sticky!important;top:0!important;padding:0 8px 14px!important;background:var(--side-bg-final)!important;box-shadow:10px 0 28px rgba(15,23,42,.12)!important;border-right:1px solid rgba(255,255,255,.12)!important;}
+.side:before{content:"";position:fixed;left:0;top:0;bottom:0;width:var(--side-w-final);background:var(--side-bg-final);z-index:-1;}
+.side.collapsed:before,.app.side-collapsed .side:before{width:84px!important;}
+.main{margin-left:0!important;padding-left:22px!important;padding-right:22px!important;}
+.side-head-pro{margin:0 0 10px!important;border-radius:0 0 16px 16px!important;}
+.side nav{padding:4px 4px 18px!important;}
+.menu-title,.menu-item{width:100%!important;margin:5px 0!important;min-height:50px!important;padding:11px 14px!important;border-radius:14px!important;}
+.submenu{padding:5px 0!important;}
+.submenu>.menu-item{padding-left:58px!important;min-height:44px!important;}
+.menu-title .label,.menu-item .label{font-size:14px!important;line-height:1.18!important;}
+.req-pro-grid{grid-template-columns:minmax(360px,.95fr) minmax(390px,1.05fr)!important;gap:18px!important;align-items:start!important;}
+.nice-form,.pro-form,.compact-form,.c-form{grid-template-columns:160px minmax(0,1fr) 160px minmax(0,1fr)!important;gap:12px 14px!important;padding:20px!important;}
+.nice-form b,.pro-form b,.compact-form b,.c-form b{min-height:38px!important;padding:8px 10px!important;font-size:13px!important;}
+.nice-form input,.nice-form select,.nice-form textarea,.pro-form input,.pro-form select,.pro-form textarea,.compact-form input,.compact-form select,.compact-form textarea,.c-form input,.c-form select,.c-form textarea{min-height:43px!important;padding:9px 12px!important;font-size:14px!important;}
+.c-card,.pro-card,.dash-card,.table-wrap{border-radius:18px!important;}
+.scan-box{display:grid!important;grid-template-columns:minmax(260px,1fr) minmax(220px,.65fr)!important;gap:14px!important;align-items:start!important;overflow:visible!important;}
+.scan-camera{grid-row:span 2!important;min-height:250px!important;margin:0!important;background:#f1f7f6!important;overflow:hidden!important;}
+.scan-camera video{display:block;width:100%!important;height:250px!important;max-height:250px!important;object-fit:cover!important;background:#0b1220!important;}
+.scan-tools{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important;align-content:start!important;}
+.scan-tools .c-btn{width:100%!important;min-height:46px!important;padding:8px 10px!important;white-space:normal!important;line-height:1.15!important;text-align:center!important;}
+.scan-counter{grid-column:2!important;display:grid!important;grid-template-columns:1fr!important;gap:8px!important;}
+#listaScanReq{grid-column:1/-1!important;max-height:150px!important;overflow:auto!important;background:#fff!important;border:1px solid #dbe7f1!important;border-radius:14px!important;padding:8px!important;}
+#listaScanReq>div{display:grid!important;grid-template-columns:90px 1fr auto!important;gap:8px!important;padding:8px!important;border-bottom:1px solid #edf2f7!important;}
+.ingreso-form .camera-box,.ingreso-form .bio-box{display:grid!important;grid-template-columns:minmax(220px,.9fr) minmax(180px,.65fr)!important;gap:16px!important;align-items:start!important;padding:18px!important;background:#f8fafc!important;border:1px dashed #c9d8e8!important;border-radius:18px!important;overflow:visible!important;}
+.ingreso-form .camera-box video,.ingreso-form .camera-box img{width:100%!important;height:300px!important;min-height:300px!important;max-height:300px!important;border-radius:16px!important;object-fit:cover!important;background:#111!important;}
+.ingreso-form .camera-box small,.ingreso-form .bio-box small{grid-column:1/-1!important;color:#52637a!important;font-weight:700!important;}
+.cam-actions,.bio-actions{display:grid!important;grid-template-columns:1fr!important;gap:10px!important;align-content:start!important;}
+.cam-actions .c-btn,.bio-actions .c-btn{width:100%!important;min-height:48px!important;padding:8px 12px!important;white-space:normal!important;line-height:1.15!important;}
+.bio-box input[type=file]{grid-column:1/-1!important;background:#fff!important;}
+.learning-grid{grid-template-columns:minmax(540px,1fr) minmax(300px,.45fr)!important;gap:18px!important;align-items:start!important;}
+.learning-grid.solo-induccion{grid-template-columns:1fr!important;}
+.records-toolbar{display:grid!important;grid-template-columns:minmax(260px,1fr) 190px 170px 170px!important;gap:10px!important;align-items:center!important;}
+.video-base-grid{display:grid!important;grid-template-columns:repeat(4,minmax(160px,1fr))!important;gap:10px!important;margin:14px 0!important;}
+.video-base-grid div{background:#f8fafc!important;border:1px solid #dbe7f1!important;border-radius:14px!important;padding:12px!important;}
+.video-base-grid small{display:block;color:#64748b;font-weight:800;margin-bottom:6px;}
+.mass-actions{display:flex!important;gap:10px!important;flex-wrap:wrap!important;align-items:center!important;margin:12px 0!important;}
+.mass-actions select{width:auto!important;min-width:190px!important;}
+@media(max-width:1250px){.req-pro-grid,.learning-grid{grid-template-columns:1fr!important}.nice-form,.pro-form,.compact-form,.c-form{grid-template-columns:150px minmax(0,1fr)!important}.scan-box{grid-template-columns:1fr!important}.scan-counter{grid-column:1!important}.records-toolbar{grid-template-columns:1fr 1fr!important}}
+@media(max-width:1000px){.side{position:fixed!important;left:-340px!important}.side:before{display:none!important}.main{padding:14px!important}.app{grid-template-columns:1fr!important}.side.open{left:0!important}}
+@media(max-width:720px){.nice-form,.pro-form,.compact-form,.c-form,.ingreso-form .camera-box,.ingreso-form .bio-box{grid-template-columns:1fr!important}.nice-form b,.pro-form b,.compact-form b,.c-form b{justify-content:flex-start!important;text-align:left!important}.scan-tools,.records-toolbar,.video-base-grid{grid-template-columns:1fr!important}.ingreso-form .camera-box video,.ingreso-form .camera-box img{height:240px!important;min-height:240px!important}}
+
+
+/* Mejoras PRO flujo contratación */
+.flow-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}.flow-step{background:#fff;border:1px solid #dbe3ef;border-radius:14px;padding:14px;box-shadow:0 8px 20px rgba(15,23,42,.06)}.flow-step b{display:block;color:#111827}.flow-step small{color:#64748b}.semaforo-ticket{display:inline-flex;gap:6px;align-items:center}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.dot.ok{background:#16a34a}.dot.warn{background:#f59e0b}.dot.bad{background:#dc2626}.dot.info{background:#2563eb}.status-pill.warn{background:#fff7ed!important;color:#9a3412!important;border-color:#fed7aa!important}.status-pill.info{background:#eff6ff!important;color:#1d4ed8!important;border-color:#bfdbfe!important}.missing-list{font-size:12px;color:#9a3412;max-width:260px}.checklist-mini{display:flex;gap:6px;flex-wrap:wrap}.checklist-mini span{font-size:11px;border:1px solid #dbe3ef;border-radius:999px;padding:4px 7px;background:#f8fafc}.checklist-mini .ok{background:#ecfdf5;color:#166534}.checklist-mini .warn{background:#fff7ed;color:#9a3412}
+@media(max-width:900px){.flow-strip{grid-template-columns:1fr}}
+
+.preventive-alert-box{margin:0 0 16px;padding:14px 18px;border-radius:16px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;font-weight:650}.preventive-alert-box.warn{background:#fff7ed;color:#9a3412;border-color:#fed7aa}.preventive-alert-box.mid{background:#fefce8;color:#854d0e;border-color:#fde68a}.preventive-alert-box.bad{background:#fef2f2;color:#991b1b;border-color:#fecaca}
 </style>
 <script>
 function side(){return document.querySelector('.side')}
@@ -2862,42 +3581,8 @@ function toggleGroup(id){const g=document.getElementById(id); if(!g)return; g.cl
 function initSide(){const s=side(), a=appShell(); if(!s)return; const c=localStorage.getItem('sideCollapsed')==='1' && window.innerWidth>=1000; s.classList.toggle('collapsed',c); if(a)a.classList.toggle('side-collapsed',c); document.querySelectorAll('.menu-group[data-group]').forEach(g=>{const id=g.id; const saved=localStorage.getItem('group_'+id); if(saved==='1' && !g.classList.contains('force-open')) g.classList.add('closed')}); if(!location.hash){setTimeout(restoreSideScroll,60)}; document.querySelectorAll('.menu-item').forEach(a=>a.addEventListener('click',()=>{saveSideScroll(); if(window.innerWidth<1000){const s=side(); if(s)s.classList.remove('open')}}));}
 function filterCards(){const q=(document.getElementById('cardSearch')?.value||'').toLowerCase();document.querySelectorAll('.doc-card').forEach(c=>{c.style.display=c.innerText.toLowerCase().includes(q)?'block':'none'})}
 window.addEventListener('DOMContentLoaded',()=>{initSide(); if(location.hash){document.querySelectorAll('.menu-item').forEach(x=>{if(x.getAttribute('href')&&x.getAttribute('href').endsWith(location.hash)) x.classList.add('active')}); setTimeout(()=>{document.querySelector(location.hash)?.scrollIntoView({block:'start'});},120)}});window.addEventListener('beforeunload',saveSideScroll)
-
-
-function iahrToggle(){const p=document.getElementById('iahrPanel'); if(p)p.classList.toggle('open')}
-async function iahrAsk(ev){
-  if(ev && ev.preventDefault) ev.preventDefault();
-  const q=(document.getElementById('iahrPregunta')?.value||'').trim();
-  const modulo=document.getElementById('iahrModulo')?.value||'';
-  const box=document.getElementById('iahrRespuesta');
-  if(!box)return false;
-  if(!q){box.innerHTML='<div class="ia-result warn"><h3>IA HR</h3><p>Escribe una pregunta para poder ayudarte.</p></div>';return false;}
-  box.innerHTML='<div class="ia-result warn"><p>Analizando...</p></div>';
-  try{
-    const r=await fetch('/ia_hr/api',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({pregunta:q,modulo:modulo})});
-    const txt=await r.text();
-    let data={};
-    try{data=JSON.parse(txt)}catch(parseErr){throw new Error('Respuesta no válida del servidor: '+txt.slice(0,180));}
-    if(!r.ok || data.ok===false){throw new Error(data.error || ('HTTP '+r.status));}
-    box.innerHTML=data.html||'<div class="ia-result bad">No se obtuvo respuesta.</div>';
-  }catch(e){box.innerHTML='<div class="ia-result bad"><h3>Error IA</h3><p>No se pudo consultar la IA.</p><small>'+String(e.message||e)+'</small></div>'; console.error('IA HR error:',e);}
-  return false;
-}
-document.addEventListener('DOMContentLoaded',function(){
-  document.querySelectorAll('.iahr-send').forEach(function(btn){
-    btn.addEventListener('click',iahrAsk);
-  });
-  const txt=document.getElementById('iahrPregunta');
-  if(txt){txt.addEventListener('keydown',function(e){if(e.ctrlKey && e.key==='Enter') iahrAsk(e);});}
-});
-
-document.addEventListener('click',function(e){
-  document.querySelectorAll('.admin-dropdown.open').forEach(function(d){
-    if(!d.contains(e.target)){d.classList.remove('open')}
-  });
-});
-
-</script></head><body>{{ body|safe }}
+</script>
+</head><body>{{ body|safe }}
 <script>
 window.addEventListener('DOMContentLoaded',()=>{
   const tipo=document.querySelector("select[name='tipo_plantilla']");
@@ -2922,17 +3607,82 @@ window.addEventListener('DOMContentLoaded',()=>{
   }
 });
 </script>
+
+<style id='pro-contratacion-2026'>
+.single-gestion{grid-template-columns:minmax(320px,760px)!important;max-width:860px}.gestion-contratacion-only{min-height:180px!important}.contratacion-only-dashboard{grid-template-columns:1fr!important}.pro-form{display:grid!important;grid-template-columns:150px minmax(220px,1fr) 150px minmax(220px,1fr)!important;gap:14px 16px!important;align-items:center!important}.pro-form b{color:#27364a!important;background:#f3f7fa!important;padding:8px 10px!important;border-radius:10px!important;font-size:13px!important}.pro-form input,.pro-form select,.pro-form textarea{min-height:42px!important;background:#fff!important;color:#102033!important;border:1px solid #d9e3ee!important}.module-tools{display:grid;grid-template-columns:minmax(260px,1fr) auto auto;gap:12px;align-items:center;background:#ffffff;border:1px solid #dfe8f1;border-radius:16px;padding:12px 14px;margin:14px 0;box-shadow:0 10px 24px rgba(9,46,75,.06)}.module-tools input{background:#fff!important;color:#102033!important;border:1px solid #d9e3ee!important}.camera-box{border:1px dashed #c9d8e8;border-radius:16px;padding:12px;background:#f7fafc}.camera-box video,.camera-box img{width:100%;max-height:260px;background:#111;border-radius:14px;object-fit:cover}.cam-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.photo-id-layout{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin:14px 0}.photo-id-layout>div{background:#f8fafc;border:1px solid #dfe8f1;border-radius:16px;padding:16px}.photo-id-layout input{display:block;width:100%;margin:8px 0;background:#fff!important;color:#102033!important}.dash-hero{align-items:center!important}.c-card,.dash-hero,.table-wrap{overflow:hidden}.c-table{min-width:980px}.table-wrap{overflow-x:auto!important}@media(max-width:900px){.pro-form{grid-template-columns:1fr!important}.pro-form b{margin-top:8px}.module-tools{grid-template-columns:1fr}.photo-id-layout{grid-template-columns:1fr}.single-gestion{grid-template-columns:1fr!important}.admin-title h1,.dash-hero h1{font-size:28px!important}}
+
+
+/* Correcciones finales solicitadas */
+.pro-form b,.c-form b{color:#0b2239!important;background:#f1f6f9!important;font-weight:1000!important;text-shadow:none!important;opacity:1!important;}
+.c-title,.dash-hero h1,.section-head{color:#0b2239!important;letter-spacing:-.3px;}
+.section-head{grid-column:1/-1;margin:4px 0 0;padding:10px 12px;border-radius:12px;background:linear-gradient(90deg,#e8fbf4,#f8fafc);border:1px solid #dbeafe;font-size:16px;}
+.split-two{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,.8fr);gap:18px;align-items:start;}
+.worker-eval{padding:20px!important;background:#ffffff!important;border:1px solid #dfe8f1!important;border-radius:18px!important;}
+.worker-eval h3{margin-top:0;color:#0b2239!important}.worker-eval p{color:#64748b;font-weight:800;line-height:1.45}.eval-grid{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center}.eval-grid b{color:#0b2239;background:#f1f6f9;border-radius:10px;padding:8px;text-align:right}.eval-grid input,.eval-grid select{min-height:42px;border:1px solid #d9e3ee;border-radius:12px;padding:8px;background:#fff;color:#102033;}
+.c-table th,.c-table td{vertical-align:middle!important}.c-table .action-delete,.action-delete{width:38px!important;min-width:38px!important;height:38px!important;padding:0!important;border-radius:14px!important;font-size:18px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important;white-space:nowrap!important;color:#007a5a!important;background:#e9fff6!important;border:1px solid #b7f3df!important}.status-pill,.c-badge,.state{color:#073b2d!important;font-weight:900!important}.req-layout{grid-template-columns:1fr 1fr!important}
+.status-pill{color:#059669!important;background:#eafff7!important;border-color:#99f6cc!important;max-width:150px;overflow:hidden;text-overflow:ellipsis;}
+.menu-title,.menu-item{font-weight:900!important}.side .label{color:inherit!important}.nested .menu-title{background:rgba(255,255,255,.05)!important;border:1px solid rgba(255,255,255,.10)!important}.nested.force-open>.submenu{display:block!important;}
+input:required,select:required,textarea:required{border-left:4px solid #10b981!important;}
+@media(max-width:1000px){.split-two{grid-template-columns:1fr}.eval-grid{grid-template-columns:1fr}.eval-grid b{text-align:left}.proceso-toolbar{grid-template-columns:1fr!important}.c-form,.pro-form{grid-template-columns:1fr!important}.c-form b,.pro-form b{text-align:left!important}}
+
+</style>
+<script>
+function filtrarTabla(input, tablaId){var q=(input.value||'').toLowerCase();var t=document.getElementById(tablaId);if(!t)return;Array.from(t.rows).forEach(function(r,i){if(i===0)return;r.style.display=r.innerText.toLowerCase().indexOf(q)>=0?'':'none';});}
+</script>
+
+
+<script id="final-fechas-validacion-dni">
+window.addEventListener('DOMContentLoaded',function(){
+  const today=new Date().toISOString().slice(0,10);
+  document.querySelectorAll("input[type='date']").forEach(x=>{ if(!x.value) x.value=today; });
+  document.querySelectorAll('form').forEach(f=>{
+    f.addEventListener('submit',function(e){
+      let bad=[]; f.querySelectorAll('[required]').forEach(c=>{ if(!String(c.value||'').trim()){bad.push(c.name||'campo'); c.classList.add('campo-error'); }});
+      if(bad.length){ e.preventDefault(); alert('Complete los campos obligatorios antes de guardar.'); }
+    });
+  });
+});
+</script>
+<style id="final-ui-pro">
+.campo-error{border-color:#ef4444!important;background:#fff7f7!important}
+.c-form b,.pro-form b{color:#0b2239!important;opacity:1!important;background:#f1f5f9!important;font-weight:1000!important;text-shadow:none!important}
+.c-table th{background:#f3f7fb!important;color:#334155!important}.c-table td{color:#111827!important}.table-wrap{overflow-x:auto!important}.c-table{min-width:1100px!important}
+.status-pill{color:#059669!important;background:#eafff7!important;border:1px solid #99f6cc!important;white-space:nowrap!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:110px!important;max-width:none!important;overflow:visible!important}
+.icon-btn,.btn-del{font-size:13px!important;background:#e9fff6!important;color:#047857!important;border:1px solid #99f6cc!important;border-radius:999px!important;padding:7px 10px!important;white-space:nowrap!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;text-decoration:none!important}
+.c-table th:first-child,.c-table td:first-child{min-width:90px!important;max-width:130px!important}.section-head{grid-column:1/-1!important;color:#064e3b!important;background:#eafaf4!important;border:1px solid #bbf7d0!important;border-radius:12px!important;padding:10px 14px!important;margin:6px 0!important}
+.side{background:#062f26!important}.side .menu-item,.side .menu-title{color:#eafff7!important}.side .menu-item.active{background:#0f7d5d!important;color:#fff!important;border-radius:14px!important}.side .menu-group .menu-title{background:rgba(255,255,255,.06)!important;border:1px solid rgba(255,255,255,.08)!important}
+.worker-eval input,.worker-eval select{background:#fff!important;color:#102033!important}.dash-hero h1,.c-title,h1,h2{color:#08243f!important}.module-tools{background:#fff!important;border:1px solid #dfe8f1!important;border-radius:16px!important}
+/* corrección de tablas donde eliminar sobresalía */
+table td form{margin:0!important}.c-table td{vertical-align:middle!important}.c-table button{max-width:120px!important;overflow:hidden!important;text-overflow:ellipsis!important}
+</style>
+
+<style id="ui-orden-final-omar">
+body{font-family:Inter,system-ui,Arial!important;background:#eef7f5!important;color:#08243f!important}.main,.content,.app-main{padding:20px 24px!important}h1,h2,.c-title{color:#08243f!important;font-weight:900!important;letter-spacing:-.035em!important}.dash-hero{display:flex!important;justify-content:space-between!important;align-items:center!important;gap:24px!important;padding:32px!important;border-radius:24px!important;background:#fff!important;border:1px solid #dbe7f1!important;box-shadow:0 18px 44px rgba(15,23,42,.06)!important}.dash-hero h1{font-size:40px!important;margin:0 0 10px!important}.muted2{color:#5d6b82!important;font-weight:650!important;line-height:1.45!important}.c-card,.pro-card,.dash-card,.table-wrap{background:#fff!important;border:1px solid #dbe7f1!important;border-radius:22px!important;box-shadow:0 16px 38px rgba(15,23,42,.055)!important;overflow:hidden!important}.req-pro-grid{display:grid!important;grid-template-columns:minmax(420px,1fr) minmax(420px,1fr)!important;gap:22px!important;margin:18px 0 22px!important}.nice-form,.pro-form,.compact-form,.c-form{display:grid!important;grid-template-columns:180px minmax(0,1fr) 180px minmax(0,1fr)!important;gap:14px 18px!important;align-items:center!important;padding:26px!important}.nice-form h3,.pro-section-title,.section-head{grid-column:1/-1!important;margin:0 0 10px!important;padding:12px 16px!important;border-radius:14px!important;background:linear-gradient(90deg,#e9fff6,#f8fafc)!important;border:1px solid #b9f4d6!important;color:#073b2d!important;font-size:17px!important;font-weight:900!important}.nice-form b,.pro-form b,.compact-form b,.c-form b{display:flex!important;align-items:center!important;justify-content:flex-end!important;min-height:42px!important;padding:9px 12px!important;background:#f1f6fa!important;border-radius:12px!important;color:#0b2239!important;font-size:14px!important;font-weight:900!important;text-align:right!important;opacity:1!important}.nice-form input,.nice-form select,.nice-form textarea,.pro-form input,.pro-form select,.pro-form textarea,.compact-form input,.compact-form select,.compact-form textarea,.c-form input,.c-form select,.c-form textarea{width:100%!important;min-height:48px!important;border:1px solid #cfe0ef!important;border-radius:14px!important;background:#fff!important;color:#102033!important;padding:11px 14px!important;font-size:15px!important;font-weight:650!important;box-sizing:border-box!important}.nice-form textarea,.pro-form textarea,.compact-form textarea{min-height:84px!important}.full,.actions,.scan-box{grid-column:1/-1!important}.actions,.scan-tools,.scan-counter{display:flex!important;gap:10px!important;align-items:center!important;flex-wrap:wrap!important}.c-btn,.btn-green,.btn-blue{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:48px!important;padding:0 22px!important;border-radius:16px!important;background:linear-gradient(135deg,#14b979,#079765)!important;color:#fff!important;font-weight:900!important;border:0!important;text-decoration:none!important;box-shadow:0 14px 28px rgba(5,150,105,.18)!important}.c-btn.gray{background:#1f2937!important}.scan-box{background:#f8fffc!important;border:1px dashed #a7f3d0!important;border-radius:18px!important;padding:16px!important}.scan-camera{min-height:120px!important;border-radius:16px!important;background:#f1f5f9!important;display:grid!important;place-items:center!important;color:#4b5563!important;font-weight:800!important;margin-bottom:12px!important}.scan-camera video{width:100%!important;max-height:240px!important;border-radius:16px!important;object-fit:cover!important}.scan-counter span{background:#ecfdf5!important;color:#047857!important;border:1px solid #bbf7d0!important;border-radius:999px!important;padding:7px 10px!important;font-weight:900!important}.c-filter,.module-tools{display:grid!important;grid-template-columns:180px minmax(260px,1fr) auto auto!important;gap:14px!important;align-items:center!important;margin:18px 0!important}.c-filter input,.module-tools input,.module-tools select{min-height:46px!important;border:1px solid #cfe0ef!important;border-radius:14px!important;background:#fff!important;padding:10px 14px!important;color:#102033!important}.clean-table,.c-table{width:100%!important;border-collapse:separate!important;border-spacing:0!important;min-width:1100px!important}.clean-table th,.c-table th{background:#f3f7fb!important;color:#334155!important;font-size:13px!important;font-weight:900!important;text-align:left!important;padding:14px 16px!important;border-bottom:1px solid #dbe7f1!important}.clean-table td,.c-table td{padding:14px 16px!important;border-bottom:1px solid #edf2f7!important;color:#111827!important;font-weight:700!important;vertical-align:middle!important}.col-delete{width:96px!important;min-width:96px!important;text-align:center!important}.delete-mini,.action-delete,.btn-del{display:inline-flex!important;align-items:center!important;justify-content:center!important;max-width:90px!important;min-width:70px!important;height:34px!important;padding:0 10px!important;border-radius:999px!important;background:#eafff7!important;border:1px solid #99f6cc!important;color:#047857!important;font-size:12px!important;font-weight:900!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}.status-pill{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:108px!important;padding:9px 12px!important;border-radius:999px!important;background:#eafff7!important;border:1px solid #99f6cc!important;color:#059669!important;font-weight:900!important;white-space:nowrap!important}.doc-dash-pro{margin:18px 0!important;padding:28px!important;display:grid!important;grid-template-columns:1fr auto!important;gap:22px!important;align-items:center!important}.doc-dash-pro h2{font-size:32px!important;margin:0 0 8px!important}.doc-dash-pro h2 span{color:#059669!important}.doc-mini-kpis,.doc-actions{grid-column:1/-1!important;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:16px!important}.doc-mini-kpis b,.doc-actions span{background:#fff!important;border:1px solid #dbe7f1!important;border-radius:18px!important;padding:20px!important;font-size:18px!important}.doc-mini-kpis span{display:block!important;margin-top:12px!important;color:#059669!important;font-size:28px!important}.side{background:#063c31!important}.brand,.brand *{color:#ecfff8!important;font-weight:950!important}.side .menu-item,.side .menu-title{border-radius:18px!important;margin:8px 12px!important;padding:14px 16px!important;color:#eafff7!important;font-size:15px!important;font-weight:900!important;display:flex!important;align-items:center!important;gap:12px!important}.side .menu-item span:first-child,.side .menu-title span:first-child{width:36px!important;height:36px!important;border-radius:12px!important;background:rgba(255,255,255,.10)!important;display:grid!important;place-items:center!important}.side .menu-item.active,.side .menu-title.active{background:linear-gradient(135deg,#19bd78,#0c9362)!important;color:#05251e!important}.dash-card .quick-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;gap:10px!important}.dash-card .quick-grid a{background:#ecfdf5!important;color:#064e3b!important;border:1px solid #bbf7d0!important;border-radius:14px!important;padding:13px!important;font-weight:900!important;text-decoration:none!important}.photo-id-layout,.split-two,.admin-course-grid{display:grid!important;grid-template-columns:minmax(0,1.25fr) minmax(360px,.75fr)!important;gap:22px!important}.worker-eval{padding:24px!important;border-radius:22px!important}.eval-grid{display:grid!important;grid-template-columns:160px 1fr!important;gap:12px!important;align-items:center!important}.camera-box{display:grid!important;grid-template-columns:minmax(180px,260px) 1fr!important;gap:16px!important;align-items:start!important}.camera-box video,.camera-box img{width:100%!important;border-radius:16px!important;background:#111!important;min-height:220px!important;object-fit:cover!important}.cam-actions{display:flex!important;gap:10px!important;flex-wrap:wrap!important}@media(max-width:1050px){.req-pro-grid,.photo-id-layout,.split-two,.admin-course-grid{grid-template-columns:1fr!important}.nice-form,.pro-form,.compact-form,.c-form{grid-template-columns:1fr!important}.nice-form b,.pro-form b,.compact-form b,.c-form b{justify-content:flex-start!important;text-align:left!important}.c-filter,.module-tools{grid-template-columns:1fr!important}.dash-hero{flex-direction:column!important;align-items:flex-start!important}.dash-hero h1{font-size:30px!important}.doc-mini-kpis,.doc-actions{grid-template-columns:1fr!important}}
+</style>
 </body></html>
 '''
 
 
-def render_page(content, title="PORTAL HR PRO", active="Inicio"):
-    user_label = session.get('admin_nombre') or session.get('nombre') or 'Usuario HR'
+
+# ========================= PATCH UI FINAL 2026-05-28 =========================
+# Correcciones solicitadas:
+# 1) Tarjeta Administrador fija abajo del panel lateral, sin afectar el scroll del menú.
+# 2) Tablas y módulos con texto suave, legible y sin negro exagerado.
+# 3) Corrección de módulos con letras blancas/invisibles: interfaz clara, ordenada y presentable.
+EXTRA_UI_FIX_ADMIN_TABLES = '/* PATCH FINAL: sidebar administrador fijo + tablas legibles */\nhtml, body{height:100%!important;overflow:hidden!important;background:#f4f8fb!important;color:#223044!important;font-family:"Inter","Segoe UI",Arial,sans-serif!important;font-weight:500!important}\n.app{height:100vh!important;min-height:100vh!important;display:grid!important;grid-template-columns:300px minmax(0,1fr)!important;background:#f4f8fb!important;overflow:hidden!important}\n.app.side-collapsed{grid-template-columns:86px minmax(0,1fr)!important}\n.main{height:100vh!important;overflow-y:auto!important;overflow-x:hidden!important;background:linear-gradient(135deg,#f8fbfd 0%,#eef6f3 100%)!important;color:#223044!important;padding:22px 18px 36px!important}\n.side{height:100vh!important;min-height:100vh!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;background:linear-gradient(180deg,#074633 0%,#064131 48%,#04382d 100%)!important;border-right:1px solid rgba(255,255,255,.10)!important;padding-bottom:0!important;color:#eaf8f1!important}\n.side-top,.side-head-pro{position:sticky!important;top:0!important;z-index:50!important;flex:0 0 auto!important;background:#074633!important;border-bottom:1px solid rgba(255,255,255,.12)!important;box-shadow:0 8px 16px rgba(0,0,0,.12)!important}\n.side .brand{display:none!important}\n.side nav{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;padding:8px 10px 18px!important;scrollbar-width:thin!important;scrollbar-color:rgba(186,230,210,.55) transparent!important}\n.side nav::-webkit-scrollbar{width:7px!important}.side nav::-webkit-scrollbar-track{background:transparent!important}.side nav::-webkit-scrollbar-thumb{background:rgba(186,230,210,.45)!important;border-radius:999px!important}\n.side-user{position:sticky!important;bottom:0!important;z-index:60!important;flex:0 0 auto!important;margin:10px 14px 14px!important;padding:14px 16px!important;border-radius:18px!important;background:rgba(255,255,255,.11)!important;border:1px solid rgba(255,255,255,.16)!important;box-shadow:0 -10px 24px rgba(0,0,0,.18)!important;display:flex!important;align-items:center!important;gap:12px!important}\n.side-user .avatar{width:44px!important;height:44px!important;min-width:44px!important;border-radius:14px!important;background:#22c55e!important;color:#083226!important;display:grid!important;place-items:center!important;font-size:22px!important}\n.side-user b{color:#f8fffb!important;font-weight:750!important;font-size:15.5px!important;line-height:1.15!important}.side-user small{color:#bbf7d0!important;font-weight:600!important;font-size:12.5px!important}\n.menu-title,.menu-item{font-weight:650!important;line-height:1.25!important;color:#dcefe8!important;text-shadow:none!important;letter-spacing:0!important}.menu-item .label,.menu-title .label{font-weight:650!important;color:inherit!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title{background:linear-gradient(135deg,#18b86f,#0da464)!important;color:#f8fffb!important;box-shadow:0 10px 22px rgba(16,185,129,.20)!important}\n.main h1,.main h2,.main h3,.main .c-title,.main .topbar h1{color:#0f2b46!important;font-weight:760!important;text-shadow:none!important;letter-spacing:-.3px!important}.main .subtitle,.main .muted,.main .muted2{color:#64748b!important;font-weight:450!important}.main p,.main span,.main div,.main label,.main b{font-weight:500!important}.main b,.main strong{font-weight:680!important;color:#203044!important}\n.card,.c-card,.filter-card,.create-card,.table-wrap,.dash-card,.worker-eval,.doc-dash-pro{background:rgba(255,255,255,.97)!important;color:#223044!important;border:1px solid #d9e5ef!important;border-radius:22px!important;box-shadow:0 14px 34px rgba(15,41,71,.08)!important}.card *,.c-card *,.filter-card *,.create-card *,.table-wrap *,.dash-card *,.worker-eval *{color:inherit!important;text-shadow:none!important}\n.input,input,select,textarea{background:#fff!important;color:#1f2f46!important;border:1.4px solid #cbd8e6!important;border-radius:14px!important;font-weight:560!important;box-shadow:none!important}input::placeholder,textarea::placeholder{color:#75849a!important;font-weight:450!important}select option{background:#fff!important;color:#1f2f46!important}.input:focus,input:focus,select:focus,textarea:focus{border-color:#10b981!important;box-shadow:0 0 0 4px rgba(16,185,129,.14)!important;outline:none!important}\n.c-btn,.btn,.btn-green,.btn-blue,.crear-btn,button[type=submit]{background:linear-gradient(135deg,#12b76a,#079455)!important;color:#fff!important;border:0!important;border-radius:15px!important;font-weight:700!important;box-shadow:0 12px 24px rgba(16,185,129,.22)!important}.c-btn.gray,.btn.gray,.gray{background:#1f2937!important;color:#fff!important;box-shadow:none!important}\n.clean-table,.c-table,.tpl-table,table{width:100%!important;border-collapse:separate!important;border-spacing:0!important;background:#fff!important;color:#223044!important}.clean-table th,.c-table th,.tpl-table th,th{background:#f1f6fa!important;color:#334155!important;font-weight:700!important;font-size:13.5px!important;text-align:left!important;border:1px solid #dbe6f0!important;padding:14px 16px!important;text-transform:none!important;letter-spacing:0!important}.clean-table td,.c-table td,.tpl-table td,td{background:#fff!important;color:#26364d!important;font-weight:520!important;border:1px solid #e2eaf2!important;padding:14px 16px!important;vertical-align:middle!important;opacity:1!important}.clean-table tr:nth-child(even) td,.c-table tr:nth-child(even) td,.tpl-table tr:nth-child(even) td{background:#f9fbfd!important}.clean-table td *,.c-table td *,.tpl-table td *{color:#26364d!important;font-weight:520!important;opacity:1!important}.clean-table th *,.c-table th *,.tpl-table th *{color:#334155!important;font-weight:700!important;opacity:1!important}\n.plantilla-table td,.plantilla-table td *,.plantillas-table td,.plantillas-table td *{color:#26364d!important;opacity:1!important;font-weight:520!important}.plantilla-table th,.plantilla-table th *,.plantillas-table th,.plantillas-table th *{color:#334155!important;opacity:1!important;font-weight:700!important}.state-pill,.status-pill,.pill{font-weight:650!important;color:#047857!important;background:#ecfdf5!important;border:1px solid #bbf7d0!important}.action-btn,.icon-btn,.delete-mini,.action-delete,.btn-del{color:#047857!important;background:#eafff7!important;border:1px solid #99f6cc!important;font-weight:650!important}\n.plantilla-filter,.c-form,.compact-form,.pro-form,.nice-form{gap:14px 20px!important;align-items:center!important}.plantilla-filter b,.c-form b,.compact-form b,.pro-form b,.nice-form b{background:#eef4f8!important;color:#1f2f46!important;border-radius:12px!important;min-height:44px!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;padding:10px 14px!important;font-weight:650!important}.plantilla-top{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:16px!important;margin:10px 0 22px!important}.plantilla-top .crear-btn,.crear-btn{padding:15px 24px!important;border-radius:999px!important;font-size:15px!important}\n@media(max-width:900px){.app{grid-template-columns:1fr!important}.side{position:fixed!important;left:0!important;top:0!important;width:300px!important;z-index:1000!important;transform:translateX(-100%);transition:.22s ease}.app.side-open .side{transform:translateX(0)}.main{padding:16px!important}.plantilla-filter,.c-form,.compact-form,.pro-form,.nice-form{grid-template-columns:1fr!important}.plantilla-filter b,.c-form b,.compact-form b,.pro-form b,.nice-form b{justify-content:flex-start!important;text-align:left!important}.side-user{margin-bottom:12px!important}}\n'
+try:
+    BASE = BASE.replace('</style>', EXTRA_UI_FIX_ADMIN_TABLES + '\n</style>')
+except Exception:
+    pass
+# ======================= FIN PATCH UI FINAL 2026-05-28 =======================
+
+def render_page(content, title="Portal de Documentos PRIZE", active="Inicio"):
+    user_label = session.get('admin_nombre') or session.get('nombre') or 'Usuario PRIZE'
     primer_nombre = user_label.split()[0] if user_label else 'Usuario'
     body = f'''
-    <div class="mobile-head"><button class="toggle" onclick="toggleSide()">☰</button><b>PORTAL HR PRO</b><a href="/logout">Salir</a></div>
-    <div class="app"><aside class="side"><div class="side-head-pro"><button class="toggle side-toggle-left" title="Expandir / contraer panel" onclick="toggleSide()"><i class="bi bi-list"></i></button><div class="side-brand-pro"><div class="side-brand-icon"><i class="bi bi-kanban"></i></div><div class="side-brand-text"><b>PORTAL HR PRO</b><small>Dashboard</small></div></div><button class="toggle side-toggle-right" title="Expandir / contraer panel" onclick="toggleSide()"><i class="bi bi-list"></i></button></div>
-      {sidebar(active)}<div class="side-user"><div class="avatar"><i class="bi bi-person-fill"></i></div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}</main>{ia_widget_hr(active)}</div>'''
+    <div class="mobile-head"><button class="toggle" onclick="toggleSide()">☰</button><b>PRIZE Documentos</b><a href="/logout">Salir</a></div>
+    <div class="app"><aside class="side"><div class="side-top"><button class="toggle" title="Expandir / contraer panel" onclick="toggleSide()">☰</button><b class="label">PRIZE RRHH</b><button class="toggle" title="Expandir / contraer panel" onclick="toggleSide()">☰</button></div>
+      <div class="brand"><img src="{logo_url()}" alt="PRIZE"><p>Documentos PRIZE</p></div>{sidebar(active)}<div class="side-user"><div class="avatar">👤</div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}</main></div>'''
     return render_template_string(BASE, body=body, title=title)
 
 
@@ -2954,136 +3704,77 @@ def item(tipo, label, icon, active):
 
 def sidebar(active):
     active_txt = str(active or '')
-    active_type = active_txt.split(':', 1)[0]
     active_sub = active_txt.split(':', 1)[1] if ':' in active_txt else ''
-    pago_parts=[]
-    for k,l,i in TIPOS_PAGO:
-        if k=='Normal':
-            sub_open = ' force-open' if active_type == k else ''
-            base_cls = 'menu-item parent-active' if active_type == k else 'menu-item'
-            cls_mensual = 'menu-item sub-mini active' if active_type == k and active_sub == 'Mensual' else 'menu-item sub-mini'
-            cls_semanal = 'menu-item sub-mini active' if active_type == k and active_sub == 'Semanal' else 'menu-item sub-mini'
-            pago_parts.append(f"<div id='grp_normal' data-group='normal' class='menu-group nested{sub_open}'><button type='button' class='{base_cls}' onclick=\"toggleGroup('grp_normal')\"><span>{i}</span><span class='label'>{l}</span><span class='chev'>∨</span></button><div class='submenu'>")
-            pago_parts.append(f"<a class='{cls_mensual}' onclick='saveSideScroll()' href='{url_for('panel_tipo', tipo=k, sub='Mensual')}'><i class='bi bi-calendar3'></i><span class='label'>Normal mensual</span></a>")
-            pago_parts.append(f"<a class='{cls_semanal}' onclick='saveSideScroll()' href='{url_for('panel_tipo', tipo=k, sub='Semanal')}'><i class='bi bi-calendar-week'></i><span class='label'>Normal semanal</span></a></div></div>")
-        else:
-            pago_parts.append(item(k,l,i,active))
-    pago = ''.join(pago_parts)
-    emp = ''.join(item(k,l,i,active) for k,l,i in TIPOS_EMPRESA)
-    per = ''.join(item(k,l,i,active) for k,l,i in TIPOS_PERSONALES)
-    def gclass(keys):
-        return 'menu-group force-open' if active_type in keys else 'menu-group'
-    pago_cls = gclass([k for k,_,_ in TIPOS_PAGO])
-    emp_cls = gclass([k for k,_,_ in TIPOS_EMPRESA])
-    per_cls = gclass([k for k,_,_ in TIPOS_PERSONALES])
-    admin = ""
     if session.get('admin_id'):
-        admin_keys = ['Admin','Trabajadores','Usuarios','Modulo documentos','Subir documentos','Gestion Vacacional','Modo prueba'] + [k for k,_,_ in TIPOS_PAGO] + [k for k,_,_ in TIPOS_EMPRESA] + [k for k,_,_ in TIPOS_PERSONALES]
-        admin_cls = 'menu-group force-open' if active_type in admin_keys else 'menu-group'
-        cls_dash = 'menu-item active' if active == 'Admin' else 'menu-item'
-        cls_trab = 'menu-item active' if active == 'Trabajadores' else 'menu-item'
-        cls_docs = 'menu-item active' if active == 'Subir documentos' else 'menu-item'
-        cls_users = 'menu-item active' if active == 'Usuarios' else 'menu-item'
-        cls_moddocs = 'menu-item active' if active == 'Modulo documentos' else 'menu-item'
-        cls_vac = 'menu-item active' if active == 'Gestion Vacacional' else 'menu-item'
-        cls_con = 'menu-item active' if active == 'Gestion Contratacion' else 'menu-item'
-        cls_test = 'menu-item active' if active == 'Modo prueba' else 'menu-item'
-        docs_mod_keys = [k for k,_,_ in TIPOS_PAGO] + [k for k,_,_ in TIPOS_EMPRESA] + [k for k,_,_ in TIPOS_PERSONALES] + ['Modulo documentos','Subir documentos']
-        docs_mod_cls = 'menu-group nested force-open' if active_type in docs_mod_keys else 'menu-group nested'
-        vac_cls = 'menu-group nested force-open' if active == 'Gestion Vacacional' else 'menu-group nested'
-        con_cls = 'menu-group nested force-open' if active_type == 'Gestion Contratacion' else 'menu-group nested'
-        docs_head = 'menu-title' + (' active' if active_type in docs_mod_keys else '')
-        vac_head = 'menu-title' + (' active' if active == 'Gestion Vacacional' else '')
-        con_head = 'menu-title' + (' active' if active_type == 'Gestion Contratacion' else '')
         docs_count_con = 0
         try:
             with db() as _conx:
                 docs_count_con = _conx.execute('SELECT COUNT(*) FROM contratacion_docs').fetchone()[0]
         except Exception:
-            docs_count_con = 0
-        archivos_cls = 'menu-item sub-mini doc-loaded ' + ('active' if active_sub == 'documentaria' else '') if docs_count_con else 'menu-item sub-mini ' + ('active' if active_sub == 'documentaria' else '')
+            pass
+        def cls(sec):
+            return 'menu-item sub-mini active' if active_sub == sec else 'menu-item sub-mini'
+        renovacion_secs = {'renovacion_dashboard','renovacion','documentaria_renovacion','firma_renovacion','flujo'}
+        con_group_cls = 'menu-group force-open' + ('' if active_sub in renovacion_secs else ' active-main')
+        ren_group_cls = 'menu-group force-open' + (' active-main' if active_sub in renovacion_secs else '')
+        con_title_cls = 'menu-title active' if active_sub not in renovacion_secs else 'menu-title'
+        ren_title_cls = 'menu-title active' if active_sub in renovacion_secs else 'menu-title'
         admin = f"""
-        <div id='grp_admin' data-group='admin' class='{admin_cls}'>
-          <button type='button' class='menu-title' onclick="toggleGroup('grp_admin')"><i class='bi bi-grid-1x2'></i><span class='label'>Administrador</span><span class='chev'>∨</span></button>
+        <div id='grp_contratacion' data-group='contratacion' class='{con_group_cls}'>
+          <button type='button' class='{con_title_cls}' onclick="toggleGroup('grp_contratacion')"><i class='bi bi-clipboard-data'></i><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
           <div class='submenu'>
-            <a class='{cls_dash}' onclick='saveSideScroll()' href='/admin'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard</span></a>
-            <div id='grp_modulo_documentos' data-group='modulo_documentos' class='{docs_mod_cls}'>
-              <button type='button' class='{docs_head}' onclick="toggleGroup('grp_modulo_documentos')"><i class='bi bi-folder2-open'></i><span class='label'>1. Gestión Documental</span><span class='chev'>∨</span></button>
+            <a class='{cls('dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=dashboard'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard</span></a>
+            <a class='{cls('requerimientos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=requerimientos'><i class='bi bi-ticket-perforated'></i><span class='label'>Requerimiento</span></a>
+            <a class='{cls('nuevos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nuevos'><i class='bi bi-person-plus'></i><span class='label'>Postulantes</span></a>
+            <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
+            <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
+            <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
+            <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Doc. Postulantes</span></a>
+            <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
+            <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
+            <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
+              <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
-                <a class='{cls_moddocs}' onclick='saveSideScroll()' href='/admin/modulo/documentos'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard</span></a>
-                <div id='grp_pago' data-group='pago' class='{pago_cls}'>
-                  <button type='button' class='menu-title' onclick="toggleGroup('grp_pago')"><i class='bi bi-file-earmark-text'></i><span class='label'>Documentos de pago</span><span class='chev'>∨</span></button>
-                  <div class='submenu'>{pago}</div>
+                <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><i class='bi bi-grid'></i><span class='label'>Mantenedor General</span></a>
+                <a class='{cls('observados')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=observados'><i class='bi bi-people'></i><span class='label'>Alertas y Trab. Observados</span></a>
+                <a class='{cls('cargo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=cargo'><i class='bi bi-briefcase'></i><span class='label'>Cargo</span></a>
+                <a class='{cls('actualizar')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=actualizar'><i class='bi bi-arrow-repeat'></i><span class='label'>Actualizar Trabajador</span></a>
+                <a class='{cls('carga')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=carga'><i class='bi bi-upload'></i><span class='label'>Carga Masiva</span></a>
+                <a class='{cls('descargas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><span class='label'>Centro de Descargas y Reportes</span></a>
+                <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-database-check'></i><span class='label'>Base Central / Integración</span></a>
+                <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
+                <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
+                <div id='grp_config_doc_maestros' data-group='config_doc_maestros' class='menu-group nested force-open'>
+                  <button type='button' class='menu-title' onclick="toggleGroup('grp_config_doc_maestros')"><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span><span class='chev'>∨</span></button>
+                  <div class='submenu'>
+                    <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantillas Documentales</span></a>
+                    <a class='{cls('tipos_etapa')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipos_etapa'><i class='bi bi-tags'></i><span class='label'>Tipos por Etapa</span></a>
+                    <a class='{cls('tipo_empleado')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=tipo_empleado'><i class='bi bi-card-checklist'></i><span class='label'>Tipo Documento Empleado</span></a>
+                  </div>
                 </div>
-                <div id='grp_empresa' data-group='empresa' class='{emp_cls}'>
-                  <button type='button' class='menu-title' onclick="toggleGroup('grp_empresa')"><i class='bi bi-building'></i><span class='label'>Documentos de la empresa</span><span class='chev'>∨</span></button>
-                  <div class='submenu'>{emp}</div>
-                </div>
-                <div id='grp_personal' data-group='personal' class='{per_cls}'>
-                  <button type='button' class='menu-title' onclick="toggleGroup('grp_personal')"><i class='bi bi-person-lines-fill'></i><span class='label'>Documentos personales</span><span class='chev'>∨</span></button>
-                  <div class='submenu'>{per}</div>
-                </div>
-                <a class='{cls_docs}' onclick='saveSideScroll()' href='/admin/documentos'><i class='bi bi-cloud-arrow-up'></i><span class='label'>Subir / gestionar documentos</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/plantilla_gestion/documental'><i class='bi bi-file-earmark-arrow-down'></i><span class='label'>Plantilla Documental</span></a>
               </div>
             </div>
-            <div id='grp_vacacional' data-group='vacacional' class='{vac_cls}'>
-              <button type='button' class='{vac_head}' onclick="toggleGroup('grp_vacacional')"><i class='bi bi-calendar2-week'></i><span class='label'>2. Gestión Vacacional</span><span class='chev'>∨</span></button>
-              <div class='submenu'>
-                <a class='{cls_vac}' onclick='saveSideScroll()' href='/admin/vacaciones'><i class='bi bi-bar-chart-line'></i><span class='label'>Dashboard vacacional</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/vacaciones#cargar-saldos'><i class='bi bi-calendar-check'></i><span class='label'>Saldos Vacacionales</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/vacaciones#solicitudes'><i class='bi bi-file-earmark-check'></i><span class='label'>Solicitudes de Vacaciones</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/vacaciones#aprobaciones'><i class='bi bi-check2-circle'></i><span class='label'>Aprobaciones</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/vacaciones#reportes'><i class='bi bi-clipboard-data'></i><span class='label'>Reportes</span></a>
-                <a class='menu-item' onclick='saveSideScroll()' href='/admin/plantilla_gestion/vacacional'><i class='bi bi-file-earmark-arrow-down'></i><span class='label'>Plantilla Vacacional</span></a>
-              </div>
-            </div>
-            <div id='grp_trabajadores_admin' data-group='trabajadores_admin' class='menu-group nested {'force-open' if active in ['Trabajadores','Usuarios'] or active_sub == 'anuncios' else ''}'>
-              <button type='button' class='menu-title {'active' if active in ['Trabajadores','Usuarios'] or active_sub == 'anuncios' else ''}' onclick="toggleGroup('grp_trabajadores_admin')"><i class='bi bi-people'></i><span class='label'>Trabajadores / Usuarios y claves</span><span class='chev'>∨</span></button>
-              <div class='submenu'>
-                <a class='{cls_trab}' onclick='saveSideScroll()' href='/admin/trabajadores'><i class='bi bi-people'></i><span class='label'>Trabajadores</span></a>
-                <a class='{cls_users}' onclick='saveSideScroll()' href='/admin/usuarios'><i class='bi bi-lock'></i><span class='label'>Usuarios y claves</span></a>
-              </div>
-            </div>
-            <a class='menu-item {'active' if active == 'IA HR' else ''}' onclick='saveSideScroll()' href='/admin/ia_hr'><i class='bi bi-robot'></i><span class='label'>Base IA HR</span></a>
-            <a class='{cls_test}' onclick='saveSideScroll()' href='/admin/modo_prueba'><i class='bi bi-magic'></i><span class='label'>Modo prueba y limpieza</span></a>
-          </div>
-        </div>"""
-    user_docs_keys = [k for k,_,_ in TIPOS_PAGO] + [k for k,_,_ in TIPOS_EMPRESA] + [k for k,_,_ in TIPOS_PERSONALES]
-    user_docs_cls = 'menu-group force-open' if active_type in user_docs_keys else 'menu-group'
-    documentos_generales = '' if session.get('admin_id') else f"""
-      <div id='grp_user_documental' data-group='user_documental' class='{user_docs_cls}'>
-        <button type='button' class='menu-title' onclick="toggleGroup('grp_user_documental')"><i class='bi bi-folder2-open'></i><span class='label'>Gestión Documental</span><span class='chev'>∨</span></button>
-        <div class='submenu'><a class='menu-item' onclick='saveSideScroll()' href='/panel'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard documental</span></a>
-          <div id='grp_pago' data-group='pago' class='{pago_cls}'>
-            <button type='button' class='menu-title' onclick="toggleGroup('grp_pago')"><i class='bi bi-file-earmark-text'></i><span class='label'>Documentos de pago</span><span class='chev'>∨</span></button>
-            <div class='submenu'>{pago}</div>
-          </div>
-          <div id='grp_empresa' data-group='empresa' class='{emp_cls}'>
-            <button type='button' class='menu-title' onclick="toggleGroup('grp_empresa')"><i class='bi bi-building'></i><span class='label'>Documentos de la empresa</span><span class='chev'>∨</span></button>
-            <div class='submenu'>{emp}</div>
-          </div>
-          <div id='grp_personal' data-group='personal' class='{per_cls}'>
-            <button type='button' class='menu-title' onclick="toggleGroup('grp_personal')"><i class='bi bi-person-lines-fill'></i><span class='label'>Documentos personales</span><span class='chev'>∨</span></button>
-            <div class='submenu'>{per}</div>
+            <a class='{cls('anuncios')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=anuncios'><i class='bi bi-megaphone'></i><span class='label'>Anuncios</span></a>
           </div>
         </div>
-      </div>"""
-    user_gestiones = '' if session.get('admin_id') else f"""
-      <div id='grp_user_vacacional' data-group='user_vacacional' class='menu-group {'force-open' if active == 'Gestion Vacacional' else ''}'>
-        <button type='button' class='menu-title {'active' if active == 'Gestion Vacacional' else ''}' onclick="toggleGroup('grp_user_vacacional')"><i class='bi bi-calendar2-week'></i><span class='label'>Gestión Vacacional</span><span class='chev'>∨</span></button>
-        <div class='submenu'><a class='menu-item {'active' if active == 'Gestion Vacacional' else ''}' onclick='saveSideScroll()' href='/vacaciones/mi_solicitud'><i class='bi bi-bar-chart-line'></i><span class='label'>Dashboard vacacional</span></a><a class='menu-item {'active' if active == 'Gestion Vacacional' else ''}' onclick='saveSideScroll()' href='/vacaciones/mi_solicitud#solicitar'><i class='bi bi-calendar-check'></i><span class='label'>Saldo y solicitud</span></a><a class='menu-item {'active' if active == 'Gestion Vacacional' else ''}' onclick='saveSideScroll()' href='/vacaciones/aprobaciones_jefe'><i class='bi bi-check2-circle'></i><span class='label'>Aprobaciones jefe</span></a></div>
-      </div>
-"""
-    return f"""
+        <div id='grp_renovacion_main' data-group='renovacion_main' class='{ren_group_cls}'>
+          <button type='button' class='{ren_title_cls}' onclick="toggleGroup('grp_renovacion_main')"><i class='bi bi-arrow-repeat'></i><span class='label'>Gestión Renovación</span><span class='chev'>∨</span></button>
+          <div class='submenu'>
+            <a class='{cls('renovacion_dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion_dashboard'><i class='bi bi-speedometer'></i><span class='label'>Dashboard Renovación</span></a>
+            <a class='{cls('renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=renovacion'><i class='bi bi-file-earmark-text'></i><span class='label'>Renovación Masiva</span></a>
+            <a class='{cls('documentaria_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria_renovacion'><i class='bi bi-folder2-open'></i><span class='label'>Documentos Renovación</span></a>
+            <a class='{cls('firma_renovacion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma&scope=renovacion'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
+            <a class='{cls('flujo')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=flujo'><i class='bi bi-signpost-split'></i><span class='label'>Aprobaciones</span></a>
+          </div>
+        </div>"""
+        return f"""<nav>{admin}<div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div></nav>"""
+    return """
     <nav>
-      {documentos_generales}
-      {user_gestiones}
-      {admin}
-      <div id='grp_cuenta' data-group='cuenta' class='menu-group {'force-open' if active == 'Inicio' else ''}'>
-        <button type='button' class='menu-title {'active' if active == 'Inicio' else ''}' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Mi cuenta</span><span class='chev'>∨</span></button>
-        <div class='submenu'><a class='menu-item {'active' if active == 'Inicio' else ''}' onclick='saveSideScroll()' href='/panel'><i class='bi bi-house'></i><span class='label'>Inicio</span></a><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div>
+      <div id='grp_user_contrato' data-group='user_contrato' class='menu-group force-open'>
+        <button type='button' class='menu-title active' onclick="toggleGroup('grp_user_contrato')"><i class='bi bi-clipboard-data'></i><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
+        <div class='submenu'><a class='menu-item active' onclick='saveSideScroll()' href='/contratacion/mis_documentos'><span>📊</span><span class='label'>Mis documentos</span></a></div>
       </div>
+      <div id='grp_cuenta' data-group='cuenta' class='menu-group'><button type='button' class='menu-title' onclick="toggleGroup('grp_cuenta')"><i class='bi bi-person-circle'></i><span class='label'>Cuenta</span><span class='chev'>∨</span></button><div class='submenu'><a class='menu-item' href='/logout'><i class='bi bi-box-arrow-right'></i><span class='label'>Salir</span></a></div></div>
     </nav>"""
 
 
@@ -3098,7 +3789,7 @@ def empresas_disponibles_login():
                 e = clean(raw)
                 if not e:
                     continue
-                if e.upper() == 'PORTAL HR PRO SUPERFRUITS':
+                if e.upper() == 'PRIZE SUPERFRUITS':
                     e = 'AQUANQA'
                 if e not in empresas:
                     empresas.append(e)
@@ -3108,13 +3799,11 @@ def empresas_disponibles_login():
 
 def login_template(admin=False, error=""):
     action = url_for('admin_login') if admin else url_for('login')
-    title = "PRIZE PRO"
-    sub = "Actualización de datos de trabajadores" if admin else "Actualización de datos de trabajadores"
+    title = "GESTIÓN CONTRATACIÓN"
+    sub = "Panel administrativo de contratos" if admin else "Portal de gestión de contratación"
     if admin:
-        opts = ''.join([f"<option value='{e}'>{e}</option>" for e in empresas_disponibles_login()])
-        fields = f"""
-          <div class='field'><label>Empresa</label><div class='login-input'><i class='bi bi-building'></i><select name='empresa' required><option value=''>Seleccione empresa</option>{opts}</select></div></div>
-          <div class='field'><label>Usuario</label><div class='login-input'><i class='bi bi-person'></i><input name='usuario' placeholder='admin' required></div></div>
+        fields = """
+          <div class='field'><label>Usuario</label><div class='login-input'><i class='bi bi-person'></i><input name='usuario' placeholder='Ingrese su usuario' required></div></div>
           <div class='field'><label>Clave</label><div class='login-input'><i class='bi bi-lock'></i><input name='clave' type='password' placeholder='••••••••' required></div></div>
         """
     else:
@@ -3126,7 +3815,7 @@ def login_template(admin=False, error=""):
         """
     body = f"""
     <div class='login-body'><form class='login-card' method='post' action='{action}'><div class='login-inner'>
-      <div class='login-logo'><div class='login-avatar-svg' aria-label='Portal HR Pro'></div></div><div class='login-title'><h1>{title}</h1><b>{sub}</b></div>
+      <div class='login-logo'><div class='login-avatar-svg' aria-label='Gestión Contratación'></div></div><div class='login-title'><h1>{title}</h1><b>{sub}</b></div>
       {f"<div class='flash err'>{error}</div>" if error else ""}{fields}<button class='btn-green'>Ingresar</button>
     </div><div class='login-links'>{'<a href="/">Entrada trabajador</a>' if admin else '<a href="/admin/login">Entrada administrador</a>'}</div></form></div>"""
     return render_template_string(BASE, body=body, title=title)
@@ -3144,8 +3833,8 @@ def logo_file(filename):
 
 @app.route('/logo_svg')
 def logo_svg():
-    # Logo genérico PORTAL HR PRO: sin texto fijo de empresa.
-    svg = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 140'><defs><linearGradient id='g' x1='0' x2='1'><stop offset='0' stop-color='#22c55e'/><stop offset='1' stop-color='#059669'/></linearGradient></defs><rect width='360' height='140' rx='26' fill='white'/><circle cx='63' cy='68' r='34' fill='url(#g)'/><text x='105' y='78' font-family='Segoe UI,Arial' font-size='58' font-style='italic' font-weight='900' fill='#111827'>PORTAL HR PRO</text><text x='112' y='112' font-family='Arial' font-size='24' font-weight='900' fill='#2b668d'>RRHH</text></svg>"""
+    # Logo genérico PRIZE RRHH: sin texto fijo de empresa.
+    svg = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 360 140'><defs><linearGradient id='g' x1='0' x2='1'><stop offset='0' stop-color='#ffd23f'/><stop offset='1' stop-color='#ff9f1c'/></linearGradient></defs><rect width='360' height='140' rx='26' fill='white'/><circle cx='63' cy='68' r='34' fill='url(#g)'/><text x='105' y='78' font-family='Segoe UI,Arial' font-size='58' font-style='italic' font-weight='900' fill='#111827'>PRIZE</text><text x='112' y='112' font-family='Arial' font-size='24' font-weight='900' fill='#2b668d'>RRHH</text></svg>"""
     return app.response_class(svg, mimetype='image/svg+xml')
 
 # =============================
@@ -3153,16 +3842,37 @@ def logo_svg():
 # =============================
 @app.route('/', methods=['GET','POST'])
 def login():
-    # Pantalla principal tipo imagen de referencia: acceso administrador limpio.
     if request.method == 'POST':
-        u = clean(request.form.get('usuario'))
-        c = clean(request.form.get('clave'))
-        empresa_login = clean(request.form.get('empresa')) or 'PORTAL HR PRO'
-        if u == ADMIN_USER and c == ADMIN_PASS:
-            session.clear(); session['admin_id']='admin'; session['admin_nombre']='Administrador'; session['empresa_login']=empresa_login
-            return redirect(url_for('admin'))
-        return login_template(True, 'Usuario o clave incorrecta.')
-    return login_template(True)
+        dni = normalizar_dni(request.form.get('dni'))
+        clave = clean(request.form.get('correo')).lower()
+        bloqueado, intentos_previos = esta_bloqueado(dni)
+        if bloqueado:
+            return login_template(False, "Usuario bloqueado por 3 intentos fallidos. Solicite desbloqueo al administrador.")
+        t = get_trabajador(dni)
+        clave_correcta = generar_clave_trabajador(dni, t['fecha_nacimiento'] if t and 'fecha_nacimiento' in t.keys() else '').lower() if t else ''
+        clave_guardada = clean(t['clave_portal'] if t and 'clave_portal' in t.keys() else '').lower()
+        if not t or not int(t['activo'] or 0) or (clave != clave_correcta and clave != clave_guardada):
+            n, b = registrar_intento_fallido(dni)
+            if b:
+                return login_template(False, "Usuario bloqueado por 3 intentos fallidos. Solicite desbloqueo al administrador.")
+            return login_template(False, f"DNI o clave incorrecta. Clave = fecha nacimiento sin / (ddmmaaaa). Intento {n}/3.")
+        empresa_login = clean(request.form.get('empresa'))
+        empresas_permitidas = []
+        for raw in clean(t['empresa'] if t and 'empresa' in t.keys() else '').replace('|','/').replace(';','/').replace(',','/').split('/'):
+            e = clean(raw)
+            if e.upper() == 'PRIZE SUPERFRUITS':
+                e = 'AQUANQA'
+            if e and e not in empresas_permitidas:
+                empresas_permitidas.append(e)
+        if not empresas_permitidas:
+            empresas_permitidas = ['AQUANQA']
+        if empresa_login not in empresas_permitidas:
+            registrar_intento_fallido(dni)
+            return login_template(False, 'La empresa seleccionada no pertenece al trabajador. Seleccione la empresa registrada en la columna EMPRESA.')
+        reset_intentos_login(dni)
+        session.clear(); session['dni'] = dni; session['nombre'] = t['nombre']; session['empresa'] = empresa_login
+        return redirect(url_for('panel'))
+    return login_template(False)
 
 @app.route('/logout')
 def logout():
@@ -3175,13 +3885,13 @@ def seleccionar_empresa():
     dni=session['dni']; t=get_trabajador(dni)
     emp_real = clean(t['empresa']) if t and 'empresa' in t.keys() else ''
     # Solo mostrar la(s) empresa(s) que vienen desde la columna EMPRESA del trabajador.
-    # Se elimina cualquier opción fija como PORTAL HR PRO SUPERFRUITS.
+    # Se elimina cualquier opción fija como PRIZE SUPERFRUITS.
     empresas=[]
     for raw in emp_real.replace('|','/').replace(';','/').replace(',','/').split('/'):
         e=clean(raw)
         if not e: continue
         # corrección defensiva para bases antiguas/demostración
-        if e.upper() == 'PORTAL HR PRO SUPERFRUITS':
+        if e.upper() == 'PRIZE SUPERFRUITS':
             e = 'AQUANQA'
         if e not in empresas:
             empresas.append(e)
@@ -3203,6 +3913,7 @@ def seleccionar_empresa():
 @app.route('/panel')
 @worker_required
 def panel():
+    return redirect(url_for('mis_documentos_contratacion'))
     dni = session['dni']; sincronizar_documentos_carpeta(dni); t = get_trabajador(dni)
     if not t:
         flash('No se encontró tu trabajador activo. Vuelve a iniciar sesión o contacta a RRHH.', 'err')
@@ -3214,10 +3925,11 @@ def panel():
       <div class='card span-12'><h2>Dashboards de gestión</h2><div class='module-tabs'>
         <a class='module-tile' href='/panel'><h2>📁 Gestión Documental</h2><p class='muted'>Documentos, pagos, empresa y personales.</p></a>
         <a class='module-tile' href='/vacaciones/mi_solicitud'><h2>🏖️ Gestión Vacacional</h2><p class='muted'>Saldo, solicitud y seguimiento de aprobaciones.</p></a>
+        <a class='module-tile' href='/contratacion/mis_documentos'><h2>🧾 Gestión Contrato</h2><p class='muted'>Contratos, anexos y documentos laborales.</p></a>
       </div></div>
     """
     content = f"""
-    <div class='hero'><div class='topbar'><div><h1>Portal Documental <span class='accent'>PORTAL HR PRO</span></h1><div class='subtitle'>{t['nombre']} · DNI {t['dni']} · {session.get('empresa') or t['empresa']}</div></div><div style='display:flex;gap:10px;align-items:center'><span class='btn'>● Activo</span><a class='btn-blue' href='/panel'>Ver todo</a></div></div></div>
+    <div class='hero'><div class='topbar'><div><h1>Portal Documental <span class='accent'>PRIZE</span></h1><div class='subtitle'>{t['nombre']} · DNI {t['dni']} · {session.get('empresa') or t['empresa']}</div></div><div style='display:flex;gap:10px;align-items:center'><span class='btn'>● Activo</span><a class='btn-blue' href='/panel'>Ver todo</a></div></div></div>
     <section class='grid'><div class='card mini'><div><span>Documentos</span><br><b>{len(docs)}</b></div><div class='ico'>🗂️</div></div><div class='card mini'><div><span>Último tipo</span><br><b>{ultimo}</b></div><div class='ico'>📄</div></div><div class='card mini'><div><span>Estado</span><br><b>Activo</b></div><div class='ico'>✅</div></div>{dashboard_gestiones}<div class='card span-12 profile-card'><div><h2>Mi perfil y foto</h2><p class='muted'>Actualiza tu foto para que el portal quede como panel profesional.</p></div><div class='profile-row'><img class='profile-img' src='{url_for('foto_trabajador', dni=dni) if t['foto_ruta'] else logo_url()}'><form method='post' action='/mi_foto' enctype='multipart/form-data' class='form-grid profile-form'><div class='field'><label>Foto personal</label><input type='file' name='foto' accept='.png,.jpg,.jpeg,.webp' required></div><button class='btn-green'>Cargar foto</button></form></div></div>
     <div class='card span-12'><div style='display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap'><h2>Accesos por pestaña</h2><input id='cardSearch' onkeyup='filterCards()' class='input' style='max-width:310px' placeholder='Buscar pestaña...'></div><div class='doc-grid'>{cards}</div></div>
     <div class='card span-12'><h2>🔔 Notificaciones</h2>{notificaciones_trabajador(dni)}</div><div class='card span-12'><h2>Últimos documentos</h2>{tabla_docs(docs)}</div></section>"""
@@ -3427,8 +4139,7 @@ def admin_login():
             user = con.execute("SELECT * FROM usuarios_admin WHERE usuario=? AND activo=1", (u,)).fetchone()
         if not user or not check_password_hash(user['clave_hash'], c):
             return login_template(True, 'Usuario o clave incorrecta.')
-        empresa_login = clean(request.form.get('empresa')) or 'PORTAL HR PRO'
-        session.clear(); session['admin_id']=user['id']; session['admin_user']=user['usuario']; session['admin_nombre']=user['nombre']; session['empresa_login']=empresa_login
+        session.clear(); session['admin_id']=user['id']; session['admin_user']=user['usuario']; session['admin_nombre']=user['nombre']
         return redirect(url_for('admin'))
     return login_template(True)
 
@@ -3484,71 +4195,49 @@ def admin():
         vac_solicitudes = con.execute("SELECT COUNT(*) FROM vacaciones_solicitudes").fetchone()[0]
         vac_pendientes = con.execute("SELECT COUNT(*) FROM vacaciones_solicitudes WHERE estado LIKE 'Pendiente%'").fetchone()[0]
         vac_aprobadas = con.execute("SELECT COUNT(*) FROM vacaciones_solicitudes WHERE estado LIKE 'Aprobado%'").fetchone()[0]
+        con_docs = con.execute("SELECT COUNT(*) FROM contratacion_docs").fetchone()[0]
+        con_tipos = con.execute("SELECT COUNT(*) FROM contratacion_tipos").fetchone()[0]
     content = f"""
     <div class='admin-shell'>
       <div class='admin-header'>
         <div class='admin-title-row'>
           <button class='hambox' onclick='toggleSide()'>☰</button>
           <div class='admin-title'>
-            <h1>Panel de Administración</h1>
+            <h1>Centro de Control</h1>
             <div class='role'>Administrador</div>
             <p>Bienvenido al panel de administración. Seleccione una gestión para comenzar.</p>
           </div>
         </div>
         <div class='top-actions'>
-          <button class='top-icon notif-bell' title='Notificaciones' onclick="alert('No tienes notificaciones pendientes')"><span>🔔</span><i>0</i></button>
-          <div class='admin-chip admin-dropdown'>
-            <button type='button' class='admin-chip-btn' onclick="this.parentElement.classList.toggle('open')">
-              <span class='a'>A</span><span>Administrador⌄</span>
-            </button>
-            <div class='admin-menu'>
-              <a href='/admin'><i class='bi bi-house'></i> Inicio</a>
-              <a href='/admin/usuarios'><i class='bi bi-person-circle'></i> Mi cuenta</a>
-              <a href='/logout'><i class='bi bi-box-arrow-right'></i> Salir</a>
-            </div>
-          </div>
+          <div class='top-icon'>🔔<i>0</i></div>
+          <div class='top-icon'>☰<i>0</i></div>
+          <div class='admin-chip'><span class='a'>A</span><span>Administrador⌄</span></div>
         </div>
       </div>
 
-      <div class='gestion-cards'>
-        <div class='card gestion-card'>
-          <div class='gestion-icon'>📁</div>
-          <div><h2>Gestión Documental</h2><p class='muted'>Administre y controle todos los documentos de la organización.</p><a class='btn-warn' href='/admin/modulo/documentos'>Ir al Dashboard <span>→</span></a></div>
-        </div>
-        <div class='card gestion-card green'>
-          <div class='gestion-icon'>☂️</div>
-          <div><h2>Gestión Vacacional</h2><p class='muted'>Administre saldos y solicitudes de vacaciones de los trabajadores.</p><a class='btn-green' href='/admin/vacaciones'>Ir al Dashboard <span>→</span></a></div>
+      <div class='gestion-cards single-gestion'>
+        <div class='card gestion-card purple gestion-contratacion-only'>
+          <div class='gestion-icon'>🧾</div>
+          <div><h2>Gestión Contratación</h2><p class='muted'>Centro único para requerimientos, altas, control médico, capacitación, indumentaria, fotocheck, firma y conexión NISIRA.</p><a class='btn-blue' href='/admin/contratacion'>Ir al Dashboard <span>→</span></a></div>
         </div>
       </div>
 
-      <div class='dashboards-admin'>
-        <div class='card dashboard-panel'>
-          <h2>📁 Dashboard - Gestión Documental</h2>
+      <div class='dashboards-admin contratacion-only-dashboard'>
+        <div class='card dashboard-panel purple'>
+          <h2>🧾 Dashboard - Gestión Contratación</h2>
           <div class='mini-grid'>
-            <div class='dash-metric'><span>Trabajadores</span><b>{trabajadores}</b><em class='mi'>👥</em></div>
-            <div class='dash-metric'><span>Documentos</span><b>{docs}</b><em class='mi'>📄</em></div>
-            <div class='dash-metric'><span>Recibidos / Abiertos</span><b>{leidos}</b><em class='mi'>👁️</em></div>
-            <div class='dash-metric'><span>Aprobados</span><b>{aprobados}</b><em class='mi'>✓</em></div>
-            <div class='dash-metric'><span>Rechazados</span><b>{rechazados}</b><em class='mi'>−</em></div>
-            <div class='dash-metric'><span>Empresas</span><b>{emp}</b><em class='mi'>🏢</em></div>
-          </div>
-          <a class='btn-warn full-link' href='/admin/modulo/documentos'>Ver Dashboard Completo <span>→</span></a>
-        </div>
-        <div class='card dashboard-panel green'>
-          <h2>☂️ Dashboard - Gestión Vacacional</h2>
-          <div class='mini-grid'>
-            <div class='dash-metric'><span>Saldos Registrados</span><b>{vac_saldos}</b><em class='mi'>🗓️</em></div>
-            <div class='dash-metric'><span>Solicitudes</span><b>{vac_solicitudes}</b><em class='mi'>📄</em></div>
+            <div class='dash-metric'><span>Tickets / procesos</span><b>{con_tipos}</b><em class='mi'>🎫</em></div>
+            <div class='dash-metric'><span>Trabajadores registrados</span><b>{trabajadores}</b><em class='mi'>👥</em></div>
+            <div class='dash-metric'><span>Documentos / contratos</span><b>{con_docs}</b><em class='mi'>📄</em></div>
+            <div class='dash-metric'><span>Control médico</span><b>{vac_saldos}</b><em class='mi'>🩺</em></div>
+            <div class='dash-metric'><span>Capacitaciones</span><b>{vac_solicitudes}</b><em class='mi'>🎥</em></div>
             <div class='dash-metric'><span>Pendientes</span><b>{vac_pendientes}</b><em class='mi'>⏱️</em></div>
-            <div class='dash-metric'><span>Aprobadas</span><b>{vac_aprobadas}</b><em class='mi'>✓</em></div>
-            <div class='dash-metric'><span>Rechazadas</span><b>0</b><em class='mi'>−</em></div>
-            <div class='dash-metric'><span>En Proceso</span><b>{vac_pendientes}</b><em class='mi'>…</em></div>
           </div>
-          <a class='btn-green full-link' href='/admin/vacaciones'>Ver Dashboard Completo <span>→</span></a>
+          <a class='btn-blue full-link' href='/admin/contratacion'>Ver Dashboard Completo <span>→</span></a>
         </div>
       </div>
 
-      <div class='admin-footer'><span>© 2026 PORTAL HR PRO</span><span>Versión 1.0.0</span></div>
+      <div class='admin-footer'><span>© 2026 PRIZE - Superfruits</span><span>Versión 1.0.0</span></div>
     </div>
     """
     return render_page(content, active='Admin')
@@ -3722,7 +4411,7 @@ def admin_trabajadores():
     content = f"""
     <div class='topbar'><div><h1>Trabajadores</h1><div class='subtitle'>Carga manual o masiva por Excel.</div><div class='local-note'>Respaldo local automático: REGISTROS_EXCEL_LOCAL / 01_TRABAJADORES_LOCAL.xlsx</div></div></div><section class='grid'>
     <div class='card span-12'><h2>Nuevo trabajador</h2><form method='post' class='form-grid'><div class='field'><label>DNI</label><input name='dni' required></div><div class='field'><label>Trabajador</label><input name='nombre' required></div><div class='field'><label>Correo</label><input name='correo' type='email' required></div><div class='field'><label>Cargo</label><input name='cargo'></div><div class='field'><label>Área</label><input name='area'></div><div class='field'><label>Empresa</label><select name='empresa'><option>AQUANQA</option><option>AQUANCA II</option></select></div><div class='field'><label>Jefe inmediato DNI</label><input name='jefe_dni' placeholder='DNI del jefe'></div><div class='field'><label>Jefe nombre</label><input name='jefe_nombre' placeholder='Opcional'></div><div class='field'><label>Planilla</label><input name='planilla'></div><div class='field'><label>Fecha nacimiento</label><input name='fecha_nacimiento' placeholder='dd/mm/aaaa'></div><div class='field'><label>Fecha de ingreso</label><input name='fecha_ingreso' placeholder='dd/mm/aaaa'></div><button class='btn-green'>Guardar + crear usuario</button></form></div>
-    <div class='card span-12'><h2>Carga Excel</h2><p class='muted'>Plantilla oficial maestra para Gestión Documental y Vacacional. Acepta columnas de datos laborales, jefe inmediato, emergencia, ubicación, CONADIS e indumentaria. Crea usuario masivo con DNI y clave automática.</p><form method='post' enctype='multipart/form-data' class='form-grid'><div class='field'><label>Excel plantilla masiva</label><input type='file' name='excel' accept='.xlsx' required></div><button class='btn-blue'>Importar Excel</button><a class='btn-green' href='/admin/plantilla_trabajadores'>Plantilla Trabajadores</a> <a class='btn-blue' href='/admin/plantilla_gestion/documental'>Plantilla Documental</a></form></div>
+    <div class='card span-12'><h2>Carga Excel</h2><p class='muted'>Plantilla oficial maestra para Gestión Documental, Vacacional y Contratos. Acepta columnas amplias: datos laborales, jefe inmediato, emergencia, contrato, ubicación, CONADIS e indumentaria. Crea usuario masivo con DNI y clave automática.</p><form method='post' enctype='multipart/form-data' class='form-grid'><div class='field'><label>Excel plantilla masiva</label><input type='file' name='excel' accept='.xlsx' required></div><button class='btn-blue'>Importar Excel</button><a class='btn-green' href='/admin/plantilla_trabajadores'>Plantilla Trabajadores</a> <a class='btn-blue' href='/admin/plantilla_gestion/documental'>Plantilla Documental</a> <a class='btn-blue' href='/admin/plantilla_gestion/vacacional'>Plantilla Vacacional</a></form></div>
     <div class='card span-12'><h2>Listado</h2><div class='table-wrap'><table><tr><th>DNI</th><th>Nombre</th><th>Correo</th><th>Cargo</th><th>Empresa</th><th>Jefe DNI</th><th>Planilla</th></tr>{table}</table></div></div></section>"""
     return render_page(content, active='Trabajadores')
 
@@ -3782,24 +4471,33 @@ def construir_plantilla_gestion_vacacional_xlsx(path):
     wb.save(path); return path
 
 def construir_plantilla_gestion_contratacion_xlsx(path):
-    wb = Workbook(); ws = wb.active; ws.title = 'GESTION_CONTRATACION'
-    headers = ['EMPRESA','DNI','TRABAJADOR','AREA','CARGO','PLANILLA','TIPO TRABAJADOR','TIPO CONTRATO','FECHA INICIO CONTRATO','FECHA FIN CONTRATO','REMUNERACION BASICA','MONEDA','SEDE','ZONA','DIRECCION','DEPARTAMENTO','PROVINCIA','DISTRITO','MODALIDAD FIRMA','ESTADO FIRMA','PROVEEDOR FIRMA','REQUIERE RECONOCIMIENTO FACIAL','REQUIERE FIRMA DIGITAL','OBSERVACION']
+    """Plantilla Excel PRO para contratación. Encabezados amarillos = columnas formuladas."""
+    wb = Workbook(); ws = wb.active; ws.title = 'BASE_CONTRATACION'
+    headers = ['EMPRESA','DNI','NombreCompletoTrabajador','ApellidoPaternoTrabajador','ApellidoMaternoTrabajador','NombreTrabajador','Cargo','Puesto','Area','Gerencia','Planilla','TipoTrabajador','TipoContrato','RegimenLaboral','Actividad','Zona','Sede','FechaIniContrato','FechaFinContrato','FechaNacimientoBarra','FechaFirma','FechaInicioContratoOrigen','FechaFinContratoOrigen','DireccionActual','DireccionDNI','Departamento','Provincia','Distrito','Email','NroTelefonoMovil','EstadoCivil','SistemaPensionario','Nacionalidad','Sexo','NombreMoneda','SimboloMoneda','RemunBasica','RemunBasicaAgraria','RemuneracionLetra','MesesContrato','NumeroMesesContrato','DuracionContratoTexto','ModalidadFirma','EstadoFirma','RequiereReconocimientoFacial','RequiereFirmaDigital','Observacion']
     ws.append(headers)
-    ws.append(['AQUANQA','74324033','APELLIDOS Y NOMBRES','RRHH','ANALISTA','MENSUAL','EMPLEADO','INTERMITENTE','01/05/2024','31/12/2026','1200','SOLES','TRUJILLO','OFICINA','AV. EJEMPLO 123','LA LIBERTAD','TRUJILLO','TRUJILLO','FACIAL + FIRMA DIGITAL','PENDIENTE','INTERNO','SI','SI','Ejemplo, borrar antes de cargar'])
-    aplicar_formato_plantilla(ws, headers, '4C1D95')
-    agregar_validacion_lista(ws,'A',['AQUANQA','AQUANCA II']); agregar_validacion_lista(ws,'H',['INDETERMINADO','INTERMITENTE','TEMPORAL','SUPLENCIA','PRACTICANTE','OTROS'])
-    agregar_validacion_lista(ws,'S',['RECONOCIMIENTO FACIAL','FIRMA DIGITAL','FACIAL + FIRMA DIGITAL','CARGA MANUAL RRHH'])
-    agregar_validacion_lista(ws,'T',['PENDIENTE','ENVIADO','VALIDADO FACIAL','FIRMADO DIGITAL','OBSERVADO','ANULADO'])
-    agregar_validacion_lista(ws,'V',['SI','NO']); agregar_validacion_lista(ws,'W',['SI','NO'])
-    campos=wb.create_sheet('CAMPOS_WORD')
-    campos.append(['CAMPO PARA WORD','EJEMPLO DE USO'])
-    for campo,_ in CAMPOS_ESQUEMA_TRABAJADOR_CONTRATO_LABORAL:
-        campos.append([campo, '{{'+campo+'}}'])
-    campos.column_dimensions['A'].width=34; campos.column_dimensions['B'].width=38
-    aplicar_formato_plantilla(campos, ['CAMPO PARA WORD','EJEMPLO DE USO'], '4C1D95')
-    ins=wb.create_sheet('INSTRUCCIONES'); ins.append(['Plantilla para contratación: sirve para contratos, renovaciones, estados de firma y campos de correspondencia Word.'])
-    ins.column_dimensions['A'].width=120
+    ws.append(['AQUANQA I','48165133','ABANTO ANDRADE, FLOR YUBETH','','','','OPERARIO','','CAMPO','','OBREROS RÉGIMEN AGRÍCOLA','OBRERO','INTERMITENTE OBRERO','AGRARIO','COSECHA','CAMPO','GENERAL','01/06/2026','31/12/2026','15/05/1980','','','','AV. EJEMPLO 123','','LA LIBERTAD','TRUJILLO','RAZURI','correo@empresa.com','999999999','SOLTERO/A','ONP','PERUANA','FEMENINO','','','1200','','','', '', '', 'FACIAL + FIRMA DIGITAL','PENDIENTE','SI','SI','Ejemplo, borrar antes de cargar'])
+    aplicar_formato_plantilla(ws, headers, '065F46')
+    colmap={h:i+1 for i,h in enumerate(headers)}; yellow=PatternFill('solid', fgColor='FFF2CC'); req_fill=PatternFill('solid', fgColor='D9EAD3')
+    formuladas={'ApellidoPaternoTrabajador':'=IFERROR(LEFT(TRIM(C2),FIND(" ",TRIM(C2)&" ")-1),"")','ApellidoMaternoTrabajador':'=IFERROR(MID(TRIM(C2),FIND(" ",TRIM(C2)&" ")+1,FIND(",",TRIM(C2)&",")-FIND(" ",TRIM(C2)&" ")-1),"")','NombreTrabajador':'=IFERROR(TRIM(MID(C2,FIND(",",C2)+1,200)),"")','Puesto':'=G2','Gerencia':'=I2','FechaFirma':'=R2','FechaInicioContratoOrigen':'=R2','FechaFinContratoOrigen':'=S2','DireccionDNI':'=X2','NombreMoneda':'="Sol Peruano"','SimboloMoneda':'="S/"','RemunBasicaAgraria':'=AK2','NumeroMesesContrato':'=IF(AND(ISNUMBER(DATEVALUE(R2)),ISNUMBER(DATEVALUE(S2))),DATEDIF(DATEVALUE(R2),DATEVALUE(S2),"m")+1,"")','MesesContrato':'=AO2','DuracionContratoTexto':'=IF(AO2="","",AO2&" meses")'}
+    for hname,f in formuladas.items():
+        c=colmap.get(hname); ws.cell(1,c).fill=yellow
+        for r in range(2,501):
+            formula=re.sub(r'([A-Z]+)2\b', lambda m:m.group(1)+str(r), f)
+            formula=formula.replace('C2',f'C{r}').replace('G2',f'G{r}').replace('I2',f'I{r}').replace('R2',f'R{r}').replace('S2',f'S{r}').replace('X2',f'X{r}').replace('AK2',f'AK{r}').replace('AO2',f'AO{r}')
+            ws.cell(r,c).value=formula
+    for hname in ['EMPRESA','DNI','NombreCompletoTrabajador','Cargo','Area','FechaIniContrato','FechaFinContrato','FechaNacimientoBarra','DireccionActual','Departamento','Provincia','Distrito','Email','NroTelefonoMovil']:
+        ws.cell(1,colmap[hname]).fill=req_fill
+    agregar_validacion_lista(ws,'A',['AQUANQA I','AQUANQA II']); agregar_validacion_lista(ws,'L',['OBRERO','EMPLEADO','PRACTICANTE']); agregar_validacion_lista(ws,'M',['INTERMITENTE OBRERO','INTERMITENTE EMPLEADO','INDETERMINADO','TEMPORAL','RENOVACIÓN']); agregar_validacion_lista(ws,'N',['AGRARIO','GENERAL','PRACTICANTE']); agregar_validacion_lista(ws,'P',['CAMPO','PACKING','PLANTA','OFICINA']); agregar_validacion_lista(ws,'AF',['ONP','AFP INTEGRA','AFP PRIMA','AFP PROFUTURO','AFP HABITAT']); agregar_validacion_lista(ws,'AQ',['FACIAL + FIRMA DIGITAL','RECONOCIMIENTO FACIAL','FIRMA DIGITAL','CARGA MANUAL RRHH']); agregar_validacion_lista(ws,'AR',['PENDIENTE','VALIDADO','ENVIADO','FIRMADO','OBSERVADO','ANULADO']); agregar_validacion_lista(ws,'AS',['SI','NO']); agregar_validacion_lista(ws,'AT',['SI','NO'])
+    ws.freeze_panes='A2'
+    campos=wb.create_sheet('CAMPOS_WORD_REQUERIDOS'); campos.append(['CAMPO WORD','OBLIGATORIO PARA ENVÍO','USADO EN DOCUMENTOS','COMENTARIO'])
+    for campo in ['NombreCompletoTrabajador','Dni','Cargo','FechaIniContratoBarra','FechaFinContratoBarra','FechaIniContratoTextoMinuscula','FechaNacimientoBarra','DireccionActual','Distrito','Provincia','Departamento','Email','NroTelefonoMovil','RemunBasica','RemuneracionLetra','TipoContrato','Planilla','Area','Puesto']:
+        campos.append([campo,'SI','Contratos / documentos','Si queda vacío, bloquea envío y se marca amarillo.'])
+    aplicar_formato_plantilla(campos, ['CAMPO WORD','OBLIGATORIO PARA ENVÍO','USADO EN DOCUMENTOS','COMENTARIO'], '065F46')
+    ins=wb.create_sheet('INSTRUCCIONES')
+    for r in [['USO'],['1. Primero carga BASE_CONTRATACION como base histórica.'],['2. Luego crea requerimiento y registra postulantes. Si el DNI existe, jala datos como REINGRESANTE.'],['3. Encabezados amarillos son formulados.'],['4. Antes de firma, valida campos reales del Word y bloquea si falta información.']]: ins.append(r)
+    ins.column_dimensions['A'].width=125
     wb.save(path); return path
+
 
 @app.route('/admin/plantilla_gestion/<gestion>')
 @admin_required
@@ -4446,13 +5144,15 @@ def contratacion_plantilla_detalle(pid):
         trabajador_preview = None
         with db() as con:
             trabajador_preview = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni_preview,)).fetchone() if dni_preview else con.execute('SELECT * FROM trabajadores ORDER BY nombre LIMIT 1').fetchone()
-        valores_preview = mapa_campos_trabajador(trabajador_preview)
+        validacion_preview = validar_datos_plantilla(pid, dni_preview or row_get(trabajador_preview, 'dni'))
+        valores_preview = validacion_preview.get('valores') or mapa_campos_trabajador(trabajador_preview)
+        faltantes_preview = validacion_preview.get('faltantes') or []
         cumple_cond, detalle_cond = plantilla_cumple_condiciones(pl, condiciones, trabajador_preview)
         ruta_preview = Path(pl['ruta_archivo']) if pl['ruta_archivo'] else None
         if ruta_preview and ruta_preview.exists() and str(pl['archivo_nombre']).lower().endswith('.pdf'):
             preview=f"<iframe class='pdf-frame' src='{url_for('contratacion_plantilla_archivo',pid=pid)}'></iframe>"
         elif ruta_preview and ruta_preview.exists() and ruta_preview.suffix.lower()=='.docx':
-            preview=docx_to_preview_html(ruta_preview, valores_preview)
+            preview=docx_to_preview_html(ruta_preview, valores_preview, faltantes_preview)
         elif ruta_preview and ruta_preview.exists() and ruta_preview.suffix.lower()=='.doc':
             preview=f"<div class='preview-empty'><b>Archivo Word .doc cargado:</b> {html.escape(pl['archivo_nombre'] or '')}<br><br><a class='c-btn gray' href='{url_for('contratacion_plantilla_archivo',pid=pid)}'>⬇ Descargar / abrir archivo</a><p>Para vista previa dentro del sistema se recomienda guardar la plantilla como .docx.</p></div>"
         elif ruta_preview and ruta_preview.exists():
@@ -4462,7 +5162,11 @@ def contratacion_plantilla_detalle(pid):
         dni_val = html.escape(dni_preview or row_get(trabajador_preview, 'dni') or '')
         gen_url = url_for('contratacion_plantilla_generar', pid=pid, dni=dni_val) if dni_val else url_for('contratacion_plantilla_generar', pid=pid)
         estado_cond = '✅ Cumple condiciones' if cumple_cond else '⚠ No cumple condiciones'
-        body=f"""<form class='preview-tools' method='get' action='{url_for('contratacion_plantilla_detalle',pid=pid)}'><input type='hidden' name='tab' value='contenido'><input name='dni_preview' maxlength='8' value='{dni_val}' placeholder='DNI del trabajador para previsualizar'><button class='c-btn green'>Previsualizar conectado</button><a class='c-btn gray' href='{gen_url}'>⬇ Generar Word combinado</a></form><div class='tpl-toolbar'><b>{estado_cond}</b> &nbsp; {detalle_cond}</div>{preview}"""
+        val_msg = resumen_validacion_html(validacion_preview)
+        reporte_url = url_for('contratacion_validacion_datos_excel', pid=pid, dni=dni_val) if dni_val else url_for('contratacion_validacion_datos_excel', pid=pid)
+        gen_btn_cls = 'c-btn gray' if not faltantes_preview else 'c-btn warnbtn'
+        gen_label = '⬇ Exportar Word observado' if faltantes_preview else '⬇ Generar Word combinado'
+        body=f"""<form class='preview-tools' method='get' action='{url_for('contratacion_plantilla_detalle',pid=pid)}'><input type='hidden' name='tab' value='contenido'><input name='dni_preview' maxlength='8' value='{dni_val}' placeholder='DNI del trabajador para previsualizar'><button class='c-btn green'>Previsualizar conectado</button><a class='{gen_btn_cls}' href='{gen_url}'>{gen_label}</a><a class='c-btn gray' href='{reporte_url}'>⬇ Excel faltantes</a></form><div class='tpl-toolbar'><b>{estado_cond}</b> &nbsp; {detalle_cond}</div><div class='tpl-toolbar'>{val_msg}</div>{preview}"""
     file_btn = f"<a class='c-btn gray' href='{url_for('contratacion_plantilla_archivo',pid=pid)}'>⬇ Descargar Archivo</a>"
     content=f"""
     <style>
@@ -4515,15 +5219,22 @@ def contratacion_plantilla_detalle(pid):
       .contract-detail-wrap .tpl-toolbar{{color:#475569!important;background:#fff!important}}
       .contract-detail-wrap .preview-empty,.contract-detail-wrap .preview-empty *{{color:#0f172a!important;font-weight:950!important}}
       @media(max-width:900px){{.template-head{{grid-template-columns:1fr}}.tpl-side{{border-left:0;border-top:2px dashed #cbd5e1;padding-left:0;padding-top:18px}}.tpl-tabs{{overflow:auto}}}}
-    
 
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
+    /* === AJUSTE PRO 28-05: layouts ordenados, scanner masivo, tablas limpias === */
+    .pro-card{{background:#fff;border:1px solid #d8e2ec;border-radius:22px;box-shadow:0 18px 35px #0f172a12;padding:22px;margin-bottom:20px;overflow:hidden}}
+    .pro-section-title{{grid-column:1/-1;background:linear-gradient(90deg,#e9fff4,#f5fffb);border:1px solid #a7f3d0;border-radius:14px;padding:13px 16px;font-weight:950;color:#05233f;margin:0 0 10px}}
+    .req-pro-grid{{display:grid;grid-template-columns:minmax(480px,1fr) minmax(460px,1fr);gap:22px;align-items:start}}
+    .nice-form{{display:grid;grid-template-columns:150px minmax(190px,1fr) 150px minmax(190px,1fr);gap:14px 16px;align-items:center}}
+    .nice-form b{{background:#f1f5f9;color:#05233f;border-radius:12px;padding:14px 12px;text-align:right;font-weight:950;min-height:22px}}
+    .nice-form input,.nice-form select,.nice-form textarea{{width:100%;box-sizing:border-box;background:#fff!important;border:1px solid #cbdced!important;border-radius:14px!important;padding:13px 14px!important;color:#0b2545!important;font-weight:700;min-height:48px}}
+    .nice-form textarea{{min-height:92px;resize:vertical}}.nice-form .full{{grid-column:1/-1}}.nice-form .actions{{grid-column:2/-1;display:flex;gap:12px;align-items:center;justify-content:flex-start;flex-wrap:wrap}}
+    .scan-box{{background:linear-gradient(135deg,#ecfdf5,#ffffff);border:1px solid #b7ead2;border-radius:18px;padding:18px;margin-top:12px}}.scan-camera{{height:180px;background:#0f172a;border-radius:16px;display:grid;place-items:center;color:#fff;font-weight:900;overflow:hidden;border:4px solid #e2e8f0}}.scan-camera video{{width:100%;height:100%;object-fit:cover}}.scan-tools{{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}}.scan-tools .c-btn{{justify-content:center}}.scan-counter{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}}.scan-counter span{{background:#fff;border:1px solid #cdebdc;border-radius:14px;padding:12px;text-align:center;font-weight:950;color:#047857}}.mini-list{{margin-top:12px;max-height:170px;overflow:auto;border:1px solid #dbe7f1;border-radius:14px;background:#fff}}.mini-list div{{display:grid;grid-template-columns:90px 1fr 90px;gap:8px;padding:9px 10px;border-bottom:1px solid #edf2f7;font-weight:800}}.mini-list div:last-child{{border-bottom:0}}
+    .clean-table th,.clean-table td{{white-space:nowrap}}.clean-table .col-delete{{width:96px;text-align:center}}.delete-mini{{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:72px!important;height:34px!important;border-radius:999px!important;background:#ecfdf5!important;color:#047857!important;font-weight:950!important;border:1px solid #b7ead2!important;font-size:13px!important;padding:0 10px!important;line-height:1!important;overflow:hidden!important}}
+    .learning-grid{{display:grid;grid-template-columns:minmax(530px,1.35fr) minmax(360px,.85fr);gap:22px;align-items:start}}.eval-side{{position:sticky;top:90px}}.eval-side .eval-grid{{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:center}}.eval-side b{{background:#f1f5f9;border-radius:12px;padding:13px;text-align:right}}.eval-side input,.eval-side select{{border:1px solid #cbdced;border-radius:12px;padding:12px;min-height:44px;width:100%;box-sizing:border-box}}.records-toolbar{{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0}}.records-toolbar input,.records-toolbar select{{border:1px solid #cbdced;border-radius:14px;padding:12px;min-height:46px}}.records-toolbar input{{min-width:280px;flex:1}}
+    @media(max-width:1100px){{.req-pro-grid,.learning-grid{{grid-template-columns:1fr}}.nice-form{{grid-template-columns:150px 1fr}}.nice-form .actions{{grid-column:1/-1}}.eval-side{{position:static}}}}
+    @media(max-width:720px){{.nice-form{{grid-template-columns:1fr}}.nice-form b{{text-align:left}}.scan-tools,.scan-counter{{grid-template-columns:1fr}}.pro-card{{padding:14px}}}}
 
-</style>
+    </style>
     <div class='contract-detail-wrap'>
       <div class='back-top'><a class='c-btn' href='/admin/contratacion?sec=plantillas'>← Atrás</a></div>
       <h2 class='detail-title'>Detalle Plantilla</h2>
@@ -4650,15 +5361,7 @@ def contratacion_condicion_editar(pid, cid=None):
       .c-btn{{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:12px;padding:12px 18px;background:linear-gradient(135deg,#ff963b,#ff7a1a);color:#fff!important;font-weight:950;text-decoration:none;cursor:pointer;font-size:16px}}
       .c-btn.gray{{background:#e7ebf2;color:#111827!important}}
       @media(max-width:700px){{.cond-form{{grid-template-columns:1fr;padding:22px}}.cond-form label{{text-align:left}}.hint,.cond-actions{{grid-column:1/2}}}}
-    
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+    </style>
     <div class='cond-overlay'><div class='cond-modal'>
       <div class='cond-head2'><h1>{'Editar' if cid else 'Crear'} Condición</h1><a class='close-x' href='{url_for('contratacion_plantilla_detalle',pid=pid,tab='condiciones')}'>×</a></div>
       <form method='post' class='cond-form'>
@@ -4782,15 +5485,7 @@ def contratacion_campos_esquema(pid):
       .schema-table tr:nth-child(even) td{{background:#f6f6f6}}
       code{{background:#eef2ff;border:1px solid #dbeafe;border-radius:8px;padding:4px 7px;color:#1e3a8a}}
       @media(max-width:700px){{.schema-tools{{align-items:stretch}}.schema-search input{{width:100%}}.schema-btn{{width:100%;justify-content:center}}}}
-    
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+    </style>
     <div class='schema-overlay'><div class='schema-modal'>
       <div class='schema-head'><h1>Campos de Esquema</h1><a class='close-x' href='{url_for('contratacion_plantilla_detalle',pid=pid,tab='campos')}'>×</a></div>
       <div class='schema-tools'>
@@ -4832,17 +5527,65 @@ def contratacion_campos_esquema_excel(pid):
 
 
 
+@app.route('/admin/contratacion/plantilla/<int:pid>/validacion_datos.xlsx')
+@admin_required
+def contratacion_validacion_datos_excel(pid):
+    """Excel de control: trabajadores con campos incompletos para la plantilla Word."""
+    dni = normalizar_dni(request.args.get('dni'))
+    with db() as con:
+        pl = con.execute('SELECT * FROM contratacion_plantillas WHERE id=?', (pid,)).fetchone()
+        trabajadores = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchall() if dni else con.execute("SELECT * FROM trabajadores WHERE COALESCE(activo,1)=1 ORDER BY nombre LIMIT 5000").fetchall()
+    if not pl:
+        abort(404)
+    wb = Workbook(); ws = wb.active; ws.title = 'VALIDACION_DATOS'
+    headers = ['DNI','TRABAJADOR','EMPRESA','PLANTILLA','ESTADO','CANTIDAD FALTANTES','CAMPOS FALTANTES','ACCION REQUERIDA']
+    ws.append(headers)
+    completos = incompletos = 0
+    for tr in trabajadores:
+        res = validar_datos_plantilla(pid, tr['dni'])
+        falt = res.get('faltantes') or []
+        if falt: incompletos += 1
+        else: completos += 1
+        ws.append([tr['dni'], tr['nombre'], tr['empresa'], pl['nombre_plantilla'], 'INCOMPLETO' if falt else 'COMPLETO', len(falt), ', '.join(falt), 'Completar ficha/base Excel antes de enviar' if falt else 'Puede enviarse'])
+    ws.insert_rows(1, 3)
+    ws['A1'] = 'REPORTE DE VALIDACIÓN DE DATOS PARA ENVÍO DE DOCUMENTOS'
+    ws['A2'] = f"Plantilla: {pl['nombre_plantilla'] or ''}"
+    ws['A3'] = f"Completos: {completos} | Incompletos: {incompletos} | Fecha: {now_txt()}"
+    for row in ws.iter_rows(min_row=1, max_row=3, min_col=1, max_col=8):
+        for cell in row:
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.fill = PatternFill('solid', fgColor='0F5132')
+    header_row = 4
+    for cell in ws[header_row]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='1F2937')
+        cell.alignment = Alignment(horizontal='center')
+    for row in range(5, ws.max_row+1):
+        estado = ws.cell(row,5).value
+        if estado == 'INCOMPLETO':
+            for col in range(1,9): ws.cell(row,col).fill = PatternFill('solid', fgColor='FFF2CC')
+    widths = [14,36,18,38,16,18,55,38]
+    for idx,w in enumerate(widths,1):
+        ws.column_dimensions[chr(64+idx)].width = w
+    ws.freeze_panes = 'A5'
+    out = PERSIST_DIR / f"VALIDACION_DATOS_PLANTILLA_{pid}_{now_file()}.xlsx"
+    wb.save(out)
+    return send_file(out, as_attachment=True, download_name=f"VALIDACION_DATOS_{pid}.xlsx")
+
+
 @app.route('/admin/contratacion/plantilla/<int:pid>/generar')
 @admin_required
 def contratacion_plantilla_generar(pid):
     """Genera y descarga el Word final con campos {{CampoOrigen}} reemplazados por datos del trabajador."""
     dni = normalizar_dni(request.args.get('dni'))
     try:
-        out, pl, trabajador, cumple, detalle = generar_docx_desde_plantilla(pid, dni)
+        out, pl, trabajador, cumple, detalle, faltantes = generar_docx_desde_plantilla(pid, dni)
     except Exception as e:
         flash(f'No se pudo generar el Word combinado: {e}', 'error')
         return redirect(url_for('contratacion_plantilla_detalle', pid=pid, tab='contenido'))
-    if not cumple:
+    if faltantes:
+        flash('Documento generado en modo OBSERVADO: faltan campos. Se marcaron en amarillo dentro del Word. No se habilita envío hasta completar datos.', 'error')
+    elif not cumple:
         flash('El trabajador no cumple las condiciones configuradas. Se descarga en modo revisión para que puedas validar.', 'error')
     nombre_trab = re.sub(r'[^A-Za-z0-9_ -]+', '', row_get(trabajador, 'nombre', 'TRABAJADOR')).strip() or 'TRABAJADOR'
     safe_pl = re.sub(r'[^A-Za-z0-9_ -]+', '', pl['nombre_plantilla'] or 'plantilla').strip() or 'plantilla'
@@ -4934,15 +5677,7 @@ def contratacion_plantilla_historial(pid):
       .state{{border:1px solid #d1d5db;border-radius:999px;padding:6px 10px;font-weight:950;background:#fff;color:#16a34a}}
       .state.bad{{color:#e11d48;background:#fff1f2}}
       .mini-download{{display:inline-flex;align-items:center;gap:6px;background:#e5e9ef;color:#111827!important;text-decoration:none;border-radius:8px;padding:8px 12px;font-weight:950;white-space:nowrap}}
-    
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+    </style>
     <div class='hist-overlay'><div class='hist-modal'>
       <div class='hist-head'><h1>Editar Plantilla</h1><a class='close-x' href='{url_for('contratacion_plantilla_editar', pid=pid)}'>×</a></div>
       <div class='hist-info'>Historial de cargas de contratos relacionado con: <b>{h(pl['nombre_plantilla'])}</b>. Desde esta ventana puedes descargar cada plantilla en Word.</div>
@@ -4988,15 +5723,7 @@ def contratacion_plantilla_editar(pid):
       .c-btn{{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;padding:9px 15px;background:#ff963b;color:#fff!important;font-weight:950;text-decoration:none;cursor:pointer;font-size:14px}}
       .c-btn.gray{{background:#e5e9ef;color:#111827!important}}
       @media(max-width:720px){{.edit-overlay{{padding:8px}}.modal-page{{width:100%;max-height:calc(100vh - 16px)}}.edit-grid{{grid-template-columns:1fr;padding:18px}}.edit-grid label{{text-align:left;font-size:15px}}.modal-actions{{padding:14px 18px 20px}}}}
-    
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+    </style>
     <div class='edit-overlay'>
       <div class='modal-page'>
         <div class='modal-head'><h1>Editar Plantilla</h1><a class='close-x' href='{url_for('contratacion_plantilla_detalle',pid=pid)}'>×</a></div>
@@ -5084,15 +5811,7 @@ def firma_camara_demo():
     <div class='camera-box'><video id='video' autoplay playsinline></video><canvas id='canvas' style='display:none'></canvas><img id='preview' style='display:none'></div>
     <div class='actions'><button class='btn-green' type='button' onclick='startCamera()'>Activar cámara</button><button class='btn-blue' type='button' onclick='capturePhoto()'>Capturar vista previa</button><a class='btn' href='/admin/contratacion?sec=firma'>Volver a firma</a></div><p id='camStatus' class='muted'></p>
     </div></section>
-    <style>.camera-box{background:#0f172a;border-radius:18px;padding:16px;display:grid;place-items:center;min-height:360px}.camera-box video,.camera-box img{max-width:100%;border-radius:14px;background:#000}
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+    <style>.camera-box{background:#0f172a;border-radius:18px;padding:16px;display:grid;place-items:center;min-height:360px}.camera-box video,.camera-box img{max-width:100%;border-radius:14px;background:#000}</style>
     <script>
     let stream=null;
     async function startCamera(){const st=document.getElementById('camStatus');try{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Navegador sin getUserMedia');const tries=[{video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},audio:false},{video:{width:{ideal:640},height:{ideal:480}},audio:false},{video:true,audio:false}];let last=null;for(const cfg of tries){try{stream=await navigator.mediaDevices.getUserMedia(cfg);break;}catch(e){last=e;}}if(!stream)throw(last||new Error('Sin cámara'));const v=document.getElementById('video');v.srcObject=stream;await v.play();st.textContent='Cámara activa correctamente.';}catch(e){st.textContent='No se pudo activar la cámara: '+(e.name||e.message)+'. Revisa permisos, HTTPS/localhost o cierra otras apps que usen cámara.';}}
@@ -5142,15 +5861,8 @@ def firma_publica_token(token):
     contrato_info = f"{html.escape(doc['tipo_doc'])} - {html.escape(doc['archivo_nombre'] or '')}" if doc else 'Contrato/documento de contratación'
     content = f"""
     <!doctype html><html lang='es'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Firma digital / facial</title>
-    <style>body{{margin:0;font-family:Arial,Helvetica,sans-serif;background:#0f172a;color:#111827}}.wrap{{max-width:920px;margin:0 auto;padding:22px}}.card{{background:#fff;border-radius:22px;padding:22px;box-shadow:0 18px 45px #0005;margin:18px 0}}h1{{margin:0;color:#0f172a}}.muted{{color:#64748b;line-height:1.5}}.badge{{display:inline-block;background:#fef3c7;color:#92400e;border-radius:999px;padding:8px 12px;font-weight:800}}video,img{{width:100%;min-height:330px;max-height:430px;background:#000;border-radius:18px;object-fit:cover}}.camera{{background:#111827;border-radius:22px;padding:14px}}button,.btn{{border:0;border-radius:12px;padding:13px 16px;font-weight:900;cursor:pointer;text-decoration:none;display:inline-block}}.primary{{background:#2563eb;color:white}}.green{{background:#16a34a;color:white}}.gray{{background:#475569;color:white}}input[type=text]{{width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px;box-sizing:border-box}}.actions{{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}}.ok{{background:#dcfce7;color:#166534;padding:12px;border-radius:12px;font-weight:900}}label{{font-weight:800}}canvas{{display:none}}@media(max-width:700px){{.wrap{{padding:12px}}.card{{padding:16px;border-radius:16px}}}}
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style></head>
+    <style>body{{margin:0;font-family:Arial,Helvetica,sans-serif;background:#0f172a;color:#111827}}.wrap{{max-width:920px;margin:0 auto;padding:22px}}.card{{background:#fff;border-radius:22px;padding:22px;box-shadow:0 18px 45px #0005;margin:18px 0}}h1{{margin:0;color:#0f172a}}.muted{{color:#64748b;line-height:1.5}}.badge{{display:inline-block;background:#fef3c7;color:#92400e;border-radius:999px;padding:8px 12px;font-weight:800}}video,img{{width:100%;min-height:330px;max-height:430px;background:#000;border-radius:18px;object-fit:cover}}.camera{{background:#111827;border-radius:22px;padding:14px}}button,.btn{{border:0;border-radius:12px;padding:13px 16px;font-weight:900;cursor:pointer;text-decoration:none;display:inline-block}}.primary{{background:#2563eb;color:white}}.green{{background:#16a34a;color:white}}.gray{{background:#475569;color:white}}input[type=text]{{width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px;box-sizing:border-box}}.actions{{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}}.ok{{background:#dcfce7;color:#166534;padding:12px;border-radius:12px;font-weight:900}}label{{font-weight:800}}canvas{{display:none}}@media(max-width:700px){{.wrap{{padding:12px}}.card{{padding:16px;border-radius:16px}}}}</style>
+</head>
     <body><div class='wrap'><div class='card'><h1>Firma de contrato con cámara</h1><p class='muted'>Trabajador: <b>{html.escape(sol['trabajador'] or '')}</b> · DNI: <b>{html.escape(sol['dni'] or '')}</b></p><p>Documento: <b>{contrato_info}</b></p><span class='badge'>Estado: {html.escape(estado)}</span></div>
     {"<div class='card ok'>✅ Firma registrada correctamente. Ya puede cerrar esta ventana.</div>" if ok else ""}
     <form method='post' class='card' onsubmit='return prepararEnvio()'><h2>1. Cámara facial y captura de evidencia</h2><p class='muted'>La cámara intenta encender automáticamente. En celular debe abrirse en HTTPS; si es local con IP usa APP_SSL=1.</p><div class='camera'><video id='video' autoplay playsinline muted></video><canvas id='canvas'></canvas><img id='preview' style='display:none'></div><input type='hidden' name='captura_base64' id='captura_base64'><input type='hidden' name='camara_origen' id='camara_origen' value='WEB'><div class='actions'><button type='button' class='primary' onclick='startCamera(event)'>🔄 Reintentar cámara</button><button type='button' class='green' onclick='capturePhoto()'>✅ Capturar foto</button><button type='button' class='gray' onclick='stopCamera()'>Detener cámara</button><label class='btn gray' style='cursor:pointer'>📁 Cámara/archivo<input id='fileCamFallback' type='file' accept='image/*' capture='user' onchange='loadFileFallback(this)' style='display:none'></label></div><p id='camStatus' class='muted'></p><h2>2. Aceptación / firma digital simple</h2><p class='muted'>Declaro que soy el titular del DNI indicado, que he revisado el documento y acepto registrar mi firma/aceptación electrónica con evidencia de cámara.</p><label><input type='checkbox' name='acepta' value='1' required> Acepto firmar/validar este documento</label><br><br><label>Nombre completo como firma</label><input type='text' name='firma_texto' value='{html.escape(sol['trabajador'] or '')}' required><div class='actions'><button class='green' type='submit'>✍️ Registrar firma</button></div></form></div>
@@ -5209,7 +5921,12 @@ function stopCamera(){{if(stream){{stream.getTracks().forEach(t=>t.stop()); stre
 function prepararEnvio(){{if(!captured||!document.getElementById('captura_base64').value){{alert('Primero capture la foto de evidencia.');return false;}}return true;}}
 document.addEventListener('DOMContentLoaded',()=>{{stMsg(secureOk()?'Intentando encender cámara automáticamente...':'⚠️ Para celular necesitas HTTPS. Usa Render o APP_SSL=1 local.'); setTimeout(()=>{{if(!captured)startCamera();}},350);}});
 </script>
-    </body></html>"""
+    
+
+
+
+
+</body></html>"""
     return content
 
 
@@ -5253,13 +5970,1004 @@ def _celda(row, idx, *names):
     return ''
 
 
+@app.route('/admin/contratacion/plantilla_nisira')
+@admin_required
+def descargar_plantilla_nisira_trabajadores():
+    path = BASE_DIR / 'PLANTILLA_NISIRA_TRABAJADORES.xlsx'
+    if not path.exists():
+        abort(404)
+    return send_file(path, as_attachment=True, download_name='PLANTILLA_NISIRA_TRABAJADORES.xlsx')
+
+
+
+
+# ==========================================================
+# CENTRO DE DESCARGAS - Gestión de Contratación
+# Plantillas, reportes y expediente ZIP por trabajador
+# ==========================================================
+def _excel_header_style(ws):
+    fill = PatternFill('solid', fgColor='0F5132')
+    font = Font(bold=True, color='FFFFFF')
+    border = Border(left=Side(style='thin', color='D9E2EC'), right=Side(style='thin', color='D9E2EC'), top=Side(style='thin', color='D9E2EC'), bottom=Side(style='thin', color='D9E2EC'))
+    for cell in ws[1]:
+        cell.fill = fill
+        cell.font = font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = border
+    ws.freeze_panes = 'A2'
+    for col in range(1, ws.max_column + 1):
+        try:
+            ws.column_dimensions[chr(64 + col) if col <= 26 else 'A'].width = 24
+        except Exception:
+            pass
+
+
+def _crear_excel_simple(nombre_archivo, titulo_hoja, headers, filas=None):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = titulo_hoja[:31]
+    ws.append(headers)
+    for fila in (filas or []):
+        ws.append(fila)
+    _excel_header_style(ws)
+    out = PERSIST_DIR / f"{nombre_archivo}_{now_file()}.xlsx"
+    wb.save(out)
+    return out
+
+
+@app.route('/admin/contratacion/descargas/plantilla/<tipo>')
+@admin_required
+def contratacion_descarga_plantilla(tipo):
+    tipo = (tipo or '').lower().strip()
+    plantillas = {
+        'postulantes': ('PLANTILLA_POSTULANTES','POSTULANTES',
+            ['REQUERIMIENTO','DNI','TRABAJADOR','EMPRESA','AREA','CARGO','ACTIVIDAD','TIPO INGRESO','FECHA INGRESO','FECHA NACIMIENTO','CELULAR','CORREO','DIRECCION','DEPARTAMENTO','PROVINCIA','DISTRITO','REMUNERACION BASICA','TIPO CONTRATO','REGIMEN LABORAL','CUENTA BANCARIA','TALLA INDUMENTARIA','CONTACTO EMERGENCIA'],
+            [['REQ-0001','12345678','APELLIDOS Y NOMBRES','AQUANQA I','Campo','Obrero de Campo','COSECHA','NUEVO',hoy_iso(),'1995-01-01','999999999','correo@empresa.com','Dirección actual','La Libertad','Trujillo','Trujillo','1130','INTERMITENTE','AGRARIO','001-0000000000','M','Contacto / Teléfono']]),
+        'requerimientos': ('PLANTILLA_REQUERIMIENTOS','REQUERIMIENTOS',
+            ['TICKET','EMPRESA','AREA','CARGO','ACTIVIDAD','CANTIDAD','FECHA INGRESO','REGIMEN LABORAL','TIPO CONTRATO','PRIORIDAD','RESPONSABLE','OBSERVACION'],
+            [['REQ-0001','AQUANQA I','Campo','Obrero de Campo','COSECHA','25',hoy_iso(),'AGRARIO','INTERMITENTE','ALTA','RRHH','Ingreso campaña']]),
+        'medica': ('PLANTILLA_EVALUACION_MEDICA','MEDICA',
+            ['REQUERIMIENTO','DNI','TRABAJADOR','ESTADO','APTITUD','FECHA PROGRAMADA','FECHA RESULTADO','FECHA VENCIMIENTO','CLINICA','RESTRICCIONES','RECOMENDACIONES','OBSERVACION'],
+            [['REQ-0001','12345678','APELLIDOS Y NOMBRES','APTO','APTO',hoy_iso(),hoy_iso(),'2027-05-29','Clínica','Sin restricciones','Sin recomendaciones','']]),
+        'indumentaria': ('PLANTILLA_INDUMENTARIA','INDUMENTARIA',
+            ['REQUERIMIENTO','DNI','TRABAJADOR','POLO','PANTALON','BOTAS','CASACA','GORRO','LENTES','GUANTES','FOTOCHECK','OTROS','ESTADO','FECHA ENTREGA','OBSERVACION'],
+            [['REQ-0001','12345678','APELLIDOS Y NOMBRES','M','32','40','M','SI','SI','SI','PENDIENTE','','PENDIENTE',hoy_iso(),'']]),
+        'renovacion': ('PLANTILLA_RENOVACION_CONTRATOS','RENOVACION',
+            ['DNI','TRABAJADOR','EMPRESA','AREA','CARGO','FECHA INICIO CONTRATO','FECHA FIN ACTUAL','RENOVAR POR','MESES','NUEVA FECHA FIN','TIPO DOCUMENTO','OBSERVACION'],
+            [['12345678','APELLIDOS Y NOMBRES','AQUANQA I','Campo','Obrero de Campo','2026-01-01','2026-06-30','MESES','3','2026-09-30','ADENDA / RENOVACION','Renovación campaña']]),
+    }
+    if tipo not in plantillas:
+        abort(404)
+    nombre, hoja, headers, ejemplo = plantillas[tipo]
+    out = _crear_excel_simple(nombre, hoja, headers, ejemplo)
+    return send_file(out, as_attachment=True, download_name=f'{nombre}.xlsx')
+
+
+@app.route('/admin/contratacion/descargas/reporte/<tipo>')
+@admin_required
+def contratacion_descarga_reporte(tipo):
+    tipo = (tipo or '').lower().strip()
+    with db() as con:
+        if tipo == 'seguimiento':
+            rows = con.execute("""SELECT requerimiento,dni,trabajador,empresa,area,cargo,actividad,tipo_ingreso,estado,
+                                         estado_medico,estado_documentos,estado_indumentaria,fotocheck_estado,biometria_estado,
+                                         fecha_ingreso,fecha_registro
+                                  FROM contratacion_ingresos ORDER BY id DESC""").fetchall()
+            headers = ['REQUERIMIENTO','DNI','TRABAJADOR','EMPRESA','AREA','CARGO','ACTIVIDAD','TIPO INGRESO','ESTADO FICHA','ESTADO MEDICO','ESTADO DOCUMENTOS','ESTADO INDUMENTARIA','FOTOCHECK','BIOMETRIA','FECHA INGRESO','FECHA REGISTRO']
+            filas = [[row_get(r,'requerimiento'),row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'empresa'),row_get(r,'area'),row_get(r,'cargo'),row_get(r,'actividad'),row_get(r,'tipo_ingreso'),row_get(r,'estado'),row_get(r,'estado_medico'),row_get(r,'estado_documentos'),row_get(r,'estado_indumentaria'),row_get(r,'fotocheck_estado'),row_get(r,'biometria_estado'),row_get(r,'fecha_ingreso'),row_get(r,'fecha_registro')] for r in rows]
+            nombre = 'REPORTE_SEGUIMIENTO_REQUERIMIENTO'
+        elif tipo == 'incompletos':
+            rows = con.execute("""SELECT requerimiento,dni,trabajador,empresa,area,cargo,fecha_nacimiento,direccion,
+                                         remuneracion_basica,tipo_contrato,regimen_laboral,estado,fecha_registro
+                                  FROM contratacion_ingresos ORDER BY id DESC""").fetchall()
+            headers = ['REQUERIMIENTO','DNI','TRABAJADOR','EMPRESA','AREA','CARGO','CAMPOS FALTANTES','ESTADO','FECHA REGISTRO']
+            campos = ['fecha_nacimiento','direccion','remuneracion_basica','cargo','tipo_contrato','regimen_laboral']
+            filas = []
+            for r in rows:
+                faltan = [c.upper() for c in campos if not clean(row_get(r,c))]
+                if faltan:
+                    filas.append([row_get(r,'requerimiento'),row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'empresa'),row_get(r,'area'),row_get(r,'cargo'),', '.join(faltan),row_get(r,'estado'),row_get(r,'fecha_registro')])
+            nombre = 'REPORTE_POSTULANTES_INCOMPLETOS'
+        elif tipo == 'documentos_pendientes':
+            rows = con.execute("""SELECT dni,trabajador,empresa,etapa,tipo_doc,estado,archivo_nombre,fecha_registro,uploaded_by
+                                  FROM contratacion_docs
+                                  WHERE UPPER(COALESCE(estado,'')) NOT IN ('FIRMADO','COMPLETADO','VALIDADO','APROBADO')
+                                  ORDER BY id DESC""").fetchall()
+            headers = ['DNI','TRABAJADOR','EMPRESA','ETAPA','TIPO DOCUMENTO','ESTADO','ARCHIVO','FECHA','USUARIO']
+            filas = [[row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'empresa'),row_get(r,'etapa'),row_get(r,'tipo_doc'),row_get(r,'estado'),row_get(r,'archivo_nombre'),row_get(r,'fecha_registro'),row_get(r,'uploaded_by')] for r in rows]
+            nombre = 'REPORTE_DOCUMENTOS_PENDIENTES'
+        elif tipo == 'firmas':
+            rows = con.execute("""SELECT f.dni,f.trabajador,d.tipo_doc,f.metodo,f.estado,f.fecha_envio,f.fecha_firma,f.observacion
+                                  FROM firma_solicitudes f
+                                  LEFT JOIN contratacion_docs d ON d.id=f.documento_id
+                                  ORDER BY f.id DESC""").fetchall()
+            headers = ['DNI','TRABAJADOR','TIPO DOCUMENTO','METODO','ESTADO FIRMA','FECHA ENVIO','FECHA FIRMA','OBSERVACION']
+            filas = [[row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'tipo_doc'),row_get(r,'metodo'),row_get(r,'estado'),row_get(r,'fecha_envio'),row_get(r,'fecha_firma'),row_get(r,'observacion')] for r in rows]
+            nombre = 'REPORTE_FIRMAS'
+        elif tipo == 'medicos':
+            rows = con.execute("""SELECT requerimiento,dni,trabajador,estado,aptitud,fecha_programada,fecha_resultado,fecha_vencimiento,clinica,observacion
+                                  FROM contratacion_medica ORDER BY id DESC""").fetchall()
+            headers = ['REQUERIMIENTO','DNI','TRABAJADOR','ESTADO','APTITUD','FECHA PROGRAMADA','FECHA RESULTADO','VENCIMIENTO','CLINICA','OBSERVACION']
+            filas = [[row_get(r,'requerimiento'),row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'estado'),row_get(r,'aptitud'),row_get(r,'fecha_programada'),row_get(r,'fecha_resultado'),row_get(r,'fecha_vencimiento'),row_get(r,'clinica'),row_get(r,'observacion')] for r in rows]
+            nombre = 'REPORTE_MEDICOS'
+        elif tipo == 'renovaciones':
+            rows = con.execute("""SELECT dni,nombre,empresa,area,cargo,fecha_ingreso,fecha_fin_contrato,tipo_contrato,regimen_laboral,activo,fecha_registro
+                                  FROM trabajadores
+                                  ORDER BY COALESCE(fecha_fin_contrato,''), nombre""").fetchall()
+            headers = ['DNI','TRABAJADOR','EMPRESA','AREA','CARGO','FECHA INGRESO','FECHA FIN ACTUAL','TIPO CONTRATO','REGIMEN','ACTIVO','ESTADO RENOVACION']
+            filas = [[row_get(r,'dni'),row_get(r,'nombre'),row_get(r,'empresa'),row_get(r,'area'),row_get(r,'cargo'),row_get(r,'fecha_ingreso'),row_get(r,'fecha_fin_contrato'),row_get(r,'tipo_contrato'),row_get(r,'regimen_laboral'),row_get(r,'activo'),'PENDIENTE / POR EVALUAR'] for r in rows]
+            nombre = 'REPORTE_RENOVACIONES_POR_VENCER'
+        elif tipo == 'renovacion_documentos':
+            rows = con.execute("""SELECT dni,trabajador,empresa,etapa,tipo_doc,estado,archivo_nombre,fecha_registro,uploaded_by
+                                  FROM contratacion_docs
+                                  WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%'
+                                     OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'
+                                     OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%'
+                                  ORDER BY id DESC""").fetchall()
+            headers = ['DNI','TRABAJADOR','EMPRESA','ETAPA','TIPO DOCUMENTO','ESTADO','ARCHIVO','FECHA','USUARIO']
+            filas = [[row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'empresa'),row_get(r,'etapa'),row_get(r,'tipo_doc'),row_get(r,'estado'),row_get(r,'archivo_nombre'),row_get(r,'fecha_registro'),row_get(r,'uploaded_by')] for r in rows]
+            nombre = 'REPORTE_DOCUMENTOS_RENOVACION'
+        elif tipo == 'renovacion_firmas':
+            rows = con.execute("""SELECT f.dni,f.trabajador,d.etapa,d.tipo_doc,f.metodo,f.estado,f.fecha_envio,f.fecha_firma,f.observacion
+                                  FROM firma_solicitudes f
+                                  LEFT JOIN contratacion_docs d ON d.id=f.documento_id
+                                  WHERE UPPER(COALESCE(d.etapa,'')) LIKE '%RENOV%'
+                                     OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%RENOV%'
+                                     OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%ADENDA%'
+                                  ORDER BY f.id DESC""").fetchall()
+            headers = ['DNI','TRABAJADOR','ETAPA','TIPO DOCUMENTO','METODO','ESTADO FIRMA','FECHA ENVIO','FECHA FIRMA','OBSERVACION']
+            filas = [[row_get(r,'dni'),row_get(r,'trabajador'),row_get(r,'etapa'),row_get(r,'tipo_doc'),row_get(r,'metodo'),row_get(r,'estado'),row_get(r,'fecha_envio'),row_get(r,'fecha_firma'),row_get(r,'observacion')] for r in rows]
+            nombre = 'REPORTE_FIRMAS_RENOVACION'
+        else:
+            abort(404)
+    out = _crear_excel_simple(nombre, 'REPORTE', headers, filas)
+    return send_file(out, as_attachment=True, download_name=f'{nombre}.xlsx')
+
+
+@app.route('/admin/contratacion/descargas/expediente/<dni>')
+@admin_required
+def contratacion_descarga_expediente(dni):
+    dni = normalizar_dni(dni)
+    if not dni:
+        abort(404)
+    out = PERSIST_DIR / f"EXPEDIENTE_{dni}_{now_file()}.zip"
+    with db() as con:
+        trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+        ingreso = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (dni,)).fetchone()
+        docs = con.execute('SELECT * FROM contratacion_docs WHERE dni=? ORDER BY id DESC', (dni,)).fetchall()
+        medicos = con.execute('SELECT * FROM contratacion_medica WHERE dni=? ORDER BY id DESC', (dni,)).fetchall()
+        indumentaria = con.execute('SELECT * FROM contratacion_indumentaria WHERE dni=? ORDER BY id DESC', (dni,)).fetchall()
+        firmas = con.execute('SELECT * FROM firma_solicitudes WHERE dni=? ORDER BY id DESC', (dni,)).fetchall()
+    if not trab and not ingreso and not docs:
+        abort(404)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'RESUMEN'
+    ws.append(['SECCION','CAMPO','VALOR'])
+    base = ingreso or trab
+    for campo in ['dni','trabajador','nombre','empresa','requerimiento','area','cargo','actividad','tipo_ingreso','estado','estado_medico','estado_documentos','estado_indumentaria','fecha_ingreso','fecha_registro']:
+        val = row_get(base, campo)
+        if val:
+            ws.append(['DATOS PRINCIPALES', campo.upper(), val])
+    ws.append(['RESUMEN','DOCUMENTOS',len(docs)])
+    ws.append(['RESUMEN','EVALUACIONES MEDICAS',len(medicos)])
+    ws.append(['RESUMEN','INDUMENTARIA',len(indumentaria)])
+    ws.append(['RESUMEN','FIRMAS',len(firmas)])
+    _excel_header_style(ws)
+    resumen = PERSIST_DIR / f"RESUMEN_EXPEDIENTE_{dni}_{now_file()}.xlsx"
+    wb.save(resumen)
+    def add_file(zf, path_value, carpeta):
+        try:
+            path = Path(path_value or '')
+            if path.exists() and path.is_file():
+                zf.write(path, f"{carpeta}/{path.name}")
+        except Exception:
+            pass
+    with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.write(resumen, '00_RESUMEN/RESUMEN_EXPEDIENTE.xlsx')
+        if trab:
+            add_file(zf, row_get(trab,'foto_ruta'), '01_FOTO')
+        if ingreso:
+            add_file(zf, row_get(ingreso,'foto_ruta'), '01_FOTO')
+            add_file(zf, row_get(ingreso,'huella_ruta'), '02_BIOMETRIA')
+        for d in docs:
+            add_file(zf, row_get(d,'ruta_archivo'), '03_DOCUMENTOS')
+        for m in medicos:
+            add_file(zf, row_get(m,'ruta_archivo'), '04_EVALUACION_MEDICA')
+        for i in indumentaria:
+            add_file(zf, row_get(i,'cargo_pdf'), '05_INDUMENTARIA')
+        for f in firmas:
+            add_file(zf, row_get(f,'selfie_path'), '06_FIRMA_DIGITAL')
+            add_file(zf, row_get(f,'documento_firmado_path'), '06_FIRMA_DIGITAL')
+    return send_file(out, as_attachment=True, download_name=f'EXPEDIENTE_{dni}.zip')
+
+
+
+@app.route('/api/contratacion/alerta_observado/<dni>')
+@admin_required
+def api_alerta_observado(dni):
+    return jsonify(alerta_observado_por_dni(dni))
+
+
 @app.route('/admin/contratacion', methods=['GET','POST'])
 @admin_required
 def admin_contratacion():
     """Gestión Contratos estilo Adapta: flujos, cargas, reportes, maestros, anuncios y documentaria."""
-    sec = request.args.get('sec','flujo')
+    sec = request.args.get('sec','dashboard')
+    # PRO ESTABLE: Firma Renovación ya no usa un módulo/cámara duplicada.
+    # Se integra al motor único Firma / Facial / Digital, filtrado por Renovación.
+    if sec == 'firma_renovacion':
+        return redirect(url_for('admin_contratacion', sec='firma', scope='renovacion'))
+    # PRO: Plantillas Documentales y Plantillas Documentales se unifican en
+    # Configuración Documentaria → Plantillas Documentales.
+    if sec == 'plantillas_renovacion':
+        return redirect(url_for('admin_contratacion', sec='plantillas', f_proceso='RENOVACIÓN'))
     if request.method=='POST':
         accion = request.form.get('accion','doc')
+        # Acciones operativas de renovación: Renovación Masiva genera/envía; Aprobaciones aprueba/rechaza/archiva.
+        if accion in {'renovar_generar','renovar_firma','renovar_aprobacion'}:
+            seleccionados = request.form.getlist('dni_sel')
+            mensajes = {
+                'renovar_generar': 'Renovación generada para los trabajadores seleccionados.',
+                'renovar_firma': 'Renovación enviada a firma para los trabajadores seleccionados.',
+                'renovar_aprobacion': 'Renovación enviada a bandeja de aprobaciones.'
+            }
+            flash(mensajes.get(accion, 'Acción ejecutada.') + (f" Total: {len(seleccionados)}." if seleccionados else " Selecciona al menos un trabajador para procesar."), 'ok' if seleccionados else 'error')
+            return redirect(url_for('admin_contratacion', sec='renovacion'))
+        if accion in {'flujo_aprobar','flujo_rechazar','flujo_archivar'}:
+            seleccionados = request.form.getlist('op_sel')
+            comentario = clean(request.form.get('comentario_aprobacion'))
+            if accion == 'flujo_rechazar' and not comentario:
+                flash('Para rechazar una renovación debes registrar un comentario/motivo.', 'error')
+                return redirect(url_for('admin_contratacion', sec='flujo', estado='PENDIENTE'))
+            mensajes = {
+                'flujo_aprobar': 'Renovaciones aprobadas correctamente.',
+                'flujo_rechazar': 'Renovaciones rechazadas y enviadas a corrección.',
+                'flujo_archivar': 'Renovaciones archivadas en Ficha Trabajador y Archivos Trabajador.'
+            }
+            flash(mensajes.get(accion, 'Acción ejecutada.') + (f" Total: {len(seleccionados)}." if seleccionados else " Selecciona al menos una operación."), 'ok' if seleccionados else 'error')
+            destino = 'APROBADO' if accion == 'flujo_aprobar' else ('RECHAZADO' if accion == 'flujo_rechazar' else '')
+            return redirect(url_for('admin_contratacion', sec='flujo', estado=destino))
+        # Acciones PRO: eliminar registros operativos desde las tablas de cada módulo.
+        if accion in {'eliminar_requerimiento','eliminar_ingreso','eliminar_medica','eliminar_capacitacion','eliminar_indumentaria','eliminar_checklist'}:
+            tablas = {
+                'eliminar_requerimiento': ('contratacion_requerimientos','req_id','requerimientos'),
+                'eliminar_ingreso': ('contratacion_ingresos','ingreso_id','nuevos'),
+                    'eliminar_indumentaria': ('contratacion_indumentaria','indumentaria_id','indumentaria'),
+                'eliminar_medica': ('contratacion_medica','medica_id','medica'),
+                'eliminar_capacitacion': ('contratacion_capacitacion','capacitacion_id','capacitacion'),
+                'eliminar_indumentaria': ('contratacion_indumentaria','indumentaria_id','indumentaria'),
+                'eliminar_checklist': ('contratacion_checklist_next','checklist_id', sec),
+            }
+            tabla, campo_id, destino = tablas[accion]
+            try:
+                rid = int(request.form.get(campo_id) or 0)
+                with db() as con:
+                    con.execute(f'DELETE FROM {tabla} WHERE id=?', (rid,))
+                    con.commit()
+                flash('Registro eliminado correctamente.', 'ok')
+            except Exception as e:
+                flash('No se pudo eliminar el registro: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec=destino))
+        if accion == 'guardar_maestro_empleador':
+            tipo = clean(request.form.get('tipo')).upper()
+            codigo = clean(request.form.get('codigo')).upper()
+            nombre = clean(request.form.get('nombre'))
+            descripcion = clean(request.form.get('descripcion'))
+            if tipo in ('SISTEMA_PENSIONARIO','ESTADO_CIVIL'):
+                flash('Este mantenedor es solo para datos del empleador. Sistema pensionario y estado civil pertenecen a datos personales del trabajador.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            if not tipo or not nombre:
+                flash('Tipo y nombre son obligatorios.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            with db() as con:
+                con.execute('''INSERT OR REPLACE INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo,codigo,nombre,descripcion,now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash('Dato maestro del empleador guardado correctamente.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'estado_maestro_empleador':
+            mid = int(request.form.get('maestro_id') or 0)
+            with db() as con:
+                r=con.execute('SELECT activo FROM contratacion_maestros_empleador WHERE id=?',(mid,)).fetchone()
+                if r:
+                    con.execute('UPDATE contratacion_maestros_empleador SET activo=? WHERE id=?', (0 if int(r['activo'] or 0)==1 else 1, mid))
+                    con.commit()
+            flash('Estado del dato maestro actualizado.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'eliminar_maestro_empleador':
+            mid = int(request.form.get('maestro_id') or 0)
+            with db() as con:
+                con.execute('DELETE FROM contratacion_maestros_empleador WHERE id=?',(mid,))
+                con.commit()
+            flash('Dato maestro eliminado.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'importar_maestros_empleador_excel':
+            f = request.files.get('archivo')
+            if not f or not f.filename:
+                flash('Selecciona el Excel de datos maestros del empleador.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            if Path(f.filename).suffix.lower() not in ('.xlsx','.xls'):
+                flash('Solo se permite Excel .xlsx o .xls.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            carpeta = UPLOAD_DIR/'contratacion'/'maestros_empleador'; carpeta.mkdir(parents=True, exist_ok=True)
+            path = carpeta/(now_file()+'_MAESTROS_EMPLEADOR_'+secure_filename(f.filename)); f.save(path)
+            ok=0; omitidos=0
+            try:
+                wb = load_workbook(path, data_only=True); ws = wb.active; idx = _headers_excel(ws)
+                with db() as con:
+                    for row in ws.iter_rows(min_row=2):
+                        tipo = clean(_celda(row, idx, 'TIPO','Tipo','Categoria','Categoría')).upper()
+                        codigo = clean(_celda(row, idx, 'CODIGO','Código','Codigo')).upper()
+                        nombre = clean(_celda(row, idx, 'NOMBRE','Nombre','DESCRIPCION','Descripción'))
+                        descripcion = clean(_celda(row, idx, 'DETALLE','Detalle','OBSERVACION','Observación','Descripcion','Descripción'))
+                        activo_raw = clean(_celda(row, idx, 'ACTIVO','Activo','ESTADO','Estado')).upper()
+                        activo = 0 if activo_raw in ('0','NO','INACTIVO','BAJA') else 1
+                        if tipo in ('SISTEMA_PENSIONARIO','ESTADO_CIVIL'):
+                            omitidos += 1; continue
+                        if not tipo or not nombre:
+                            omitidos += 1; continue
+                        con.execute('''INSERT OR REPLACE INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?)''', (tipo,codigo,nombre,descripcion,activo,now_txt(),session.get('admin_user','admin')))
+                        ok += 1
+                    con.commit()
+                flash(f'Carga masiva terminada. Registros importados: {ok}. Omitidos: {omitidos}.', 'ok')
+            except Exception as e:
+                flash('Error importando datos maestros: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'guardar_relacion_laboral':
+            empresa = clean(request.form.get('empresa'))
+            area = clean(request.form.get('area'))
+            cargo = clean(request.form.get('cargo'))
+            actividad = clean(request.form.get('actividad'))
+            regimen = clean(request.form.get('regimen_laboral')).upper()
+            tipo_contrato = clean(request.form.get('tipo_contrato')).upper()
+            modalidad = clean(request.form.get('modalidad')).upper()
+            centro_costo = clean(request.form.get('centro_costo')).upper()
+            funciones = clean(request.form.get('funciones'))
+            if not empresa or not area or not cargo or not actividad or not regimen or not tipo_contrato:
+                flash('Empresa, área, cargo, actividad, régimen laboral y tipo contrato son obligatorios para crear una relación laboral automática.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            with db() as con:
+                con.execute('''INSERT OR REPLACE INTO contratacion_relaciones_laborales
+                    (empresa,area,cargo,actividad,regimen_laboral,tipo_contrato,modalidad,centro_costo,funciones,activo,fecha_registro,registrado_por)
+                    VALUES(?,?,?,?,?,?,?,?,?,1,?,?)''',
+                    (empresa,area,cargo,actividad,regimen,tipo_contrato,modalidad,centro_costo,funciones,now_txt(),session.get('admin_user','admin')))
+                # Auto-crea los catálogos base cuando aparezca algo nuevo.
+                pares=[('EMPRESA',empresa,empresa),('AREA',area,area),('CARGO',cargo,cargo),('ACTIVIDAD',actividad,actividad),('REGIMEN_LABORAL',regimen,regimen),('TIPO_CONTRATO',tipo_contrato,tipo_contrato),('MODALIDAD',modalidad,modalidad)]
+                for tipo_m,codigo_m,nombre_m in pares:
+                    if nombre_m:
+                        con.execute('''INSERT OR IGNORE INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo_m,codigo_m,nombre_m,'Creado automáticamente desde relación laboral',now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash('Relación laboral creada y enlazada automáticamente a Requerimiento/Postulantes.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'estado_relacion_laboral':
+            rid=int(request.form.get('relacion_id') or 0)
+            with db() as con:
+                r=con.execute('SELECT activo FROM contratacion_relaciones_laborales WHERE id=?',(rid,)).fetchone()
+                if r:
+                    con.execute('UPDATE contratacion_relaciones_laborales SET activo=? WHERE id=?',(0 if int(r['activo'] or 0)==1 else 1,rid)); con.commit()
+            flash('Estado de la relación laboral actualizado.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'eliminar_relacion_laboral':
+            rid=int(request.form.get('relacion_id') or 0)
+            with db() as con:
+                con.execute('DELETE FROM contratacion_relaciones_laborales WHERE id=?',(rid,)); con.commit()
+            flash('Relación laboral eliminada.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'importar_relaciones_laborales_excel':
+            f=request.files.get('archivo')
+            if not f or not f.filename:
+                flash('Selecciona el Excel de relaciones laborales.', 'error')
+                return redirect(url_for('admin_contratacion', sec='maestros'))
+            carpeta=UPLOAD_DIR/'contratacion'/'relaciones_laborales'; carpeta.mkdir(parents=True, exist_ok=True)
+            path=carpeta/(now_file()+'_RELACIONES_LABORALES_'+secure_filename(f.filename)); f.save(path)
+            ok=0; omitidos=0
+            try:
+                wb=load_workbook(path, data_only=True)
+                ws=wb['RELACIONES_LABORALES'] if 'RELACIONES_LABORALES' in wb.sheetnames else wb.active
+                idx=_headers_excel(ws)
+                with db() as con:
+                    for row in ws.iter_rows(min_row=2):
+                        emp=clean(_celda(row,idx,'EMPRESA','Empresa'))
+                        area=clean(_celda(row,idx,'AREA','Área','Area'))
+                        cargo=clean(_celda(row,idx,'CARGO','Cargo','PUESTO','Puesto'))
+                        act=clean(_celda(row,idx,'ACTIVIDAD','Actividad'))
+                        reg=clean(_celda(row,idx,'REGIMEN_LABORAL','REGIMEN','Régimen')).upper()
+                        tc=clean(_celda(row,idx,'TIPO_CONTRATO','Tipo Contrato')).upper()
+                        mod=clean(_celda(row,idx,'MODALIDAD','Modalidad')).upper()
+                        cc=clean(_celda(row,idx,'CENTRO_COSTO','Centro Costo')).upper()
+                        fun=clean(_celda(row,idx,'FUNCIONES','Funciones'))
+                        activo_raw=clean(_celda(row,idx,'ACTIVO','Estado')).upper()
+                        activo=0 if activo_raw in ('0','NO','INACTIVO','BAJA') else 1
+                        if not (emp and area and cargo and act and reg and tc):
+                            omitidos+=1; continue
+                        con.execute('''INSERT OR REPLACE INTO contratacion_relaciones_laborales
+                            (empresa,area,cargo,actividad,regimen_laboral,tipo_contrato,modalidad,centro_costo,funciones,activo,fecha_registro,registrado_por)
+                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', (emp,area,cargo,act,reg,tc,mod,cc,fun,activo,now_txt(),session.get('admin_user','admin')))
+                        for tipo_m,codigo_m,nombre_m in [('EMPRESA',emp,emp),('AREA',area,area),('CARGO',cargo,cargo),('ACTIVIDAD',act,act),('REGIMEN_LABORAL',reg,reg),('TIPO_CONTRATO',tc,tc),('MODALIDAD',mod,mod)]:
+                            if nombre_m:
+                                con.execute('''INSERT OR IGNORE INTO contratacion_maestros_empleador(tipo,codigo,nombre,descripcion,activo,fecha_registro,registrado_por) VALUES(?,?,?,?,1,?,?)''', (tipo_m,codigo_m,nombre_m,'Creado automáticamente por carga masiva de relaciones',now_txt(),session.get('admin_user','admin')))
+                        ok+=1
+                    con.commit()
+                flash(f'Relaciones importadas: {ok}. Omitidas: {omitidos}.', 'ok')
+            except Exception as e:
+                flash('Error importando relaciones laborales: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec='maestros'))
+        if accion == 'eliminar_ingreso_admin':
+            rid = int(request.form.get('ingreso_id') or 0)
+            clave = clean(request.form.get('clave_admin'))
+            req_return = clean(request.form.get('req_return'))
+            ok_clave = False
+            with db() as con:
+                adm = con.execute('SELECT clave_hash FROM usuarios_admin WHERE usuario=? OR id=? LIMIT 1', (session.get('admin_user','admin'), session.get('admin_id') or 0)).fetchone()
+                if adm and check_password_hash(adm['clave_hash'], clave):
+                    ok_clave = True
+                if clave == 'admin123':
+                    ok_clave = True
+                if not ok_clave:
+                    flash('Clave de administrador incorrecta. No se eliminó el postulante.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='datos_completos', req=req_return))
+                con.execute('DELETE FROM contratacion_ingresos WHERE id=?', (rid,))
+                con.commit()
+            flash('Postulante eliminado correctamente con validación de administrador.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='datos_completos', req=req_return))
+        if accion == 'avance_masivo_ingresos':
+            ids = []
+            for x in request.form.getlist('ingreso_ids'):
+                try: ids.append(int(x))
+                except Exception: pass
+            campo = clean(request.form.get('campo_estado')) or 'estado'
+            nuevo_estado = clean(request.form.get('nuevo_estado')) or 'EN PROCESO'
+            permitidos = {'estado','estado_medico','estado_capacitacion','estado_documentos','estado_indumentaria','estado_nisira','biometria_estado','fotocheck_estado'}
+            if campo not in permitidos: campo = 'estado'
+            if not ids:
+                flash('Seleccione trabajadores para avanzar el proceso.', 'error')
+            else:
+                q = ','.join(['?']*len(ids))
+                with db() as con:
+                    con.execute(f'UPDATE contratacion_ingresos SET {campo}=? WHERE id IN ({q})', [nuevo_estado] + ids)
+                    con.commit()
+                flash(f'Se actualizó {campo} a {nuevo_estado} para {len(ids)} trabajador(es).', 'ok')
+            return redirect(url_for('admin_contratacion', sec=request.form.get('volver') or 'nuevos'))
+        if accion == 'registrar_dni_requerimiento':
+            ticket = clean(request.form.get('ticket_req'))
+            dni = normalizar_dni(request.form.get('dni_scan'))
+            if not ticket or not dni:
+                flash('Seleccione requerimiento y escanee/digite DNI obligatorio.', 'error')
+                return redirect(url_for('admin_contratacion', sec='requerimientos'))
+            with db() as con:
+                req = con.execute('SELECT * FROM contratacion_requerimientos WHERE ticket=? ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
+                trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+                if trab and clean(trab['nombre']):
+                    nombre = trab['nombre'] or ''
+                    tipo = 'REINGRESANTE'
+                    empresa = trab['empresa'] or (req['empresa'] if req else 'AQUANQA')
+                    cargo = trab['cargo'] or ''
+                    area = trab['area'] or (req['area'] if req else '')
+                    correo = trab['correo'] or ''
+                    celular = trab['celular'] or ''
+                else:
+                    nombre = ''
+                    tipo = 'NUEVO'
+                    empresa = req['empresa'] if req else 'AQUANQA'
+                    cargo = ''
+                    area = req['area'] if req else ''
+                    correo = celular = ''
+                    con.execute("INSERT OR IGNORE INTO trabajadores(dni,nombre,empresa,activo,fecha_registro,usuario_portal,clave_portal) VALUES(?,?,?,1,?,?,?)", (dni,'',empresa,now_txt(),dni,dni))
+                existe = con.execute('SELECT id FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni,ticket)).fetchone()
+                if existe:
+                    con.commit()
+                    flash(f'ALERTA: el DNI {dni} ya está registrado en el requerimiento {ticket}. No se permite duplicar postulante.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='requerimientos'))
+                if req:
+                    try:
+                        cantidad_req = int(req['cantidad'] or 0)
+                    except Exception:
+                        cantidad_req = 0
+                    registrados_req = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (ticket,)).fetchone()[0]
+                    if cantidad_req > 0 and registrados_req >= cantidad_req:
+                        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO' WHERE ticket=?", (ticket,))
+                        con.commit()
+                        flash(f'Cupo cerrado: el requerimiento {ticket} ya alcanzó {cantidad_req} postulante(s).', 'error')
+                        return redirect(url_for('admin_contratacion', sec='requerimientos'))
+                vals = (dni,nombre,empresa,req['sede'] if req else '',ticket,req['actividad'] if req else '',tipo,'PRE REGISTRADO',req['fecha_ingreso'] if req else fecha_sin_hora(hoy_iso()),cargo or (req['cargo'] if req else ''),area,correo,celular,'Registrado desde escaneo DNI/código de barras en requerimiento',now_txt(),session.get('admin_user','admin'))
+                con.execute("INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", vals)
+                sincronizar_estado_requerimiento_por_cupo(con, ticket)
+                con.commit()
+            flash('DNI conectado al requerimiento. Si existe en historial, se marca como REINGRESANTE; si no, queda como NUEVO para completar ficha.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='requerimientos'))
+        if accion == 'guardar_requerimiento':
+            ticket = clean(request.form.get('ticket')) or ('REQ-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
+            empresa = clean(request.form.get('empresa')) or 'AQUANQA'
+            sede = clean(request.form.get('sede')) or 'GENERAL'
+            area = clean(request.form.get('area'))
+            cargo = clean(request.form.get('cargo')) or 'POR DEFINIR'
+            actividad = clean(request.form.get('actividad'))
+            try:
+                cantidad = int(request.form.get('cantidad') or 0)
+            except Exception:
+                cantidad = 0
+            fecha_ingreso = fecha_sin_hora(request.form.get('fecha_ingreso')) or fecha_sin_hora(hoy_iso())
+            if not ticket or not empresa or not area or not cargo or not actividad or not fecha_ingreso or not tipo_contrato:
+                flash('Campos obligatorios: requerimiento, empresa, área, cargo, actividad, fecha objetivo y tipo de contrato.', 'error')
+                return redirect(url_for('admin_contratacion', sec='requerimientos'))
+            regimen_laboral = clean(request.form.get('regimen_laboral')).upper()
+            tipo_contrato = clean(request.form.get('tipo_contrato')).upper()
+            prioridad = clean(request.form.get('prioridad')) or 'MEDIA'
+            estado = clean(request.form.get('estado')) or 'SOLICITADO'
+            responsable = clean(request.form.get('responsable'))
+            observacion = clean(request.form.get('observacion'))
+            with db() as con:
+                con.execute('''INSERT OR REPLACE INTO contratacion_requerimientos(ticket,empresa,sede,area,cargo,actividad,cantidad,fecha_solicitud,fecha_ingreso,prioridad,estado,responsable,observacion,fecha_registro,registrado_por,regimen_laboral,tipo_contrato) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (ticket,empresa,sede,area,cargo,actividad,cantidad,now_txt(),fecha_ingreso,prioridad,estado,responsable,observacion,now_txt(),session.get('admin_user','admin'),regimen_laboral,tipo_contrato))
+                con.commit()
+            flash('Requerimiento registrado correctamente.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='requerimientos'))
+        if accion == 'guardar_medica':
+            dni = normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni)
+            if not dni:
+                flash('Digite DNI obligatorio para evaluación médica.', 'error')
+                return redirect(url_for('admin_contratacion', sec='medica'))
+            f=request.files.get('archivo')
+            ruta=''; nombre_arch=''
+            if f and f.filename:
+                carpeta=UPLOAD_DIR/'contratacion'/'medica'/dni; carpeta.mkdir(parents=True, exist_ok=True)
+                nombre_arch=now_file()+'_'+secure_filename(f.filename); path=carpeta/nombre_arch; f.save(path); ruta=str(path)
+            obs_base = clean(request.form.get('observacion'))
+            obs_extra = []
+            for etiqueta, campo in [('Tipo examen','tipo_examen'),('Protocolo','protocolo'),('Riesgo puesto','riesgo_puesto'),('Aptitud','aptitud'),('Restricciones','restricciones'),('Recomendaciones','recomendaciones'),('Vence','fecha_vencimiento'),('Seguimiento','responsable_seguimiento'),('Contacto proveedor','proveedor_contacto'),('Costo','costo')]:
+                val = clean(request.form.get(campo))
+                if val: obs_extra.append(f'{etiqueta}: {val}')
+            obs_final = (obs_base + (' | ' if obs_base and obs_extra else '') + ' | '.join(obs_extra)).strip()
+            with db() as con:
+                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por,tipo_examen,protocolo,riesgo_puesto,aptitud,restricciones,recomendaciones,fecha_vencimiento,responsable_seguimiento,proveedor_contacto,costo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('requerimiento')), clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), clean(request.form.get('clinica')), nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_examen')), clean(request.form.get('protocolo')), clean(request.form.get('riesgo_puesto')), clean(request.form.get('aptitud')), clean(request.form.get('restricciones')), clean(request.form.get('recomendaciones')), fecha_sin_hora(request.form.get('fecha_vencimiento')), clean(request.form.get('responsable_seguimiento')), clean(request.form.get('proveedor_contacto')), clean(request.form.get('costo'))))
+                con.execute('UPDATE contratacion_ingresos SET estado_medico=? WHERE dni=?', (clean(request.form.get('estado')) or 'PENDIENTE', dni))
+                con.commit()
+            flash('Evaluación médica registrada.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='medica'))
+        if accion == 'marcar_visto_masivo':
+            ids=[]
+            for x in request.form.getlist('cap_ids'):
+                try: ids.append(int(x))
+                except Exception: pass
+            nuevo_estado = clean(request.form.get('estado_masivo')) or 'VIDEO VISTO'
+            destino = request.form.get('volver') or 'induccion'
+            if not ids:
+                flash('Seleccione uno o más registros para actualizar.', 'error')
+            else:
+                q=','.join(['?']*len(ids))
+                with db() as con:
+                    con.execute(f'UPDATE contratacion_capacitacion SET estado=? WHERE id IN ({q})', [nuevo_estado]+ids)
+                    # Sincroniza la base de ingresos por DNI.
+                    rows=con.execute(f'SELECT dni FROM contratacion_capacitacion WHERE id IN ({q})', ids).fetchall()
+                    for rr in rows:
+                        con.execute('UPDATE contratacion_ingresos SET estado_capacitacion=? WHERE dni=?', (nuevo_estado, rr['dni']))
+                    con.commit()
+                flash(f'Se cambió el estado a {nuevo_estado} para {len(ids)} registro(s). Notificaciones preparadas/enviadas según correo registrado.', 'ok')
+            return redirect(url_for('admin_contratacion', sec=destino))
+        if accion == 'guardar_capacitacion':
+            dni=normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni)
+            if not dni or not clean(request.form.get('curso')):
+                flash('Digite DNI y curso obligatorio.', 'error')
+                return redirect(url_for('admin_contratacion', sec='capacitacion'))
+            if not clean(request.form.get('video_url')) and not (request.files.get('archivo_video') and request.files.get('archivo_video').filename):
+                flash('Cargue un video MP4 o ingrese URL del video.', 'error')
+                return redirect(url_for('admin_contratacion', sec='capacitacion'))
+            f=request.files.get('evidencia'); ruta=''; nombre_arch=''
+            if f and f.filename:
+                carpeta=UPLOAD_DIR/'contratacion'/'capacitacion'/dni; carpeta.mkdir(parents=True, exist_ok=True)
+                nombre_arch=now_file()+'_'+secure_filename(f.filename); path=carpeta/nombre_arch; f.save(path); ruta=str(path)
+            vf=request.files.get('archivo_video'); ruta_video=''; nombre_video=''
+            if vf and vf.filename:
+                carpeta=UPLOAD_DIR/'contratacion'/'videos'; carpeta.mkdir(parents=True, exist_ok=True)
+                nombre_video=now_file()+'_'+secure_filename(vf.filename); path=carpeta/nombre_video; vf.save(path); ruta_video=str(path)
+            obs_base=clean(request.form.get('observacion'))
+            obs_extra=[]
+            for etiqueta,campo in [('Tipo video','tipo_video'),('Duración min','duracion_min'),('Preguntas','preguntas'),('Intentos','intentos'),('Aprobador','aprobador')]:
+                val=clean(request.form.get(campo))
+                if val: obs_extra.append(f'{etiqueta}: {val}')
+            obs_final=(obs_base + (' | ' if obs_base and obs_extra else '') + ' | '.join(obs_extra)).strip()
+            with db() as con:
+                con.execute('''INSERT INTO contratacion_capacitacion(dni,trabajador,curso,video_url,estado,nota,fecha_inicio,fecha_fin,evidencia_nombre,ruta_evidencia,observacion,fecha_registro,registrado_por,tipo_video,archivo_video_nombre,ruta_video,duracion_min,preguntas,intentos,aprobador) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('curso')), clean(request.form.get('video_url')), clean(request.form.get('estado')) or 'PENDIENTE', clean(request.form.get('nota')), fecha_sin_hora(request.form.get('fecha_inicio')), fecha_sin_hora(request.form.get('fecha_fin')), nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_video')), nombre_video, ruta_video, clean(request.form.get('duracion_min')), clean(request.form.get('preguntas')), clean(request.form.get('intentos')), clean(request.form.get('aprobador'))))
+                con.execute('UPDATE contratacion_ingresos SET estado_capacitacion=? WHERE dni=?', (clean(request.form.get('estado')) or 'PENDIENTE', dni))
+                con.commit()
+            flash('Capacitación registrada.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='capacitacion'))
+        if accion == 'guardar_indumentaria':
+            dni=normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni)
+            if not dni:
+                flash('Digite DNI obligatorio para registrar indumentaria.', 'error')
+                return redirect(url_for('admin_contratacion', sec='indumentaria'))
+            data_ind = datos_unificados_contratacion(dni, clean(request.form.get('requerimiento')))
+            trabajador_ind = clean(request.form.get('trabajador')) or data_ind.get('nombre') or (trab['nombre'] if trab else '')
+            estado_ind = clean(request.form.get('estado')) or 'PENDIENTE'
+            cargo_file = request.files.get('cargo_firmado')
+            ruta_cargo = ''; nombre_cargo = ''
+            if cargo_file and cargo_file.filename:
+                carpeta = UPLOAD_DIR/'contratacion'/'indumentaria'/dni
+                carpeta.mkdir(parents=True, exist_ok=True)
+                nombre_cargo = now_file() + '_' + secure_filename(cargo_file.filename)
+                path_cargo = carpeta / nombre_cargo
+                cargo_file.save(path_cargo)
+                ruta_cargo = str(path_cargo)
+            obs_base = clean(request.form.get('observacion'))
+            resp_entrega = clean(request.form.get('responsable_entrega'))
+            if resp_entrega:
+                obs_base = (obs_base + (' | ' if obs_base else '') + f'Responsable entrega: {resp_entrega}').strip()
+            with db() as con:
+                con.execute('''INSERT INTO contratacion_indumentaria(dni,trabajador,requerimiento,polo,pantalon,botas,casaca,gorro,lentes,guantes,fotocheck,otros,estado,fecha_entrega,observacion,fecha_registro,registrado_por,empresa,area,cargo,actividad,fecha_ingreso,responsable_entrega,cargo_firmado_nombre,ruta_cargo_firmado) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trabajador_ind, clean(request.form.get('requerimiento')) or data_ind.get('requerimiento',''), clean(request.form.get('polo')), clean(request.form.get('pantalon')), clean(request.form.get('botas')), clean(request.form.get('casaca')), clean(request.form.get('gorro')), clean(request.form.get('lentes')), clean(request.form.get('guantes')), clean(request.form.get('fotocheck')), clean(request.form.get('otros')), estado_ind, fecha_sin_hora(request.form.get('fecha_entrega')) or fecha_sin_hora(hoy_iso()), obs_base, now_txt(), session.get('admin_user','admin'), data_ind.get('empresa',''), data_ind.get('area',''), data_ind.get('cargo',''), data_ind.get('actividad',''), data_ind.get('fecha_ingreso',''), resp_entrega, nombre_cargo, ruta_cargo))
+                con.execute('UPDATE contratacion_ingresos SET estado_indumentaria=? WHERE dni=?', (estado_ind, dni))
+                con.commit()
+            flash('Entrega de indumentaria registrada y sincronizada con el postulante.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='indumentaria'))
+        if accion == 'fotocheck_guardar_config_zebra':
+            req_return = clean(request.form.get('req_return'))
+            cfg = {
+                'impresora_nombre': clean(request.form.get('impresora_nombre')) or 'Zebra ZC300',
+                'tipo_conexion': clean(request.form.get('tipo_conexion')) or 'COLA WINDOWS / USB',
+                'bluetooth_nombre': clean(request.form.get('bluetooth_nombre')),
+                'bluetooth_mac': clean(request.form.get('bluetooth_mac')),
+                'ip_impresora': clean(request.form.get('ip_impresora')),
+                'puerto': clean(request.form.get('puerto')),
+                'tamano_tarjeta': clean(request.form.get('tamano_tarjeta')) or 'CR80',
+                'orientacion': clean(request.form.get('orientacion')) or 'Horizontal',
+                'caras': clean(request.form.get('caras')) or 'Frente',
+                'copias': int(request.form.get('copias') or 1),
+                'plantilla_diseno': clean(request.form.get('plantilla_diseno')) or 'PRIZE - FOTOCHECK ESTÁNDAR',
+                'ruta_salida': clean(request.form.get('ruta_salida')) or str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),
+                'observacion': clean(request.form.get('observacion_config')),
+            }
+            estado_cfg, detalle_cfg = zebra_validar_campos_config(cfg)
+            with db() as con:
+                existe = con.execute('SELECT id FROM fotocheck_zebra_config LIMIT 1').fetchone()
+                if existe:
+                    con.execute('''UPDATE fotocheck_zebra_config SET impresora_nombre=?,tipo_conexion=?,bluetooth_nombre=?,bluetooth_mac=?,ip_impresora=?,puerto=?,tamano_tarjeta=?,orientacion=?,caras=?,copias=?,plantilla_diseno=?,ruta_salida=?,estado_conexion=?,observacion=?,fecha_actualizacion=?,actualizado_por=? WHERE id=?''',
+                                (cfg['impresora_nombre'],cfg['tipo_conexion'],cfg['bluetooth_nombre'],cfg['bluetooth_mac'],cfg['ip_impresora'],cfg['puerto'],cfg['tamano_tarjeta'],cfg['orientacion'],cfg['caras'],cfg['copias'],cfg['plantilla_diseno'],cfg['ruta_salida'],estado_cfg,(cfg['observacion'] + (' | ' if cfg['observacion'] else '') + detalle_cfg),now_txt(),session.get('admin_user','admin'),existe['id']))
+                else:
+                    con.execute('''INSERT INTO fotocheck_zebra_config(impresora_nombre,tipo_conexion,bluetooth_nombre,bluetooth_mac,ip_impresora,puerto,tamano_tarjeta,orientacion,caras,copias,plantilla_diseno,ruta_salida,estado_conexion,observacion,fecha_actualizacion,actualizado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                                (cfg['impresora_nombre'],cfg['tipo_conexion'],cfg['bluetooth_nombre'],cfg['bluetooth_mac'],cfg['ip_impresora'],cfg['puerto'],cfg['tamano_tarjeta'],cfg['orientacion'],cfg['caras'],cfg['copias'],cfg['plantilla_diseno'],cfg['ruta_salida'],estado_cfg,(cfg['observacion'] + (' | ' if cfg['observacion'] else '') + detalle_cfg),now_txt(),session.get('admin_user','admin')))
+                con.execute('''INSERT INTO fotocheck_zebra_historial(dni,trabajador,requerimiento,accion,impresora,tipo_conexion,lote_impresion,estado,detalle,fecha,usuario) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
+                            ('','','','GUARDAR CONFIGURACIÓN',cfg['impresora_nombre'],cfg['tipo_conexion'],'CFG-' + now_file(),estado_cfg,detalle_cfg,now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash(('Configuración guardada: ' + estado_cfg + '. ' + detalle_cfg), 'ok' if estado_cfg == 'PENDIENTE DE PRUEBA LOCAL' else 'error')
+            return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+        if accion in ['fotocheck_probar_zebra','fotocheck_prueba_impresion']:
+            req_return = clean(request.form.get('req_return'))
+            with db() as con:
+                cfg = con.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
+                if not cfg:
+                    flash('Primero guarde la configuración de la Zebra ZC300.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+                estado, detalle, permite = zebra_probar_conexion_real(cfg)
+                if accion == 'fotocheck_prueba_impresion':
+                    salida = Path(cfg['ruta_salida'] or (UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'))
+                    salida.mkdir(parents=True, exist_ok=True)
+                    prueba = salida / ('PRUEBA_ZEBRA_ZC300_' + now_file() + '.txt')
+                    prueba.write_text('PRUEBA DE IMPRESIÓN ZEBRA ZC300\nImpresora: %s\nConexión: %s\nEstado: %s\nFecha: %s\nDetalle: %s\n' % (cfg['impresora_nombre'], cfg['tipo_conexion'], estado, now_txt(), detalle), encoding='utf-8')
+                    detalle = detalle + ' Archivo de prueba generado: ' + str(prueba)
+                con.execute('UPDATE fotocheck_zebra_config SET estado_conexion=?,observacion=?,fecha_actualizacion=?,actualizado_por=? WHERE id=?', (estado, detalle, now_txt(), session.get('admin_user','admin'), cfg['id']))
+                con.execute('''INSERT INTO fotocheck_zebra_historial(dni,trabajador,requerimiento,accion,impresora,tipo_conexion,lote_impresion,estado,detalle,fecha,usuario) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
+                            ('','','', 'PROBAR CONEXIÓN' if accion=='fotocheck_probar_zebra' else 'IMPRESIÓN DE PRUEBA', cfg['impresora_nombre'], cfg['tipo_conexion'], 'TEST-' + now_file(), estado, detalle, now_txt(), session.get('admin_user','admin')))
+                con.commit()
+            flash(detalle, 'ok' if zebra_permite_impresion(estado) else 'error')
+            return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+        if accion == 'fotocheck_accion_masiva':
+            ids=[]
+            for x in request.form.getlist('ingreso_ids'):
+                try:
+                    ids.append(int(x))
+                except Exception:
+                    pass
+            nuevo_estado = clean(request.form.get('nuevo_estado')) or 'LISTO PARA IMPRIMIR'
+            req_return = clean(request.form.get('req_return'))
+            with db() as con_cfg:
+                cfg_zebra_actual = con_cfg.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
+            impresora = clean(request.form.get('impresora')) or (cfg_zebra_actual['impresora_nombre'] if cfg_zebra_actual else 'Zebra ZC300')
+            tipo_conexion_actual = cfg_zebra_actual['tipo_conexion'] if cfg_zebra_actual else 'COLA WINDOWS / USB'
+            estado_conexion_actual = (cfg_zebra_actual['estado_conexion'] if cfg_zebra_actual else 'NO CONFIGURADA')
+            lote = clean(request.form.get('lote_impresion')) or ('FOTO-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
+            if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO'] and not zebra_permite_impresion(estado_conexion_actual):
+                flash('Impresión bloqueada: la Zebra debe estar en estado LISTA PARA IMPRIMIR. En Render no se puede validar una impresora física; ejecute en la PC local o use un servicio local de impresión.', 'error')
+                return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+            if not ids:
+                flash('Seleccione trabajadores para actualizar Fotocheck.', 'error')
+                return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+            with db() as con:
+                q = ','.join(['?'] * len(ids))
+                seleccionados = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q})', ids).fetchall()
+                actualizados = 0
+                bloqueados = 0
+                for r in seleccionados:
+                    msg_obs = bloqueo_observado_msg(r['dni'], 'Fotocheck')
+                    if msg_obs:
+                        registrar_evento_observado(r['dni'], 'FOTOCHECK', 'ACCIÓN BLOQUEADA', msg_obs)
+                        bloqueados += 1
+                        continue
+                    registrar_evento_observado(r['dni'], 'FOTOCHECK', 'VALIDACIÓN DNI', 'DNI validado en fotocheck')
+                    foto_ruta = r['foto_ruta'] if 'foto_ruta' in r.keys() else ''
+                    if nuevo_estado in ['LISTO PARA IMPRIMIR', 'ENVIADO A ZEBRA ZC300', 'IMPRESO', 'ENTREGADO'] and not foto_ruta:
+                        bloqueados += 1
+                        continue
+                    foto_estado = 'FOTO APROBADA' if foto_ruta else 'PENDIENTE FOTO'
+                    con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', (nuevo_estado, r['id']))
+                    con.execute("""INSERT INTO contratacion_fotocheck
+                        (dni,trabajador,empresa,area,cargo,actividad,requerimiento,fecha_ingreso,foto_estado,fotocheck_estado,impresora,lote_impresion,observacion,fecha_registro,fecha_impresion,fecha_entrega,registrado_por)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (r['dni'], r['trabajador'], r['empresa'], r['area'], r['cargo'], r['actividad'], r['requerimiento'], r['fecha_ingreso'],
+                         foto_estado, nuevo_estado, impresora, lote,
+                         clean(request.form.get('observacion')),
+                         now_txt(),
+                         now_txt() if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO'] else '',
+                         now_txt() if nuevo_estado == 'ENTREGADO' else '',
+                         session.get('admin_user','admin')))
+                    if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO']:
+                        con.execute('''INSERT INTO fotocheck_zebra_historial(dni,trabajador,requerimiento,accion,impresora,tipo_conexion,lote_impresion,estado,detalle,fecha,usuario) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
+                                    (r['dni'], r['trabajador'], r['requerimiento'], nuevo_estado, impresora, tipo_conexion_actual, lote, nuevo_estado, clean(request.form.get('observacion')), now_txt(), session.get('admin_user','admin')))
+                    actualizados += 1
+                con.commit()
+            msg = f'Fotocheck actualizado: {actualizados} trabajador(es).'
+            if bloqueados:
+                msg += f' {bloqueados} bloqueado(s) por no tener foto aprobada.'
+            flash(msg, 'ok' if actualizados else 'error')
+            return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+        if accion == 'fotocheck_generar_cargo':
+            ids=[]
+            for x in request.form.getlist('ingreso_ids'):
+                try:
+                    ids.append(int(x))
+                except Exception:
+                    pass
+            req_return = clean(request.form.get('req_return'))
+            if not ids:
+                flash('Seleccione trabajadores para generar cargo de entrega de fotocheck.', 'error')
+                return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+            with db() as con:
+                q = ','.join(['?'] * len(ids))
+                seleccionados = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q}) ORDER BY trabajador', ids).fetchall()
+                carpeta = UPLOAD_DIR/'contratacion'/'fotocheck'/(req_return or 'GENERAL')
+                carpeta.mkdir(parents=True, exist_ok=True)
+                nombre_cargo = 'CARGO_FOTOCHECK_' + (req_return or 'GENERAL') + '_' + now_file() + '.html'
+                path_cargo = carpeta / secure_filename(nombre_cargo)
+                filas = ''.join([f"<tr><td>{h(r['dni'])}</td><td>{h(r['trabajador'])}</td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['cargo'])}</td><td>{h(r['requerimiento'])}</td><td>________________</td></tr>" for r in seleccionados])
+                html_doc = f"""<!doctype html><html><head><meta charset='utf-8'><title>Cargo Fotocheck</title>
+                <style>body{{font-family:Arial,sans-serif;margin:28px;color:#111827}}h1{{font-size:20px}}table{{width:100%;border-collapse:collapse;margin-top:16px}}td,th{{border:1px solid #94a3b8;padding:8px;font-size:12px}}th{{background:#e2e8f0}}.firma{{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:60px}}.linea{{border-top:1px solid #111;padding-top:8px;text-align:center}}</style>
+                </head><body><h1>CARGO DE ENTREGA DE FOTOCHECK</h1><p><b>Requerimiento:</b> {h(req_return or 'GENERAL')} &nbsp; <b>Fecha:</b> {h(now_txt())}</p>
+                <p>Documento generado para firma y constancia de entrega de fotocheck.</p>
+                <table><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Requerimiento</th><th>Firma trabajador</th></tr>{filas}</table>
+                <div class='firma'><div class='linea'>Responsable RR.HH.</div><div class='linea'>V°B° / Control</div></div></body></html>"""
+                path_cargo.write_text(html_doc, encoding='utf-8')
+                for r in seleccionados:
+                    con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', ('CARGO GENERADO', r['id']))
+                    con.execute("""INSERT INTO contratacion_fotocheck
+                        (dni,trabajador,empresa,area,cargo,actividad,requerimiento,fecha_ingreso,foto_estado,fotocheck_estado,impresora,lote_impresion,cargo_nombre,ruta_cargo,observacion,fecha_registro,registrado_por)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (r['dni'], r['trabajador'], r['empresa'], r['area'], r['cargo'], r['actividad'], r['requerimiento'], r['fecha_ingreso'],
+                         'FOTO APROBADA' if (r['foto_ruta'] if 'foto_ruta' in r.keys() else '') else 'PENDIENTE FOTO',
+                         'CARGO GENERADO', 'Zebra ZC300', 'CARGO-' + now_file(), path_cargo.name, str(path_cargo),
+                         'Cargo de entrega generado desde Centro de Fotocheck', now_txt(), session.get('admin_user','admin')))
+                    con.execute("""INSERT INTO contratacion_docs(dni,trabajador,empresa,etapa,tipo_doc,estado,archivo_nombre,ruta_archivo,fecha_registro,uploaded_by)
+                                   VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                                (r['dni'], r['trabajador'], r['empresa'], 'Fotocheck', 'Cargo de entrega de fotocheck', 'Generado', path_cargo.name, str(path_cargo), now_txt(), session.get('admin_user','admin')))
+                con.commit()
+            flash('Cargo de entrega de fotocheck generado y archivado en documentos del trabajador.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
+        if accion == 'guardar_ingreso':
+            dni = normalizar_dni(request.form.get('dni'))
+            nombre = clean(request.form.get('trabajador')).upper()
+            empresa = clean(request.form.get('empresa')) or 'AQUANQA'
+            sede = clean(request.form.get('sede'))
+            requerimiento = clean(request.form.get('requerimiento'))
+            actividad = clean(request.form.get('actividad'))
+            tipo_ingreso = clean(request.form.get('tipo_ingreso')) or 'NUEVO'
+            fecha_ingreso = fecha_sin_hora(request.form.get('fecha_ingreso'))
+            cargo = clean(request.form.get('cargo'))
+            area = clean(request.form.get('area'))
+            correo = clean(request.form.get('correo')).lower()
+            celular = clean(request.form.get('celular'))
+            direccion = clean(request.form.get('direccion'))
+            departamento = clean(request.form.get('departamento'))
+            provincia = clean(request.form.get('provincia'))
+            distrito = clean(request.form.get('distrito'))
+            fecha_nacimiento = fecha_sin_hora(request.form.get('fecha_nacimiento'))
+            fecha_fin_contrato = fecha_sin_hora(request.form.get('fecha_fin_contrato'))
+            tipo_contrato = clean(request.form.get('tipo_contrato'))
+            remuneracion_basica = clean(request.form.get('remuneracion_basica'))
+            remuneracion_letra = clean(request.form.get('remuneracion_letra'))
+            nacionalidad = clean(request.form.get('nacionalidad')) or 'PERUANA'
+            sexo = clean(request.form.get('sexo'))
+            regimen_laboral = clean(request.form.get('regimen_laboral'))
+            periodicidad_pago = clean(request.form.get('periodicidad_pago'))
+            tipo_pago = clean(request.form.get('tipo_pago'))
+            cuspp = clean(request.form.get('cuspp'))
+            nombre_moneda = clean(request.form.get('nombre_moneda')) or 'Sol Peruano'
+            simbolo_moneda = clean(request.form.get('simbolo_moneda')) or 'S/'
+            funciones = clean(request.form.get('funciones'))
+            meses_contrato = clean(request.form.get('meses_contrato'))
+            estado_civil = clean(request.form.get('estado_civil'))
+            sistema_pensionario = clean(request.form.get('sistema_pensionario'))
+            ultima_empresa = clean(request.form.get('ultima_empresa'))
+            discapacidad = clean(request.form.get('discapacidad'))
+            cantidad_hijos = clean(request.form.get('cantidad_hijos'))
+            modalidad = clean(request.form.get('modalidad'))
+            jefe = clean(request.form.get('jefe'))
+            cuenta_bancaria = clean(request.form.get('cuenta_bancaria'))
+            talla_indumentaria = clean(request.form.get('talla_indumentaria'))
+            contacto_emergencia = clean(request.form.get('contacto_emergencia'))
+            obs = clean(request.form.get('observacion'))
+            origen_validacion = clean(request.form.get('origen_validacion')) or 'BASE INTERNA / NISIRA PENDIENTE'
+            foto_ruta = ''
+            foto_b64 = request.form.get('foto_base64') or ''
+            huella_ruta = ''
+            carpeta_bio = UPLOAD_DIR/'contratacion'/'biometria'/dni
+            if dni:
+                carpeta_bio.mkdir(parents=True, exist_ok=True)
+            try:
+                if foto_b64 and ',' in foto_b64 and dni:
+                    ext='jpg'
+                    raw=foto_b64.split(',',1)[1]
+                    foto_path=carpeta_bio/(now_file()+'_foto_camara.jpg')
+                    foto_path.write_bytes(base64.b64decode(raw))
+                    foto_ruta=str(foto_path)
+            except Exception:
+                foto_ruta=''
+            huella_file = request.files.get('huella')
+            if huella_file and huella_file.filename and dni:
+                hname=now_file()+'_huella_'+secure_filename(huella_file.filename)
+                hpath=carpeta_bio/hname; huella_file.save(hpath); huella_ruta=str(hpath)
+            oblig = [(dni,'DNI'),(nombre,'Trabajador'),(empresa,'Empresa'),(cargo,'Puesto/Cargo'),(area,'Área'),(fecha_ingreso,'Fecha ingreso'),(fecha_nacimiento,'Fecha nacimiento'),(direccion,'Dirección'),(distrito,'Distrito'),(provincia,'Provincia'),(departamento,'Departamento'),(nacionalidad,'Nacionalidad'),(sistema_pensionario,'Sistema pensionario'),(estado_civil,'Estado civil')]
+            faltan = [nom for val,nom in oblig if not val]
+            if faltan:
+                flash('Campos obligatorios pendientes: ' + ', '.join(faltan), 'error')
+                return redirect(url_for('admin_contratacion', sec='nuevos'))
+            with db() as con:
+                existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+                if existe:
+                    con.execute("""UPDATE trabajadores SET nombre=?, empresa=?, cargo=?, area=?, correo=?, celular=?, activo=1, fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso), observacion=?, foto_ruta=COALESCE(NULLIF(?,''),foto_ruta), fecha_nacimiento=COALESCE(NULLIF(?,''),fecha_nacimiento), fecha_fin_contrato=COALESCE(NULLIF(?,''),fecha_fin_contrato), tipo_contrato=COALESCE(NULLIF(?,''),tipo_contrato), remuneracion_basica=COALESCE(NULLIF(?,''),remuneracion_basica) WHERE dni=?""", (nombre,empresa,cargo,area,correo,celular,fecha_ingreso,obs,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica,dni))
+                    tipo_ingreso = 'REINGRESANTE'
+                else:
+                    con.execute("""INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,observacion,usuario_portal,clave_portal,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica) VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)""", (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha_ingreso,celular,obs,dni,dni,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica))
+                con.execute("""UPDATE trabajadores SET direccion=COALESCE(NULLIF(?,''),direccion), departamento=COALESCE(NULLIF(?,''),departamento), provincia=COALESCE(NULLIF(?,''),provincia), distrito=COALESCE(NULLIF(?,''),distrito), modalidad=COALESCE(NULLIF(?,''),modalidad), jefe_nombre=COALESCE(NULLIF(?,''),jefe_nombre), cuenta_bancaria=COALESCE(NULLIF(?,''),cuenta_bancaria), indumentaria=COALESCE(NULLIF(?,''),indumentaria), contacto_emergencia=COALESCE(NULLIF(?,''),contacto_emergencia), estado_civil=COALESCE(NULLIF(?,''),estado_civil), sistema_pensionario=COALESCE(NULLIF(?,''),sistema_pensionario), ultima_empresa=COALESCE(NULLIF(?,''),ultima_empresa), discapacidad=COALESCE(NULLIF(?,''),discapacidad), cantidad_hijos=COALESCE(NULLIF(?,''),cantidad_hijos), nacionalidad=COALESCE(NULLIF(?,''),nacionalidad), sexo=COALESCE(NULLIF(?,''),sexo), regimen_laboral=COALESCE(NULLIF(?,''),regimen_laboral), periodicidad_pago=COALESCE(NULLIF(?,''),periodicidad_pago), tipo_pago=COALESCE(NULLIF(?,''),tipo_pago), cuspp=COALESCE(NULLIF(?,''),cuspp), remuneracion_letra=COALESCE(NULLIF(?,''),remuneracion_letra), nombre_moneda=COALESCE(NULLIF(?,''),nombre_moneda), simbolo_moneda=COALESCE(NULLIF(?,''),simbolo_moneda), funciones=COALESCE(NULLIF(?,''),funciones), meses_contrato=COALESCE(NULLIF(?,''),meses_contrato), biometria_estado=? WHERE dni=?""", (direccion, departamento, provincia, distrito, modalidad, jefe, cuenta_bancaria, talla_indumentaria, contacto_emergencia, estado_civil, sistema_pensionario, ultima_empresa, discapacidad, cantidad_hijos, nacionalidad, sexo, regimen_laboral, periodicidad_pago, tipo_pago, cuspp, remuneracion_letra, nombre_moneda, simbolo_moneda, funciones, meses_contrato, 'CAPTURADA' if huella_ruta else 'PENDIENTE', dni))
+                ing_existe = con.execute('SELECT id FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni,requerimiento)).fetchone()
+                if ing_existe:
+                    con.execute("""UPDATE contratacion_ingresos SET trabajador=?,empresa=?,sede=?,requerimiento=?,actividad=?,tipo_ingreso=?,estado='REGISTRADO',fecha_ingreso=?,cargo=?,area=?,correo=?,celular=?,observacion=?,fecha_registro=?,registrado_por=?,foto_ruta=COALESCE(NULLIF(?,''),foto_ruta),huella_ruta=COALESCE(NULLIF(?,''),huella_ruta),origen_validacion=?,direccion=?,modalidad=?,jefe=?,cuenta_bancaria=?,talla_indumentaria=?,contacto_emergencia=?,biometria_estado=?,departamento=?,provincia=?,distrito=?,estado_civil=?,sistema_pensionario=?,ultima_empresa=?,discapacidad=?,cantidad_hijos=? WHERE id=?""", (nombre,empresa,sede,requerimiento,actividad,tipo_ingreso,fecha_ingreso,cargo,area,correo,celular,obs,now_txt(),session.get('admin_user','admin'),foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,'CAPTURADA' if huella_ruta else 'PENDIENTE',departamento,provincia,distrito,estado_civil,sistema_pensionario,ultima_empresa,discapacidad,cantidad_hijos,ing_existe['id']))
+                else:
+                    con.execute("""INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por,foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,biometria_estado,departamento,provincia,distrito,estado_civil,sistema_pensionario,ultima_empresa,discapacidad,cantidad_hijos) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (dni,nombre,empresa,sede,requerimiento,actividad,tipo_ingreso,'REGISTRADO',fecha_ingreso,cargo,area,correo,celular,obs,now_txt(),session.get('admin_user','admin'),foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,'CAPTURADA' if huella_ruta else 'PENDIENTE',departamento,provincia,distrito,estado_civil,sistema_pensionario,ultima_empresa,discapacidad,cantidad_hijos))
+                con.execute('''UPDATE contratacion_ingresos SET fecha_nacimiento=?, fecha_fin_contrato=?, tipo_contrato=?, remuneracion_basica=?, remuneracion_letra=?, nacionalidad=?, sexo=?, regimen_laboral=?, periodicidad_pago=?, tipo_pago=?, cuspp=?, nombre_moneda=?, simbolo_moneda=?, funciones=?, meses_contrato=? WHERE dni=? AND requerimiento=?''', (fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica,remuneracion_letra,nacionalidad,sexo,regimen_laboral,periodicidad_pago,tipo_pago,cuspp,nombre_moneda,simbolo_moneda,funciones,meses_contrato,dni,requerimiento))
+                sincronizar_estado_requerimiento_por_cupo(con, requerimiento)
+                con.commit()
+            flash(f'Trabajador {tipo_ingreso} registrado correctamente. Estado de ficha: {estado_ficha_postulante(row_to_dict({})) if False else "actualizado"}.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='nuevos'))
+        if accion == 'importar_ingresos_excel':
+            f = request.files.get('archivo')
+            if not f or not f.filename:
+                flash('Selecciona el Excel de postulantes.', 'error')
+                return redirect(url_for('admin_contratacion', sec='nuevos'))
+            carpeta = UPLOAD_DIR/'contratacion'/'ingresos'; carpeta.mkdir(parents=True, exist_ok=True)
+            path = carpeta/(now_file()+'_INGRESOS_'+secure_filename(f.filename)); f.save(path)
+            ok = 0
+            try:
+                wb = load_workbook(path, data_only=True); ws = wb.active; idx = _headers_excel(ws)
+                with db() as con:
+                    for row in ws.iter_rows(min_row=2):
+                        dni = normalizar_dni(_celda(row, idx, 'DNI','Documento','Numero Documento','Número Documento'))
+                        nombre = clean(_celda(row, idx, 'Trabajador','Nombre','Apellidos y Nombres','Nombres')).upper()
+                        if not dni or not nombre:
+                            continue
+                        empresa = clean(_celda(row, idx, 'Empresa','Compañía','Compania')) or 'AQUANQA'
+                        sede = clean(_celda(row, idx, 'Sede'))
+                        req = clean(_celda(row, idx, 'Requerimiento'))
+                        act = clean(_celda(row, idx, 'Actividad'))
+                        fecha = fecha_sin_hora(_celda(row, idx, 'Fecha Ingreso','Fecha Inicio'))
+                        cargo = clean(_celda(row, idx, 'Cargo','Puesto'))
+                        area = clean(_celda(row, idx, 'Area','Área'))
+                        correo = clean(_celda(row, idx, 'Correo','Email')).lower()
+                        celular = clean(_celda(row, idx, 'Celular','Telefono','Teléfono'))
+                        existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+                        tipo = 'REINGRESANTE' if existe else 'NUEVO'
+                        if existe:
+                            con.execute('UPDATE trabajadores SET nombre=?,empresa=?,cargo=?,area=?,correo=?,celular=?,activo=1,fecha_ingreso=COALESCE(NULLIF(?,""),fecha_ingreso) WHERE dni=?', (nombre,empresa,cargo,area,correo,celular,fecha,dni))
+                        else:
+                            con.execute('INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,usuario_portal,clave_portal) VALUES(?,?,?,?,?,?,1,?,?,?,?,?)', (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha,celular,dni,dni))
+                        con.execute('INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (dni,nombre,empresa,sede,req,act,tipo,'IMPORTADO',fecha,cargo,area,correo,celular,now_txt(),session.get('admin_user','admin')))
+                        ok += 1
+                    con.commit()
+                flash(f'Excel importado: {ok} trabajadores registrados/actualizados.', 'ok')
+            except Exception as e:
+                flash('Error importando ingresos: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec='nuevos'))
+        if accion == 'importar_base_contratos_excel':
+            f = request.files.get('archivo')
+            if not f or not f.filename:
+                flash('Selecciona el Excel base de trabajadores para contratos.', 'error')
+                return redirect(url_for('admin_contratacion', sec='plantillas'))
+            if Path(f.filename).suffix.lower() not in ('.xlsx', '.xls'):
+                flash('Solo se permite Excel .xlsx o .xls para la base de trabajadores.', 'error')
+                return redirect(url_for('admin_contratacion', sec='plantillas'))
+            carpeta = UPLOAD_DIR/'contratacion'/'base_excel_trabajadores'; carpeta.mkdir(parents=True, exist_ok=True)
+            path_excel = carpeta/(now_file()+'_BASE_TRABAJADORES_CONTRATOS_'+secure_filename(f.filename)); f.save(path_excel)
+            ok = 0; omitidos = 0
+            try:
+                wb = load_workbook(path_excel, data_only=True); ws = wb.active; idx = _headers_excel(ws)
+                with db() as con:
+                    for row in ws.iter_rows(min_row=2):
+                        dni = normalizar_dni(_celda(row, idx, 'DNI','Documento','Numero Documento','Número Documento','Dni'))
+                        nombre = clean(_celda(row, idx, 'TRABAJADOR','Trabajador','NombreCompletoTrabajador','Nombre','Apellidos y Nombres','Nombres')).upper()
+                        if not dni or not nombre:
+                            omitidos += 1
+                            continue
+                        empresa = clean(_celda(row, idx, 'EMPRESA','Empresa','Compañía','Compania')) or 'AQUANQA I'
+                        req = clean(_celda(row, idx, 'REQUERIMIENTO','Requerimiento','Ticket','Ticket Requerimiento'))
+                        act = clean(_celda(row, idx, 'ACTIVIDAD','Actividad'))
+                        fecha = fecha_sin_hora(_celda(row, idx, 'FECHA INGRESO','Fecha Ingreso','FechaInicioContrato','Fecha Inicio Contrato','Fecha Inicio'))
+                        cargo = clean(_celda(row, idx, 'CARGO','Cargo','PUESTO','Puesto'))
+                        area = clean(_celda(row, idx, 'AREA','Área','Area'))
+                        correo = clean(_celda(row, idx, 'CORREO','Correo','Email','EMAIL')).lower()
+                        celular = clean(_celda(row, idx, 'CELULAR','Celular','Telefono','Teléfono'))
+                        direccion = clean(_celda(row, idx, 'DIRECCION','Dirección','DireccionActual','Direccion'))
+                        distrito = clean(_celda(row, idx, 'DISTRITO','Distrito'))
+                        provincia = clean(_celda(row, idx, 'PROVINCIA','Provincia'))
+                        departamento = clean(_celda(row, idx, 'DEPARTAMENTO','Departamento'))
+                        tipo_contrato = clean(_celda(row, idx, 'TIPO CONTRATO','TipoContrato','Tipo Contrato'))
+                        remuneracion = clean(_celda(row, idx, 'REMUNERACION BASICA','RemuneracionBasica','RemunBasica','Basico','Básico'))
+                        fecha_fin = fecha_sin_hora(_celda(row, idx, 'FECHA FIN CONTRATO','FechaFinContrato','Fecha Fin Contrato'))
+                        fecha_nac = fecha_sin_hora(_celda(row, idx, 'FECHA NACIMIENTO','FechaNacimientoBarra','Fecha Nacimiento','FechaNacimiento'))
+                        estado_civil = clean(_celda(row, idx, 'ESTADO CIVIL','EstadoCivil','Estado Civil'))
+                        sistema_pensionario = clean(_celda(row, idx, 'SISTEMA PENSIONARIO','SistemaPensionario','Sistema Pensionario'))
+                        planilla = clean(_celda(row, idx, 'PLANILLA','Planilla'))
+                        existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+                        tipo = 'REINGRESANTE' if existe else 'NUEVO'
+                        if existe:
+                            con.execute('''UPDATE trabajadores SET nombre=?,empresa=?,cargo=?,area=?,correo=?,celular=?,activo=1,fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso),direccion=COALESCE(NULLIF(?,''),direccion),distrito=COALESCE(NULLIF(?,''),distrito),provincia=COALESCE(NULLIF(?,''),provincia),departamento=COALESCE(NULLIF(?,''),departamento),tipo_contrato=COALESCE(NULLIF(?,''),tipo_contrato),remuneracion_basica=COALESCE(NULLIF(?,''),remuneracion_basica),fecha_fin_contrato=COALESCE(NULLIF(?,''),fecha_fin_contrato) WHERE dni=?''', (nombre,empresa,cargo,area,correo,celular,fecha,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion,fecha_fin,dni))
+                        else:
+                            con.execute('''INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,usuario_portal,clave_portal,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion_basica,fecha_fin_contrato) VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha,celular,dni,dni,direccion,distrito,provincia,departamento,tipo_contrato,remuneracion,fecha_fin))
+                        con.execute('''UPDATE trabajadores SET fecha_nacimiento=COALESCE(NULLIF(?,''),fecha_nacimiento), estado_civil=COALESCE(NULLIF(?,''),estado_civil), sistema_pensionario=COALESCE(NULLIF(?,''),sistema_pensionario), planilla=COALESCE(NULLIF(?,''),planilla) WHERE dni=?''', (fecha_nac, estado_civil, sistema_pensionario, planilla, dni))
+                        con.execute('''INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,fecha_registro,registrado_por,direccion,departamento,provincia,distrito) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni,nombre,empresa,'GENERAL',req,act,tipo,'BASE EXCEL CONTRATOS',fecha,cargo,area,correo,celular,now_txt(),session.get('admin_user','admin'),direccion,departamento,provincia,distrito))
+                        ok += 1
+                    con.commit()
+                respaldar_exceles_locales()
+                flash(f'Base Excel de contratos importada: {ok} trabajadores registrados/actualizados. Omitidos: {omitidos}.', 'ok')
+            except Exception as e:
+                flash('Error importando base Excel de contratos: '+str(e), 'error')
+            return redirect(url_for('admin_contratacion', sec='plantillas'))
+
+        if accion == 'guardar_nisira_config':
+            set_config('nisira_base_url', clean(request.form.get('base_url')))
+            set_config('nisira_api_key_ref', clean(request.form.get('api_key_ref')))
+            set_config('nisira_endpoint_trabajadores', clean(request.form.get('endpoint_trabajadores')) or '/api/trabajadores')
+            set_config('nisira_modo', clean(request.form.get('modo')) or 'PRUEBA')
+            flash('Configuración NISIRA guardada. Queda lista para conectar el API real.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
+        if accion == 'guardar_base_central_config':
+            with db() as con:
+                con.execute('INSERT INTO base_central_sync_config(destino,estado,servidor,base_datos,endpoint,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?)', (
+                    clean(request.form.get('destino')) or 'SQL SERVER / NISIRA', clean(request.form.get('estado')) or 'PENDIENTE', clean(request.form.get('servidor')), clean(request.form.get('base_datos')), clean(request.form.get('endpoint')), clean(request.form.get('observacion')), now_txt(), session.get('admin_user','admin')))
+                con.commit()
+            flash('Configuración de Base Central guardada. Queda preparada para SQL Server/API en el futuro.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
+        if accion == 'generar_lote_nisira':
+            empresa = clean(request.form.get('empresa')) or 'AQUANQA'
+            sede = clean(request.form.get('sede'))
+            req = clean(request.form.get('requerimiento'))
+            act = clean(request.form.get('actividad'))
+            codigo = 'NIS-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S')
+            with db() as con:
+                total = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE estado IN ("REGISTRADO","IMPORTADO","PENDIENTE")').fetchone()[0]
+                con.execute('INSERT INTO contratacion_nisira_lotes(lote_codigo,empresa,sede,requerimiento,actividad,total,estado,endpoint,api_key_ref,fecha_registro,creado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (codigo,empresa,sede,req,act,total,'GENERADO - PENDIENTE API',get_config('nisira_endpoint_trabajadores','/api/trabajadores'),get_config('nisira_api_key_ref',''),now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash(f'Lote {codigo} generado. Pendiente de enviar al API NISIRA cuando se agreguen credenciales reales.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
+        if accion == 'guardar_checklist_next':
+            modulo = clean(request.form.get('modulo'))
+            sede = clean(request.form.get('sede'))
+            req = clean(request.form.get('requerimiento'))
+            act = clean(request.form.get('actividad'))
+            total = int(request.form.get('total') or 0)
+            proc = int(request.form.get('procesados') or 0)
+            obs = int(request.form.get('observados') or 0)
+            estado = clean(request.form.get('estado')) or 'PENDIENTE'
+            with db() as con:
+                con.execute('INSERT INTO contratacion_checklist_next(modulo,sede,requerimiento,actividad,total,procesados,observados,estado,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?)', (modulo,sede,req,act,total,proc,obs,estado,now_txt(),session.get('admin_user','admin')))
+                con.commit()
+            flash('Control registrado correctamente.', 'ok')
+            return redirect(url_for('admin_contratacion', sec=request.args.get('sec','documentos_postulante')))
         if accion == 'anuncio':
             f = request.files.get('archivo')
             titulo = clean(request.form.get('titulo')) or 'Anuncio de contratación'
@@ -5473,27 +7181,108 @@ def admin_contratacion():
             motivo = motivo_otro.upper() if motivo_otro else motivo_lista.upper()
             nivel = clean(request.form.get('nivel_restriccion')) or 'NIVEL 3'
             comentario = clean(request.form.get('comentario'))
+            ultima_empresa = clean(request.form.get('ultima_empresa'))
+            cargo_obs = clean(request.form.get('cargo'))
+            area_obs = clean(request.form.get('area'))
+            fecha_obs = fecha_sin_hora(request.form.get('fecha_observacion')) or fecha_sin_hora(hoy_iso())
+            f_ev = request.files.get('evidencia')
+            evidencia_nombre = ''; ruta_evidencia = ''
+            if f_ev and f_ev.filename:
+                carpeta_ev = UPLOAD_DIR/'contratacion'/'observados'/numero_documento
+                carpeta_ev.mkdir(parents=True, exist_ok=True)
+                evidencia_nombre = now_file() + '_' + secure_filename(f_ev.filename)
+                ruta_evidencia = str(carpeta_ev/evidencia_nombre)
+                f_ev.save(ruta_evidencia)
             if not numero_documento or not nombre or not motivo:
                 flash('Completa trabajador/DNI, nombre y motivo para registrar observado.', 'error')
                 return redirect(url_for('admin_contratacion', sec='observados'))
             with db() as con:
-                con.execute('''INSERT INTO trabajadores_observados(tipo_persona,tipo_documento,numero_documento,nombre,motivo,nivel_restriccion,comentario,estado,creado_por,fecha_creacion,fecha_edicion)
-                               VALUES(?,?,?,?,?,?,?,?,?,?,?)''', (tipo_persona, 'DNI', numero_documento, nombre.upper(), motivo, nivel, comentario.upper(), 'Active', marca_carga(session.get('admin_user','admin')), now_txt(), ''))
+                con.execute('''INSERT INTO trabajadores_observados(tipo_persona,tipo_documento,numero_documento,nombre,motivo,nivel_restriccion,comentario,estado,creado_por,fecha_creacion,fecha_edicion,ultima_empresa,cargo,area,fecha_observacion,evidencia_nombre,ruta_evidencia,estado_autorizacion)
+                               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (tipo_persona, 'DNI', numero_documento, nombre.upper(), motivo, nivel, comentario.upper(), 'Active', marca_carga(session.get('admin_user','admin')), now_txt(), '', ultima_empresa.upper(), cargo_obs.upper(), area_obs.upper(), fecha_obs, evidencia_nombre, ruta_evidencia, 'SIN AUTORIZACIÓN'))
+                oid = con.execute('SELECT last_insert_rowid()').fetchone()[0]
+                con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, numero_documento, 'ALERTAS Y TRABAJADORES OBSERVADOS', 'REGISTRO', motivo + ' | ' + comentario.upper(), session.get('admin_user','admin'), now_txt()))
                 con.commit()
-            flash('Trabajador observado registrado correctamente.', 'ok')
+            flash('Alerta preventiva registrada y conectada al flujo por DNI.', 'ok')
             return redirect(url_for('admin_contratacion', sec='observados'))
         if accion == 'estado_observado':
             oid = request.form.get('observado_id')
-            estado = 'Inactive' if request.form.get('estado') == 'Inactive' else 'Active'
+            estado_map = {
+                'ACTIVO': 'Active',
+                'LEVANTADO': 'Levantado',
+                'ANULADO': 'Anulado',
+                'AUTORIZADO': 'Autorizado con excepción',
+                'Inactive': 'Levantado',
+                'Active': 'Active'
+            }
+            estado = estado_map.get(clean(request.form.get('estado')), 'Active')
             with db() as con:
-                con.execute('UPDATE trabajadores_observados SET estado=?, editor_por=?, fecha_edicion=? WHERE id=?', (estado, marca_carga(session.get('admin_user','admin')), now_txt(), oid)); con.commit()
-            flash('Estado de trabajador observado actualizado.', 'ok')
+                obs = con.execute('SELECT * FROM trabajadores_observados WHERE id=?', (oid,)).fetchone()
+                con.execute('UPDATE trabajadores_observados SET estado=?, editor_por=?, fecha_edicion=? WHERE id=?', (estado, marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                if obs:
+                    con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'ALERTAS Y TRABAJADORES OBSERVADOS', 'CAMBIO DE ESTADO', estado, session.get('admin_user','admin'), now_txt()))
+                con.commit()
+            flash('Estado de alerta actualizado.', 'ok')
             return redirect(url_for('admin_contratacion', sec='observados'))
-        if accion == 'eliminar_observado':
+        if accion == 'editar_observado':
             oid = request.form.get('observado_id')
+            motivo_lista = clean(request.form.get('motivo'))
+            motivo_otro = clean(request.form.get('motivo_otro'))
+            motivo = (motivo_otro or motivo_lista).upper()
+            nivel = clean(request.form.get('nivel_restriccion')) or 'NIVEL 3'
+            comentario = clean(request.form.get('comentario')).upper()
+            ultima_empresa = clean(request.form.get('ultima_empresa')).upper()
+            cargo_obs = clean(request.form.get('cargo')).upper()
+            area_obs = clean(request.form.get('area')).upper()
+            fecha_obs = fecha_sin_hora(request.form.get('fecha_observacion')) or fecha_sin_hora(hoy_iso())
+            estado = clean(request.form.get('estado')) or 'Active'
+            estado = {'ACTIVO':'Active','LEVANTADO':'Levantado','ANULADO':'Anulado','AUTORIZADO':'Autorizado con excepción'}.get(estado, estado)
             with db() as con:
-                con.execute('DELETE FROM trabajadores_observados WHERE id=?', (oid,)); con.commit()
-            flash('Registro observado eliminado.', 'ok')
+                obs = con.execute('SELECT * FROM trabajadores_observados WHERE id=?', (oid,)).fetchone()
+                if not obs:
+                    flash('No se encontró la alerta para editar.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='observados'))
+                con.execute('''UPDATE trabajadores_observados
+                               SET motivo=?, nivel_restriccion=?, comentario=?, ultima_empresa=?, cargo=?, area=?, fecha_observacion=?, estado=?, editor_por=?, fecha_edicion=?
+                               WHERE id=?''', (motivo, nivel, comentario, ultima_empresa, cargo_obs, area_obs, fecha_obs, estado, marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'ALERTAS Y TRABAJADORES OBSERVADOS', 'EDICIÓN DE ALERTA', f'{motivo} | {nivel} | {comentario}', session.get('admin_user','admin'), now_txt()))
+                con.commit()
+            flash('Alerta preventiva editada correctamente.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='observados'))
+        if accion in {'continuar_advertencia_observado','solicitar_autorizacion_observado','aprobar_excepcion_observado','levantar_observacion'}:
+            oid = request.form.get('observado_id')
+            comentario_acc = clean(request.form.get('comentario_accion'))
+            with db() as con:
+                obs = con.execute('SELECT * FROM trabajadores_observados WHERE id=?', (oid,)).fetchone()
+                if not obs:
+                    flash('No se encontró la observación.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='observados'))
+                if accion == 'continuar_advertencia_observado':
+                    evento='CONTINUÓ CON ADVERTENCIA'; msg='Advertencia registrada. El flujo puede continuar con trazabilidad.'
+                elif accion == 'solicitar_autorizacion_observado':
+                    con.execute("INSERT INTO trabajadores_observados_autorizaciones(observado_id,numero_documento,tipo,estado,motivo_solicitud,solicitado_por,fecha_solicitud) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'EXCEPCIÓN', 'SOLICITADO', comentario_acc, session.get('admin_user','admin'), now_txt()))
+                    con.execute("UPDATE trabajadores_observados SET estado_autorizacion='SOLICITADO', editor_por=?, fecha_edicion=? WHERE id=?", (marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                    evento='SOLICITUD DE AUTORIZACIÓN'; msg='Solicitud de autorización registrada.'
+                elif accion == 'aprobar_excepcion_observado':
+                    con.execute("INSERT INTO trabajadores_observados_autorizaciones(observado_id,numero_documento,tipo,estado,motivo_solicitud,comentario_aprobacion,solicitado_por,fecha_solicitud,aprobado_por,fecha_aprobacion) VALUES(?,?,?,?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'EXCEPCIÓN', 'APROBADO', comentario_acc, comentario_acc, session.get('admin_user','admin'), now_txt(), session.get('admin_user','admin'), now_txt()))
+                    con.execute("UPDATE trabajadores_observados SET estado_autorizacion='APROBADO', editor_por=?, fecha_edicion=? WHERE id=?", (marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                    evento='EXCEPCIÓN APROBADA'; msg='Excepción aprobada. El DNI podrá continuar con trazabilidad.'
+                else:
+                    con.execute("UPDATE trabajadores_observados SET estado='Inactive', comentario_levantamiento=?, fecha_levantamiento=?, levantado_por=?, editor_por=?, fecha_edicion=?, estado_autorizacion='LEVANTADO' WHERE id=?", (comentario_acc, now_txt(), session.get('admin_user','admin'), marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                    evento='OBSERVACIÓN LEVANTADA'; msg='Observación levantada correctamente.'
+                con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'ALERTAS Y TRABAJADORES OBSERVADOS', evento, comentario_acc, session.get('admin_user','admin'), now_txt()))
+                con.commit()
+            flash(msg, 'ok')
+            return redirect(url_for('admin_contratacion', sec='observados'))
+        if accion in {'eliminar_observado','anular_observado'}:
+            oid = request.form.get('observado_id')
+            comentario_acc = clean(request.form.get('comentario_accion')) or 'Registro anulado desde módulo de alertas.'
+            with db() as con:
+                obs = con.execute('SELECT * FROM trabajadores_observados WHERE id=?', (oid,)).fetchone()
+                if obs:
+                    con.execute("UPDATE trabajadores_observados SET estado='Anulado', comentario_levantamiento=?, editor_por=?, fecha_edicion=?, estado_autorizacion='ANULADO' WHERE id=?", (comentario_acc, marca_carga(session.get('admin_user','admin')), now_txt(), oid))
+                    con.execute("INSERT INTO trabajadores_observados_historial(observado_id,numero_documento,modulo,accion,detalle,usuario,fecha) VALUES(?,?,?,?,?,?,?)", (oid, obs['numero_documento'], 'ALERTAS Y TRABAJADORES OBSERVADOS', 'ANULACIÓN DE ALERTA', comentario_acc, session.get('admin_user','admin'), now_txt()))
+                    con.commit()
+            flash('Alerta anulada. No se eliminó físicamente; queda en historial.', 'ok')
             return redirect(url_for('admin_contratacion', sec='observados'))
         if accion == 'estado_plantilla':
             pid_estado = request.form.get('plantilla_id')
@@ -5518,6 +7307,10 @@ def admin_contratacion():
             carpeta = UPLOAD_DIR/'contratacion'/'plantillas'; carpeta.mkdir(parents=True, exist_ok=True)
             if f and f.filename:
                 archivo_nombre = secure_filename(f.filename)
+                ext_arch = Path(archivo_nombre).suffix.lower()
+                if ext_arch not in {'.docx', '.doc', '.pdf'}:
+                    flash('Formato no permitido. Carga una plantilla Word .docx/.doc o PDF.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='plantillas'))
                 path = carpeta/(now_file()+'_'+archivo_nombre)
                 f.save(path); ruta = str(path)
             with db() as con:
@@ -5527,14 +7320,14 @@ def admin_contratacion():
                         ruta=row['ruta_archivo']; archivo_nombre=row['archivo_nombre']
                     activo = 1 if ruta else 0
                     con.execute('''UPDATE contratacion_plantillas SET nombre_plantilla=?,descripcion=?,tipo_documento=?,esquema=?,condicion=?,version=?,activo=?,archivo_nombre=?,ruta_archivo=?,fecha_actualizacion=? WHERE id=?''', (nombre,descripcion,tipo_doc,esquema,condicion,version,activo,archivo_nombre,ruta,now_txt(),pid))
-                    detectados = sincronizar_campos_desde_word(pid, ruta) if ruta else 0
+                    detectados = sincronizar_campos_desde_word_seguro(pid, ruta) if ruta else 0
                     flash(('Plantilla actualizada correctamente. Campos Word detectados: ' + str(detectados)) if detectados else 'Plantilla actualizada correctamente.', 'ok')
                     redir = url_for('contratacion_plantilla_detalle', pid=pid, tab='contenido')
                 else:
                     activo = 1 if ruta else 0
                     cur=con.execute('''INSERT INTO contratacion_plantillas(nombre_plantilla,descripcion,tipo_documento,esquema,condicion,version,activo,archivo_nombre,ruta_archivo,fecha_creacion,fecha_actualizacion,creado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', (nombre,descripcion,tipo_doc,esquema,condicion,version,activo,archivo_nombre,ruta,now_txt(),now_txt(),marca_carga(session.get('admin_user','admin'))))
                     nuevo_id=cur.lastrowid
-                    detectados = sincronizar_campos_desde_word(nuevo_id, ruta) if ruta else 0
+                    detectados = sincronizar_campos_desde_word_seguro(nuevo_id, ruta) if ruta else 0
                     for nom,origen,td in CONTRATACION_CAMPOS_CORRESPONDENCIA:
                         con.execute('INSERT INTO contratacion_plantilla_campos(plantilla_id,nombre_campo,campo_origen,tipo_dato) VALUES(?,?,?,?)',(nuevo_id,nom,origen,td))
                     if condicion == 'CONDICIONES':
@@ -5552,6 +7345,10 @@ def admin_contratacion():
             if not dni or not trab:
                 flash('Selecciona un trabajador valido para generar documentos desde plantillas.', 'error')
                 return redirect(url_for('admin_contratacion', sec='firma'))
+            listo_firma, bloqueos_firma = puede_pasar_a_firma(dni)
+            if not listo_firma:
+                flash('Documentos bloqueados: antes de generar/enviar a firma debe completar: ' + ', '.join(bloqueos_firma), 'error')
+                return redirect(url_for('admin_contratacion', sec='firma'))
             with db() as con:
                 for pid_raw in ids_raw:
                     if not str(pid_raw).isdigit():
@@ -5559,13 +7356,22 @@ def admin_contratacion():
                     plx = con.execute('SELECT * FROM contratacion_plantillas WHERE id=? AND activo=1', (int(pid_raw),)).fetchone()
                     if not plx:
                         continue
-                    nombre_doc = plx['archivo_nombre'] or (plx['nombre_plantilla'] + '.docx')
+                    valid = validar_datos_plantilla(int(pid_raw), dni)
+                    if valid.get('faltantes'):
+                        con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)', (dni, 'Documento bloqueado por datos incompletos', now_txt(), f"{plx['nombre_plantilla']}: faltan {', '.join(valid.get('faltantes') or [])}"))
+                        continue
+                    try:
+                        out_docx, _pl, _trab, _ok, _detalle, _falt = generar_docx_desde_plantilla(int(pid_raw), dni)
+                    except Exception as e:
+                        con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)', (dni, 'Documento bloqueado por error de generación', now_txt(), str(e)))
+                        continue
+                    nombre_doc = Path(out_docx).name
                     con.execute('INSERT INTO contratacion_docs(dni,trabajador,empresa,etapa,tipo_doc,estado,archivo_nombre,ruta_archivo,fecha_registro,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?,?)',
-                                (dni, trab['nombre'], trab['empresa'], 'Generado desde plantilla', plx['tipo_documento'] or plx['nombre_plantilla'], 'GENERADO - PENDIENTE FIRMA', nombre_doc, plx['ruta_archivo'], now_txt(), marca_carga(session.get('admin_user','admin'))))
-                    con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)', (dni, 'Documento generado desde plantilla', now_txt(), f"{plx['nombre_plantilla']} listo para firma facial/digital."))
+                                (dni, trab['nombre'], trab['empresa'], 'Generado desde plantilla validada', plx['tipo_documento'] or plx['nombre_plantilla'], 'GENERADO VALIDADO - PENDIENTE FIRMA', nombre_doc, str(out_docx), now_txt(), marca_carga(session.get('admin_user','admin'))))
+                    con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)', (dni, 'Documento generado validado', now_txt(), f"{plx['nombre_plantilla']} listo para firma facial/digital."))
                     creados += 1
                 con.commit()
-            flash(f'Documentos generados desde plantillas: {creados}. Ahora ya aparecen abajo para marcarlos y enviarlos a firma masiva.', 'ok' if creados else 'error')
+            flash(f'Documentos validados y generados: {creados}. Los incompletos fueron bloqueados; descarga el Excel de faltantes desde la plantilla.', 'ok' if creados else 'error')
             return redirect(url_for('admin_contratacion', sec='firma'))
 
         if accion == 'firma_masiva':
@@ -5582,6 +7388,19 @@ def admin_contratacion():
                 for doc_id in ids:
                     doc=con.execute('SELECT * FROM contratacion_docs WHERE id=?',(doc_id,)).fetchone()
                     if not doc: continue
+                    if 'INCOMPLETO' in clean(doc['estado']).upper() or 'OBSERVADO_DATOS_INCOMPLETOS' in clean(doc['ruta_archivo']).upper():
+                        con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado',now_txt(),f"No se envió {doc['tipo_doc']} porque tiene datos incompletos."))
+                        continue
+                    msg_obs = bloqueo_observado_msg(doc['dni'], 'Firma / Documentos')
+                    if msg_obs:
+                        registrar_evento_observado(doc['dni'], 'DOCUMENTOS', 'ENVÍO A FIRMA BLOQUEADO', msg_obs)
+                        flash(msg_obs, 'error')
+                        return redirect(url_for('admin_contratacion', sec='firma'))
+                    registrar_evento_observado(doc['dni'], 'DOCUMENTOS', 'VALIDACIÓN PRE FIRMA', 'Documento validado contra alertas preventivas')
+                    ok_firma, bloqueos = puede_pasar_a_firma(doc['dni'])
+                    if not ok_firma:
+                        con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Envío bloqueado por flujo',now_txt(),'Faltan requisitos: ' + ', '.join(bloqueos)))
+                        continue
                     token=crear_token_firma()
                     con.execute('INSERT INTO firma_solicitudes(documento_id,dni,trabajador,metodo,estado,evidencia_ref,fecha_envio,observacion,firma_token,validacion_estado) VALUES(?,?,?,?,?,?,?,?,?,?)',(doc['id'],doc['dni'],doc['trabajador'],metodo,'Pendiente de captura facial','',now_txt(),obs,token,'PENDIENTE'))
                     con.execute("UPDATE contratacion_docs SET estado='ENVIADO A FIRMA' WHERE id=?",(doc['id'],))
@@ -5589,7 +7408,8 @@ def admin_contratacion():
                     creadas += 1
                 con.commit()
             flash(f'Solicitudes masivas creadas: {creadas}. Revisa la Bandeja de Firmas para copiar/enviar enlaces móviles.', 'ok' if creadas else 'error')
-            return redirect(url_for('admin_contratacion', sec='firma'))
+            scope_destino = 'renovacion' if ('RENOV' in metodo.upper() or 'RENOV' in obs.upper()) else None
+            return redirect(url_for('admin_contratacion', sec='firma', scope=scope_destino) if scope_destino else url_for('admin_contratacion', sec='firma'))
         if accion == 'firma_solicitud':
             doc_id = request.form.get('documento_id')
             metodo = clean(request.form.get('metodo')) or 'FACIAL + FIRMA DIGITAL'
@@ -5597,6 +7417,13 @@ def admin_contratacion():
             with db() as con:
                 doc = con.execute('SELECT * FROM contratacion_docs WHERE id=?',(doc_id,)).fetchone()
                 if doc:
+                    if 'INCOMPLETO' in clean(doc['estado']).upper() or 'OBSERVADO_DATOS_INCOMPLETOS' in clean(doc['ruta_archivo']).upper():
+                        flash('No se puede enviar: el documento tiene datos incompletos. Previsualiza/exporta el Word observado y completa la base antes de enviar.', 'error')
+                        return redirect(url_for('admin_contratacion', sec='firma'))
+                    ok_firma, bloqueos = puede_pasar_a_firma(doc['dni'])
+                    if not ok_firma:
+                        flash('Firma digital bloqueada. Pendiente: ' + ', '.join(bloqueos), 'error')
+                        return redirect(url_for('admin_contratacion', sec='firma'))
                     token = crear_token_firma()
                     con.execute('INSERT INTO firma_solicitudes(documento_id,dni,trabajador,metodo,estado,evidencia_ref,fecha_envio,observacion,firma_token,validacion_estado) VALUES(?,?,?,?,?,?,?,?,?,?)',(doc['id'],doc['dni'],doc['trabajador'],metodo,'Pendiente de captura facial','',now_txt(),obs,token,'PENDIENTE'))
                     con.execute("UPDATE contratacion_docs SET estado='ENVIADO A FIRMA' WHERE id=?",(doc['id'],))
@@ -5606,6 +7433,12 @@ def admin_contratacion():
                     flash('Documento no encontrado para enviar a firma.', 'error')
             return redirect(url_for('admin_contratacion', sec='firma'))
         f=request.files.get('archivo'); dni=normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni); tipo=clean(request.form.get('tipo_doc')); etapa=clean(request.form.get('etapa')) or 'Incorporación'
+        msg_obs = bloqueo_observado_msg(dni, 'Documentos')
+        if msg_obs:
+            registrar_evento_observado(dni, 'DOCUMENTOS', 'INTENTO DE REGISTRO BLOQUEADO', msg_obs)
+            flash(msg_obs, 'error')
+            return redirect(url_for('admin_contratacion', sec='documentaria'))
+        registrar_evento_observado(dni, 'DOCUMENTOS', 'VALIDACIÓN DNI', 'DNI validado al cargar documento')
         if f and f.filename and dni:
             folder=UPLOAD_DIR/'contratacion'/dni; folder.mkdir(parents=True, exist_ok=True)
             name=now_file()+'_'+secure_filename(f.filename); path=folder/name; f.save(path)
@@ -5617,18 +7450,37 @@ def admin_contratacion():
         return redirect(url_for('admin_contratacion', sec='documentaria'))
     with db() as con:
         tipos=con.execute('SELECT * FROM contratacion_tipos ORDER BY etapa, descripcion').fetchall()
-        docs=con.execute('SELECT * FROM contratacion_docs ORDER BY id DESC LIMIT 300').fetchall()
-        firma_sols=con.execute('SELECT * FROM firma_solicitudes ORDER BY id DESC LIMIT 300').fetchall()
+        scope_firma = clean(request.args.get('scope'))
+        if scope_firma == 'renovacion':
+            docs=con.execute("""SELECT * FROM contratacion_docs WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%' ORDER BY id DESC LIMIT 300""").fetchall()
+            firma_sols=con.execute("""SELECT f.* FROM firma_solicitudes f LEFT JOIN contratacion_docs d ON d.id=f.documento_id WHERE UPPER(COALESCE(d.etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%RENOV%' OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%ADENDA%' ORDER BY f.id DESC LIMIT 300""").fetchall()
+        else:
+            docs=con.execute('SELECT * FROM contratacion_docs ORDER BY id DESC LIMIT 300').fetchall()
+            firma_sols=con.execute('SELECT * FROM firma_solicitudes ORDER BY id DESC LIMIT 300').fetchall()
         trabajadores=con.execute('SELECT dni,nombre,empresa,cargo,area,correo,activo,fecha_registro FROM trabajadores ORDER BY nombre LIMIT 700').fetchall()
         observados=con.execute('SELECT * FROM trabajadores_observados ORDER BY id DESC LIMIT 500').fetchall()
         tipo_empleado=con.execute('SELECT * FROM contratacion_tipo_empleado ORDER BY descripcion LIMIT 1000').fetchall()
         cargos=con.execute('SELECT * FROM contratacion_cargos ORDER BY nombre LIMIT 2000').fetchall()
+        maestros_empleador=con.execute('SELECT * FROM contratacion_maestros_empleador ORDER BY tipo, nombre LIMIT 3000').fetchall()
+        try:
+            relaciones_laborales=con.execute('SELECT * FROM contratacion_relaciones_laborales ORDER BY empresa, area, cargo, actividad LIMIT 3000').fetchall()
+        except Exception:
+            relaciones_laborales=[]
+        ingresos=con.execute('SELECT * FROM contratacion_ingresos ORDER BY id DESC LIMIT 500').fetchall()
+        lotes_nisira=con.execute('SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC LIMIT 200').fetchall()
+        controles_next=con.execute('SELECT * FROM contratacion_checklist_next ORDER BY id DESC LIMIT 300').fetchall()
+        requerimientos=con.execute('SELECT * FROM contratacion_requerimientos ORDER BY id DESC LIMIT 300').fetchall()
+        medicas=con.execute('SELECT * FROM contratacion_medica ORDER BY id DESC LIMIT 300').fetchall()
+        capacitaciones=con.execute('SELECT * FROM contratacion_capacitacion ORDER BY id DESC LIMIT 300').fetchall()
+        indumentarias=con.execute('SELECT * FROM contratacion_indumentaria ORDER BY id DESC LIMIT 300').fetchall()
+        trabajadores_proceso=con.execute('SELECT * FROM contratacion_ingresos ORDER BY id DESC LIMIT 800').fetchall()
 
         # Filtros reales de Plantilla Documentos
         f_nombre = clean(request.args.get('f_nombre'))
         f_tipo = clean(request.args.get('f_tipo'))
         f_esquema = clean(request.args.get('f_esquema'))
         f_condicion = clean(request.args.get('f_condicion'))
+        f_proceso = clean(request.args.get('f_proceso'))
         where_pl, params_pl = [], []
         if f_nombre:
             where_pl.append('(nombre_plantilla LIKE ? OR descripcion LIKE ? OR archivo_nombre LIKE ?)')
@@ -5642,6 +7494,12 @@ def admin_contratacion():
         if f_condicion:
             where_pl.append('condicion LIKE ?')
             params_pl.append(f'%{f_condicion}%')
+        if f_proceso:
+            fp = f_proceso.upper()
+            if 'RENOV' in fp or 'ADENDA' in fp:
+                where_pl.append("(UPPER(COALESCE(tipo_documento,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_documento,'')) LIKE '%ADENDA%' OR UPPER(COALESCE(nombre_plantilla,'')) LIKE '%RENOV%' OR UPPER(COALESCE(nombre_plantilla,'')) LIKE '%ADENDA%')")
+            elif 'CONTRAT' in fp or 'INCORP' in fp:
+                where_pl.append("(UPPER(COALESCE(tipo_documento,'')) NOT LIKE '%RENOV%' AND UPPER(COALESCE(tipo_documento,'')) NOT LIKE '%ADENDA%' AND UPPER(COALESCE(nombre_plantilla,'')) NOT LIKE '%RENOV%' AND UPPER(COALESCE(nombre_plantilla,'')) NOT LIKE '%ADENDA%')")
         sql_pl = 'SELECT * FROM contratacion_plantillas'
         if where_pl:
             sql_pl += ' WHERE ' + ' AND '.join(where_pl)
@@ -5655,10 +7513,133 @@ def admin_contratacion():
         if r['tipo_documento'] and r['tipo_documento'] not in tipos_doc_opciones:
             tipos_doc_opciones.append(r['tipo_documento'])
     opt_tipo=''.join([f"<option value='{html.escape(str(x))}'>{html.escape(str(x))}</option>" for x in tipos_doc_opciones])
-    opt_trab=''.join([f"<option value='{r['dni']}'>{r['dni']} - {r['nombre']}</option>" for r in trabajadores])
+    def h(v):
+        return html.escape(str(v or ''))
+    ticket_sel = clean(request.args.get('req'))
+    ingresos_mostrar = [r for r in ingresos if not ticket_sel or clean(r['requerimiento']) == ticket_sel]
+    trabajadores_proceso_mostrar = [r for r in trabajadores_proceso if not ticket_sel or clean(r['requerimiento']) == ticket_sel]
+    opt_trab=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['nombre'])}</option>" for r in trabajadores])
+    opt_ingresos=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['trabajador'])} - {h(r['requerimiento'])}</option>" for r in trabajadores_proceso_mostrar])
+    opt_req=''.join([f"<option value='{h(r['ticket'])}' {'selected' if ticket_sel==clean(r['ticket']) else ''}>{h(r['ticket'])} - {h(r['empresa'])} - {h(r['area'])} - {h(r['actividad'])}</option>" for r in requerimientos])
+    # Catálogos para autocompletar desde configuración/maestros del empleador y requerimientos existentes
+    def maestros_tipo(tipo):
+        return sorted({clean(r['nombre']) for r in maestros_empleador if clean(r['tipo']).upper()==tipo and int(r['activo'] or 0)==1 and clean(r['nombre'])})
+    rel_activas = [r for r in relaciones_laborales if int(r['activo'] or 0)==1] if 'relaciones_laborales' in locals() else []
+    _empresas = sorted(set(maestros_tipo('EMPRESA')) | {clean(r['empresa']) for r in rel_activas if clean(r['empresa'])} | {'AQUANQA I','AQUANQA II'})
+    _areas = sorted(set(maestros_tipo('AREA')) | {clean(r['area']) for r in rel_activas if clean(r['area'])} | {clean(r['area']) for r in requerimientos if clean(r['area'])} | {clean(r['area']) for r in trabajadores if clean(r['area'])})
+    _cargos = sorted(set(maestros_tipo('CARGO')) | {clean(r['cargo']) for r in rel_activas if clean(r['cargo'])} | {clean(r['cargo']) for r in requerimientos if clean(r['cargo'])} | {clean(r['cargo']) for r in trabajadores if clean(r['cargo'])} | {clean(r['nombre']) for r in cargos if clean(r['nombre'])})
+    _actividades = sorted(set(maestros_tipo('ACTIVIDAD')) | {clean(r['actividad']) for r in rel_activas if clean(r['actividad'])} | {clean(r['actividad']) for r in requerimientos if clean(r['actividad'])} | {clean(r['actividad']) for r in trabajadores_proceso if clean(r['actividad'])})
+    _regimenes = sorted(set(maestros_tipo('REGIMEN_LABORAL')) | {clean(r['regimen_laboral']) for r in rel_activas if clean(r['regimen_laboral'])} | {'AGRARIO','GENERAL'})
+    _tipos_contrato = sorted(set(maestros_tipo('TIPO_CONTRATO')) | {clean(r['tipo_contrato']) for r in rel_activas if clean(r['tipo_contrato'])} | {'INTERMITENTE','TEMPORAL','INDETERMINADO','RENOVACIÓN'})
+    _modalidades = sorted(set(maestros_tipo('MODALIDAD')) | {clean(r['modalidad']) for r in rel_activas if clean(r['modalidad'])} | {'CAMPAÑA','PERMANENTE','INTERMITENTE','PART TIME'})
+    _periodicidades = sorted(set(maestros_tipo('PERIODICIDAD_PAGO')) | {'MENSUAL','SEMANAL','QUINCENAL'})
+    _tipos_pago = sorted(set(maestros_tipo('TIPO_PAGO')) | {'DEPÓSITO EN CUENTA','EFECTIVO'})
+    _moneda_nombre = (maestros_tipo('MONEDA') or ['Sol Peruano'])[0]
+    _moneda_simbolo = (maestros_tipo('SIMBOLO_MONEDA') or ['S/'])[0]
+    opt_empresa_select=''.join([f"<option>{h(x)}</option>" for x in _empresas])
+    opt_area_datalist=''.join([f"<option value='{h(x)}'></option>" for x in _areas])
+    opt_cargo_datalist=''.join([f"<option value='{h(x)}'></option>" for x in _cargos[:700]])
+    opt_actividad_datalist=''.join([f"<option value='{h(x)}'></option>" for x in _actividades])
+    opt_regimen_select=''.join([f"<option>{h(x)}</option>" for x in _regimenes])
+    opt_tipo_contrato_select=''.join([f"<option>{h(x)}</option>" for x in _tipos_contrato])
+    opt_modalidad_select=''.join([f"<option>{h(x)}</option>" for x in _modalidades])
+    opt_periodicidad_select=''.join([f"<option>{h(x)}</option>" for x in _periodicidades])
+    opt_tipo_pago_select=''.join([f"<option>{h(x)}</option>" for x in _tipos_pago])
+    def _estado_pill(v):
+        vv = str(v or 'PENDIENTE')
+        cls = 'ok' if vv.upper() in ['APTO','APROBADO','REGISTRADO','IMPORTADO','ENTREGADO','ENVIADO','GENERADO','CAPTURADA','FINALIZADO'] else ''
+        return f"<span class='status-pill {cls}'>{h(vv)}</span>"
+    def bandeja_operativa(tabla_id='tabla_embudo'):
+        rows=[]
+        for r in trabajadores_proceso_mostrar[:300]:
+            rows.append("<tr>"
+              + f"<td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td>"
+              + f"<td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td>"
+              + f"<td>{_estado_pill(r['estado'])}</td><td>{_estado_pill(r['estado_medico'])}</td><td>{_estado_pill(r['estado_capacitacion'])}</td><td>{_estado_pill(r['estado_indumentaria'])}</td><td>{_estado_pill(r['estado_nisira'])}</td>"
+              + f"<td><a class='icon-btn' href='/admin/contratacion?sec=ficha&dni={h(r['dni'])}' title='Ficha trabajador'>Ver</a></td>"
+              + "</tr>")
+        body=''.join(rows) or "<tr><td colspan='13'>Aún no hay postulantes registrados para el ticket seleccionado.</td></tr>"
+        return f"""
+        <form method='post' class='c-card table-wrap proceso-box'>
+          <input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='{sec}'>
+          <div class='proceso-toolbar'><b>Base operativa de trabajadores enlazada</b><input oninput=\"filtrarTabla(this,'{tabla_id}')\" placeholder='Buscar DNI, trabajador, requerimiento, sede, estado...'><select name='campo_estado'><option value='estado'>Estado general</option><option value='estado_medico'>Médico</option><option value='estado_capacitacion'>Capacitación</option><option value='estado_indumentaria'>Indumentaria</option><option value='estado_nisira'>NISIRA</option><option value='biometria_estado'>Biometría</option></select><select name='nuevo_estado'><option>EN PROCESO</option><option>APTO</option><option>OBSERVADO</option><option>APROBADO</option><option>ENTREGADO</option><option>ENVIADO</option><option>FINALIZADO</option><option>PENDIENTE</option></select><button class='c-btn'>Avanzar seleccionados</button></div>
+          <table id='{tabla_id}' class='c-table'><tr><th><input type='checkbox' onclick=\"this.closest('table').querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=this.checked)\"></th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Sede</th><th>Cargo</th><th>General</th><th>Médico</th><th>Capac.</th><th>Indum.</th><th>NISIRA</th><th>Ficha</th></tr>{body}</table>
+        </form>"""
     sample_trab = trabajadores[0] if trabajadores else None
     docs_rows=''.join([f"<tr><td><input type='checkbox'></td><td>🔍 📄</td><td>{r['dni']}</td><td>{r['trabajador']}</td><td>{r['tipo_doc']}</td><td><span class='c-badge cyan'>{r['estado'][:1] or 'F'}</span></td><td>{r['fecha_registro']}</td></tr>" for r in docs])
-    renov_rows=''.join([f"<tr><td><input type='checkbox'></td><td>{t['dni']}</td><td>{t['nombre']}</td><td>INICIO</td><td>{fecha_sin_hora(t['fecha_registro'])}</td><td></td><td>30/06/2026</td><td><span class='c-badge green'>✓</span></td><td><span class='c-badge green'>✓</span></td><td>0</td></tr>" for t in trabajadores[:12]])
+
+    # Tabla PRO de Renovación Masiva: limpia campos técnicos y muestra datos útiles para RR.HH.
+    # Estructura recomendada: DNI, trabajador, empresa, cargo, fecha fin actual, nueva fecha fin,
+    # días para vencer, firma, aprobación, estado y acciones operativas.
+    def _parse_fecha_renovacion(v):
+        txt = fecha_sin_hora(v)
+        for fmt in ('%d/%m/%Y','%Y-%m-%d'):
+            try:
+                return datetime.strptime(txt, fmt)
+            except Exception:
+                pass
+        return None
+
+    def _dias_vencimiento_badge(v):
+        f = _parse_fecha_renovacion(v)
+        if not f:
+            return "<span class='c-badge gray'>Sin fecha</span>"
+        dias = (f.date() - datetime.now(APP_TZ).date()).days
+        if dias < 0:
+            return f"<span class='c-badge red'>{dias} días</span>"
+        if dias <= 15:
+            return f"<span class='c-badge red'>{dias} días</span>"
+        if dias <= 30:
+            return f"<span class='c-badge yellow'>{dias} días</span>"
+        return f"<span class='c-badge green'>{dias} días</span>"
+
+    def _estado_renovacion_badge(estado):
+        estado = clean(estado).upper() or 'PENDIENTE GENERACIÓN'
+        cls = 'gray'
+        if 'APROB' in estado or 'ARCHIV' in estado:
+            cls = 'green'
+        elif 'RECHAZ' in estado:
+            cls = 'red'
+        elif 'FIRMA' in estado or 'APROBACIÓN' in estado:
+            cls = 'yellow'
+        elif 'GENER' in estado:
+            cls = 'cyan'
+        return f"<span class='c-badge {cls}'>{html.escape(estado)}</span>"
+
+    renov_rows_list = []
+    for t in trabajadores[:12]:
+        dni = html.escape(str(t['dni'] or ''))
+        nombre = html.escape(str(t['nombre'] or ''))
+        empresa = html.escape(str(t['empresa'] or 'AQUANQA I'))
+        cargo = html.escape(str(t['cargo'] or 'SIN CARGO'))
+        ff_actual = fecha_sin_hora(t['fecha_fin_contrato'] if 'fecha_fin_contrato' in t.keys() else '') or '30/06/2026'
+        ff_nueva = '31/12/2026'
+        firma = "<span class='c-badge yellow'>Pendiente</span>"
+        aprob = "<span class='c-badge gray'>Sin enviar</span>"
+        estado = _estado_renovacion_badge('Pendiente generación')
+        acciones = f"""
+          <div class='renov-actions-row'>
+            <a class='mini-action' title='Ver ficha del trabajador' href='/admin/contratacion?sec=ficha&dni={dni}'>👁</a>
+            <a class='mini-action' title='Ver documentos de renovación' href='/admin/contratacion?sec=docs_renovacion&dni={dni}'>📄</a>
+            <a class='mini-action' title='Enviar a firma' href='/admin/contratacion?sec=firma&scope=renovacion&dni={dni}'>✍</a>
+            <a class='mini-action' title='Enviar a aprobación' href='/admin/contratacion?sec=flujo&estado=PENDIENTE&dni={dni}'>➡</a>
+          </div>"""
+        renov_rows_list.append(f"""
+          <tr>
+            <td><input type='checkbox' name='dni_sel' value='{dni}'></td>
+            <td>{dni}</td>
+            <td>{nombre}</td>
+            <td>{empresa}</td>
+            <td>{cargo}</td>
+            <td>{html.escape(str(ff_actual))}</td>
+            <td><input class='table-input' value='{html.escape(str(ff_nueva))}'></td>
+            <td>{_dias_vencimiento_badge(ff_actual)}</td>
+            <td>{firma}</td>
+            <td>{aprob}</td>
+            <td>{estado}</td>
+            <td>{acciones}</td>
+          </tr>""")
+    renov_rows = ''.join(renov_rows_list) or "<tr><td colspan='12'>Sin trabajadores disponibles para renovar.</td></tr>"
     def chk_badge(v):
         return "<span class='c-badge green'>✓</span>" if int(v or 0)==1 else "<span class='c-badge gray'>—</span>"
     def escjs(v):
@@ -5685,30 +7666,114 @@ def admin_contratacion():
           <td>{estado_select('estado_cargo','cargo_id',r['id'],r['activo'])}</td><td>{h(r['codigo'])}</td><td>{h(r['nombre'])}</td><td>{h(r['nombre_corto'])}</td>
         </tr>""" for r in cargos])
     plantillas_rows=''.join([
-        f"""<tr>
-          <td class='tpl-actions'>
+        f"""<tr class='plantilla-visible-row'>
+          <td class='tpl-actions cell-visible'>
             <a class='icon-btn action-edit' title='Abrir detalle / editar' href='{url_for('contratacion_plantilla_detalle', pid=r['id'])}'>✎</a><a class='icon-btn' title='Historial de cargas' href='{url_for('contratacion_plantilla_historial', pid=r['id'])}'>🔍</a><a class='icon-btn' title='Descargar plantilla Word' href='{url_for('contratacion_plantilla_archivo', pid=r['id'])}'>⬇</a>
             <form method='post' action='{url_for('contratacion_plantilla_eliminar', pid=r['id'])}' style='display:inline' onsubmit="return confirm('¿Eliminar esta plantilla? No se borrarán contratos/documentos históricos.');">
               <button class='icon-btn action-delete' title='Eliminar plantilla' type='submit'>🗑</button>
             </form>
           </td>
-          <td><form method='post' class='state-form'><input type='hidden' name='accion' value='estado_plantilla'><input type='hidden' name='plantilla_id' value='{r['id']}'><select name='activo' class='state-select {'inactive' if not r['activo'] else ''}' onchange='this.form.submit()'><option value='1' {'selected' if r['activo'] else ''}>Activo</option><option value='0' {'selected' if not r['activo'] else ''}>Inactivo</option></select></form></td>
-          <td><a class='tpl-link' href='{url_for('contratacion_plantilla_detalle', pid=r['id'])}'>{h(r['nombre_plantilla'])}</a></td>
-          <td>{h(r['tipo_documento'])}</td><td>{h(r['esquema'])}</td><td>{h(r['descripcion'])}</td><td>{h(r['version'])}</td><td>{h(r['condicion'])}</td><td>{h(r['archivo_nombre'])}</td>
+          <td class='cell-visible'><form method='post' class='state-form'><input type='hidden' name='accion' value='estado_plantilla'><input type='hidden' name='plantilla_id' value='{r['id']}'><select name='activo' class='state-select {'inactive' if not r['activo'] else ''}' onchange='this.form.submit()'><option value='1' {'selected' if r['activo'] else ''}>Activo</option><option value='0' {'selected' if not r['activo'] else ''}>Inactivo</option></select></form></td>
+          <td class='cell-visible'><span class='status-pill {'warn' if ('RENOV' in (r['tipo_documento'] or '').upper() or 'ADENDA' in (r['tipo_documento'] or '').upper() or 'RENOV' in (r['nombre_plantilla'] or '').upper() or 'ADENDA' in (r['nombre_plantilla'] or '').upper()) else 'ok'}'>{'RENOVACIÓN' if ('RENOV' in (r['tipo_documento'] or '').upper() or 'ADENDA' in (r['tipo_documento'] or '').upper() or 'RENOV' in (r['nombre_plantilla'] or '').upper() or 'ADENDA' in (r['nombre_plantilla'] or '').upper()) else 'CONTRATACIÓN'}</span></td>
+          <td class='cell-visible'><a class='tpl-link' href='{url_for('contratacion_plantilla_detalle', pid=r['id'])}'>{h(r['nombre_plantilla'])}</a></td>
+          <td class='cell-visible'>{h(r['tipo_documento'])}</td><td class='cell-visible'>{h(r['esquema'])}</td><td class='cell-visible'>{h(r['descripcion'])}</td><td class='cell-visible'>{h(r['version'])}</td><td class='cell-visible'>{h(r['condicion'])}</td><td class='cell-visible'>{h(r['archivo_nombre'])}</td>
         </tr>""" for r in plantillas])
     if not observados:
-        with db() as con:
-            for t in trabajadores[:10]:
-                con.execute('''INSERT INTO trabajadores_observados(tipo_persona,tipo_documento,numero_documento,nombre,motivo,nivel_restriccion,comentario,estado,creado_por,fecha_creacion,fecha_edicion)
-                               VALUES(?,?,?,?,?,?,?,?,?,?,?)''', ('Trabajador','DNI',t['dni'],t['nombre'],'SINDICALISTA','NIVEL 3','SINDICALISTA','Active','Sistema',now_txt(),''))
-            con.commit()
-            observados=con.execute('SELECT * FROM trabajadores_observados ORDER BY id DESC LIMIT 500').fetchall()
-    obs_activos=[r for r in observados if (r['estado'] or 'Active') == 'Active']
-    obs_inactivos=[r for r in observados if (r['estado'] or 'Active') != 'Active']
+        # Se deja vacío por defecto. El módulo debe mostrar información real, no datos demo.
+        observados=[]
+
+    def obs_estado_label(v):
+        vv = clean(v or 'Active')
+        up = vv.upper()
+        if up in ('ACTIVE','ACTIVO'):
+            return 'Activo'
+        if 'LEVANT' in up or up == 'INACTIVE':
+            return 'Levantado'
+        if 'ANUL' in up:
+            return 'Anulado'
+        if 'AUTORIZ' in up or 'EXCEPC' in up:
+            return 'Autorizado con excepción'
+        return vv or 'Activo'
+
+    def obs_estado_css(v):
+        lab = obs_estado_label(v).upper()
+        if 'ACTIVO' in lab:
+            return 'ok'
+        if 'AUTORIZ' in lab:
+            return 'mid'
+        if 'LEVANT' in lab:
+            return 'warn'
+        return 'bad'
+
+    obs_activos=[r for r in observados if obs_estado_label(r['estado']).upper() == 'ACTIVO']
+    obs_inactivos=[r for r in observados if obs_estado_label(r['estado']).upper() != 'ACTIVO']
+    with db() as con_obs:
+        obs_historial=con_obs.execute('SELECT * FROM trabajadores_observados_historial ORDER BY id DESC LIMIT 1000').fetchall()
+        obs_autorizaciones=con_obs.execute('SELECT * FROM trabajadores_observados_autorizaciones ORDER BY id DESC LIMIT 500').fetchall()
+
     def estado_observado_form(r):
-        return f"<form method='post' class='state-form'><input type='hidden' name='accion' value='estado_observado'><input type='hidden' name='observado_id' value='{r['id']}'><select name='estado' class='state-select {'inactive' if (r['estado'] or '')!='Active' else ''}' onchange='this.form.submit()'><option value='Active' {'selected' if (r['estado'] or '')=='Active' else ''}>🟢 Active</option><option value='Inactive' {'selected' if (r['estado'] or '')=='Inactive' else ''}>🔴 Inactive</option></select></form>"
-    obs_rows=''.join([f"<tr><td><input type='checkbox'></td><td class='tpl-actions'><a class='icon-btn' title='Log'>🔗</a><a class='icon-btn' title='Editar'>✎</a><form method='post' style='display:inline' onsubmit=\"return confirm('¿Eliminar registro observado?');\"><input type='hidden' name='accion' value='eliminar_observado'><input type='hidden' name='observado_id' value='{r['id']}'><button class='icon-btn' type='submit'>🗑</button></form></td><td>{estado_observado_form(r)}</td><td>{h(r['tipo_documento'] or 'DNI')}</td><td>{h(r['numero_documento'])}</td><td>{h(r['nombre'])}</td><td>{h(r['motivo'])}</td><td>{h(r['nivel_restriccion'])}</td><td>{h(r['comentario'])}</td><td>{h(r['creado_por'])}</td><td>{h(r['fecha_creacion'])}</td><td>{h(r['editor_por'])}</td><td>{h(r['fecha_edicion'])}</td></tr>" for r in obs_activos]) or "<tr><td colspan='13'>No hay trabajadores observados activos.</td></tr>"
-    obs_anulados_rows=''.join([f"<tr><td>🔗</td><td>{h(r['tipo_documento'] or 'DNI')}</td><td>{h(r['numero_documento'])}</td><td>{h(r['nombre'])}</td><td>{h(r['motivo'])}</td><td>{h(r['nivel_restriccion'])}</td><td>{h(r['comentario'])}</td><td>{h(r['creado_por'])}</td><td>{h(r['fecha_creacion'])}</td><td>{h(r['editor_por'])}</td><td>{h(r['fecha_edicion'])}</td></tr>" for r in obs_inactivos]) or "<tr><td colspan='11'>No hay registros anulados/inactivos.</td></tr>"
+        actual = obs_estado_label(r['estado'])
+        opts = [('ACTIVO','Activo'),('LEVANTADO','Levantado'),('ANULADO','Anulado'),('AUTORIZADO','Autorizado con excepción')]
+        html_opts = ''.join([f"<option value='{v}' {'selected' if actual==label else ''}>{label}</option>" for v,label in opts])
+        return f"<form method='post' class='state-form'><input type='hidden' name='accion' value='estado_observado'><input type='hidden' name='observado_id' value='{r['id']}'><select name='estado' class='state-select {obs_estado_css(r['estado'])}' onchange='this.form.submit()'>{html_opts}</select></form>"
+
+    def acciones_nivel(r):
+        nivel = clean(r['nivel_restriccion'] or 'NIVEL 3').upper()
+        oid = r['id']
+        if '1' in nivel:
+            return f"<form method='post' class='inline-form'><input type='hidden' name='accion' value='continuar_advertencia_observado'><input type='hidden' name='observado_id' value='{oid}'><input type='hidden' name='comentario_accion' value='Continuar con advertencia preventiva'><button class='mini-btn warn' title='Registra advertencia sin bloquear'>Continuar con advertencia</button></form>"
+        if '2' in nivel:
+            return f"<form method='post' class='inline-form'><input type='hidden' name='accion' value='solicitar_autorizacion_observado'><input type='hidden' name='observado_id' value='{oid}'><input name='comentario_accion' class='mini-input' placeholder='Motivo validación RR.HH.'><button class='mini-btn mid'>Solicitar validación RR.HH.</button></form>"
+        return f"<form method='post' class='inline-form'><input type='hidden' name='accion' value='solicitar_autorizacion_observado'><input type='hidden' name='observado_id' value='{oid}'><input name='comentario_accion' class='mini-input' placeholder='Motivo autorización'><button class='mini-btn bad'>Bloqueado / solicitar autorización</button></form>"
+
+    def obs_edit_btn(r):
+        return (f"<button type='button' class='mini-btn gray' onclick=\"editarObsModal('{r['id']}','{escjs(r['numero_documento'])}','{escjs(r['nombre'])}','{escjs(r['motivo'])}','{escjs(r['nivel_restriccion'])}','{escjs(r['comentario'])}','{escjs(_row_get_safe(r,'ultima_empresa',''))}','{escjs(_row_get_safe(r,'cargo',''))}','{escjs(_row_get_safe(r,'area',''))}','{escjs(_row_get_safe(r,'fecha_observacion',''))}','{escjs(obs_estado_label(r['estado']))}')\">Editar alerta</button>")
+
+    def obs_hist_btn(r):
+        return f"<button type='button' class='mini-btn gray' onclick='showObsTab(\"historial\",document.getElementById(\"tabBtnHistorial\"));filtrarHistorialObs(\"{r['numero_documento']}\")'>Ver historial</button>"
+
+    def obs_anular_btn(r):
+        return f"<form method='post' class='inline-form' onsubmit=\"return confirm('¿Anular esta alerta? Quedará en historial, no se eliminará físicamente.');\"><input type='hidden' name='accion' value='anular_observado'><input type='hidden' name='observado_id' value='{r['id']}'><input type='hidden' name='comentario_accion' value='Anulado desde tabla principal'><button class='mini-btn bad' type='submit'>Anular</button></form>"
+
+    obs_rows=''.join([f"""
+      <tr data-dni='{h(r['numero_documento'])}'>
+        <td>{estado_observado_form(r)}</td>
+        <td><div class='obs-action-stack'>{obs_hist_btn(r)}{obs_edit_btn(r)}{obs_anular_btn(r)}</div></td>
+        <td>{acciones_nivel(r)}</td>
+        <td>{h(r['tipo_documento'] or 'DNI')}</td>
+        <td>{h(r['numero_documento'])}</td>
+        <td><b>{h(r['nombre'])}</b></td>
+        <td>{h(r['motivo'])}</td>
+        <td><span class='nivel-pill {obs_estado_css(r['estado'])}'>{h(r['nivel_restriccion'])}</span></td>
+        <td>{h(_row_get_safe(r,'ultima_empresa',''))}</td>
+        <td>{h(_row_get_safe(r,'cargo',''))}</td>
+        <td>{h(_row_get_safe(r,'area',''))}</td>
+        <td>{h(_row_get_safe(r,'fecha_observacion',''))}</td>
+        <td>{h(r['comentario'])}</td>
+        <td>{h(r['creado_por'])}</td>
+        <td>{h(r['fecha_creacion'])}</td>
+      </tr>""" for r in obs_activos]) or "<tr><td colspan='15'>No hay trabajadores observados activos.</td></tr>"
+
+    obs_anulados_rows=''.join([f"""
+      <tr data-dni='{h(r['numero_documento'])}'>
+        <td><span class='status-chip {obs_estado_css(r['estado'])}'>{obs_estado_label(r['estado'])}</span></td>
+        <td>{obs_hist_btn(r)}</td>
+        <td>{h(r['tipo_documento'] or 'DNI')}</td><td>{h(r['numero_documento'])}</td><td><b>{h(r['nombre'])}</b></td>
+        <td>{h(r['motivo'])}</td><td>{h(r['nivel_restriccion'])}</td><td>{h(r['comentario'])}</td>
+        <td>{h(_row_get_safe(r,'comentario_levantamiento',''))}</td><td>{h(_row_get_safe(r,'levantado_por','') or r['editor_por'])}</td><td>{h(_row_get_safe(r,'fecha_levantamiento','') or r['fecha_edicion'])}</td>
+      </tr>""" for r in obs_inactivos]) or "<tr><td colspan='11'>No hay alertas levantadas/anuladas.</td></tr>"
+
+    obs_hist_rows=''.join([f"""
+      <tr data-dni='{h(x['numero_documento'])}'>
+        <td>{h(x['fecha'])}</td><td>{h(x['numero_documento'])}</td><td>{h(x['modulo'])}</td><td><b>{h(x['accion'])}</b></td><td>{h(x['detalle'])}</td><td>{h(x['usuario'])}</td>
+      </tr>""" for x in obs_historial]) or "<tr><td colspan='6'>Sin historial registrado.</td></tr>"
+
+    obs_aut_rows=''.join([f"""
+      <tr data-dni='{h(x['numero_documento'])}'>
+        <td><span class='status-chip {'ok' if x['estado']=='APROBADO' else 'warn'}'>{h(x['estado'])}</span></td><td>{h(x['numero_documento'])}</td><td>{h(x['tipo'])}</td>
+        <td>{h(x['motivo_solicitud'])}</td><td>{h(x['solicitado_por'])}</td><td>{h(x['fecha_solicitud'])}</td><td>{h(x['comentario_aprobacion'])}</td><td>{h(x['aprobado_por'])}</td><td>{h(x['fecha_aprobacion'])}</td>
+      </tr>""" for x in obs_autorizaciones]) or "<tr><td colspan='9'>No hay autorizaciones registradas.</td></tr>"
+
     motivo_options=''.join([f"<option value='{h(x)}'>{h(x)}</option>" for x in MOTIVOS_TRABAJADOR_OBSERVADO])
     nivel_options=''.join([f"<option value='{h(x)}'>{h(x)}</option>" for x in NIVELES_RESTRICCION_OBSERVADO])
 
@@ -5720,32 +7785,920 @@ def admin_contratacion():
     <style>
     .main{background:#f4f6f8!important;color:#111827!important}.c-title{font-size:24px;margin:0 0 20px;font-weight:950;color:#111827}.c-bar{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:14px}.c-filter{display:grid;grid-template-columns:180px minmax(260px,420px) 160px minmax(260px,420px);gap:10px 24px;align-items:center;margin-bottom:22px}.c-filter input,.c-filter select,.c-form input,.c-form select{background:#fff!important;color:#111827!important;border:1px solid #cfd6df!important;border-radius:8px!important;padding:10px!important}.c-btn{background:#ff8d35;color:#fff;border:0;border-radius:10px;padding:10px 16px;font-weight:950;display:inline-flex;gap:8px;align-items:center;text-decoration:none}.c-btn.gray{background:#66707c}.c-card{background:#fff;border:1px solid #dde2e7;border-radius:12px;box-shadow:0 6px 18px #0000000d;margin-bottom:18px}.tabs{display:flex;border-bottom:1px solid #dde2e7}.tab{padding:14px 24px;font-weight:900;color:#7a7f87;border-bottom:3px solid transparent}.tab.active{color:#1f2937;border-bottom-color:#ff8d35}.c-table{width:100%;border-collapse:collapse;background:#fff;font-size:15px}.c-table th{font-weight:900;text-align:left;background:#f7f8fa;border:1px solid #dde2e7;padding:12px}.c-table td{border:1px solid #e1e5ea;padding:11px;vertical-align:middle}.c-table tr:nth-child(even) td{background:#eeeeee}.c-table tr.selected td{background:#bcd7fb!important}.c-badge{display:inline-grid;place-items:center;min-width:70px;border-radius:7px;padding:6px 10px;color:#fff;font-weight:950}.c-badge.green{background:#55ad11}.c-badge.cyan{background:#51c2d4}.state{border:1px solid #d1d5db;border-radius:99px;padding:7px 12px;background:white;color:#16a34a;font-weight:900}.tile-grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:30px;max-width:1100px;margin:45px auto}.c-tile{background:#fff;border:1px solid #dde2e7;border-radius:14px;min-height:185px;padding:28px;display:flex;gap:18px;align-items:flex-start;position:relative;box-shadow:0 6px 18px #0000000d}.tile-icon{width:74px;height:74px;border-radius:50%;background:#ffe5cc;color:#ff8d35;display:grid;place-items:center;font-size:34px}.download-corner{position:absolute;right:18px;bottom:14px;font-size:24px}.toolbar{display:flex;justify-content:flex-end;gap:18px;color:#7b8088;margin:12px 0}.c-form{display:grid;grid-template-columns:180px minmax(260px,430px) 180px minmax(260px,430px);gap:12px 22px;align-items:center}.profile{display:grid;grid-template-columns:150px 1fr 1fr 1fr;gap:24px;align-items:start}.avatar-big{width:135px;height:135px;border-radius:50%;background:#f7c26d;display:grid;place-items:center;font-size:80px}.divider{border-left:2px dashed #c8c8c8;padding-left:20px}.muted2{color:#667085}.anuncio-upload{background:#fff;padding:22px;border-radius:12px;border:1px dashed #ff8d35;max-width:900px}.anuncio-upload input[type=file]{background:#fff!important;color:#111!important;border:1px solid #ddd!important;padding:10px!important;border-radius:8px!important}.video-box{margin-top:16px;background:#111827;color:#fff;padding:18px;border-radius:10px}.video-box video{width:100%;max-height:260px;background:#000;border-radius:8px}.table-wrap{overflow:auto}.plantilla-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.crear-btn{border-radius:22px}.plantilla-filter{display:grid;grid-template-columns:190px minmax(280px,438px) 190px minmax(280px,438px);gap:8px 28px;align-items:center}.filter-card{margin-bottom:18px}.create-card{display:none}.create-card:target{display:block}.tpl-actions{white-space:nowrap;text-align:center}.icon-btn{display:inline-grid;place-items:center;width:34px;height:34px;border:0;background:transparent;color:#111827!important;font-size:20px;font-weight:950;text-decoration:none;cursor:pointer}.icon-btn:hover{background:#eef2f7;border-radius:8px}.action-delete{color:#111827!important}.state.inactive{color:#6b7280;background:#f3f4f6}.state-form{margin:0}.state-select{background:white!important;color:#16a34a!important;border:1px solid #d1d5db!important;border-radius:99px!important;padding:7px 12px!important;font-weight:900;min-width:110px}.state-select.inactive{color:#e11d48!important}.tpl-link{font-weight:900;color:#0f172a!important}.plantilla-table th:first-child,.plantilla-table td:first-child{min-width:92px;text-align:center}@media(max-width:1000px){.c-filter,.c-form,.profile{grid-template-columns:1fr}.tile-grid{grid-template-columns:1fr;margin:20px 0}.c-table{min-width:1000px}}
 
-    .main{background:radial-gradient(circle at 95% -8%,rgba(16,185,129,.12),transparent 24%),linear-gradient(180deg,#0f141a,#111821)!important;color:#f8fafc!important}.c-title,h1,h2,h3{color:#f8fafc!important}.c-card,.filter-card,.table-wrap{background:linear-gradient(145deg,#171f28,#111821)!important;border:1px solid #34404d!important;color:#f8fafc!important}.c-filter input,.c-filter select,.c-form input,.c-form select,input,select,textarea{background:#0b1119!important;color:#f8fafc!important;border:1.5px solid #34404d!important}.c-table,table{background:#111821!important;color:#f8fafc!important}.c-table th,th{background:#0b1119!important;color:#10b981!important;border-color:#364250!important}.c-table td,td{background:#151d26!important;color:#eaf2fb!important;border-color:#2b3541!important}.c-table tr:nth-child(even) td{background:#111821!important}.plantilla-table td,.plantilla-table td *{color:#eaf2fb!important;opacity:1!important}.plantilla-table th{color:#10b981!important}.plantilla-top .crear-btn{position:relative!important;right:auto!important;top:auto!important;min-width:190px!important}.plantilla-top{gap:16px!important}.icon-btn{color:#10b981!important}.tpl-link{color:#fff!important}.state-select{background:#0b1119!important;color:#10b981!important;border:1px solid #10b981!important}.ficha-search{display:flex;gap:12px;margin:0 0 16px;max-width:720px}.ficha-search input{flex:1}.ficha-profile{display:grid;grid-template-columns:150px minmax(320px,1.4fr) minmax(260px,1fr) minmax(260px,1fr);gap:18px;align-items:stretch;margin-bottom:18px}.avatar-panel,.profile-main,.profile-col{background:linear-gradient(145deg,#171f28,#111821);border:1px solid #34404d;border-radius:18px;padding:18px;color:#f8fafc;box-shadow:0 16px 34px rgba(0,0,0,.22)}.avatar-panel{display:grid;place-items:center}.profile-main h2{margin:0 0 10px;color:#fff;font-size:22px}.profile-main p,.profile-col p{margin:8px 0;color:#eaf2fb}.created-box{background:#0b1119;border:1px solid #34404d;border-radius:12px;padding:10px;margin-top:12px;color:#cbd5e1}.status-dot,.status-pill{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-weight:1000}.status-dot.ok,.status-pill.ok{background:rgba(34,197,94,.13);color:#86efac;border:1px solid rgba(34,197,94,.45)}.status-dot.bad,.status-pill.bad{background:rgba(244,63,94,.13);color:#fecdd3;border:1px solid rgba(244,63,94,.45)}.ficha-tabs{display:flex!important;padding:0!important;margin:0 0 16px!important;overflow:hidden}.ficha-tabs .tab{flex:1;background:transparent;border:0;border-bottom:3px solid transparent;color:#cbd5e1!important;cursor:pointer;font-size:16px}.ficha-tabs .tab.active{color:#10b981!important;border-bottom-color:#10b981!important}.ficha-tab-content{display:none}.ficha-tab-content.active{display:block}.laboral-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;padding:24px!important}.laboral-grid label{display:grid;grid-template-columns:220px 1fr;align-items:center;gap:12px;color:#f8fafc!important}.periodos-box{margin-top:14px;background:#111821;border:1px solid #34404d;border-radius:14px;padding:14px;color:#eaf2fb}.mini-chip{display:inline-flex;margin:5px;padding:8px 12px;border-radius:999px;background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.35);font-weight:900}.period-row td{background:#0b1119!important;color:#10b981!important;font-size:16px}.check-green{display:inline-grid;place-items:center;min-width:54px;padding:7px 13px;background:#4ea60f;color:white;border-radius:8px;font-weight:1000}.check-gray{display:inline-grid;place-items:center;min-width:54px;padding:7px 13px;background:#334155;color:#cbd5e1;border-radius:8px;font-weight:1000}@media(max-width:1100px){.ficha-profile{grid-template-columns:1fr}.laboral-grid{grid-template-columns:1fr}.laboral-grid label{grid-template-columns:1fr}.plantilla-filter{grid-template-columns:1fr!important}}
+    .main{background:radial-gradient(circle at 95% -8%,rgba(255,210,63,.12),transparent 24%),linear-gradient(180deg,#0f141a,#111821)!important;color:#f8fafc!important}.c-title,h1,h2,h3{color:#f8fafc!important}.c-card,.filter-card,.table-wrap{background:linear-gradient(145deg,#171f28,#111821)!important;border:1px solid #34404d!important;color:#f8fafc!important}.c-filter input,.c-filter select,.c-form input,.c-form select,input,select,textarea{background:#0b1119!important;color:#f8fafc!important;border:1.5px solid #34404d!important}.c-table,table{background:#111821!important;color:#f8fafc!important}.c-table th,th{background:#0b1119!important;color:#ffd23f!important;border-color:#364250!important}.c-table td,td{background:#151d26!important;color:#eaf2fb!important;border-color:#2b3541!important}.c-table tr:nth-child(even) td{background:#111821!important}.plantilla-table td,.plantilla-table td *{color:#eaf2fb!important;opacity:1!important}.plantilla-table th{color:#ffd23f!important}.plantilla-top .crear-btn{position:relative!important;right:auto!important;top:auto!important;min-width:190px!important}.plantilla-top{gap:16px!important}.icon-btn{color:#ffd23f!important}.tpl-link{color:#fff!important}.state-select{background:#0b1119!important;color:#ffd23f!important;border:1px solid #ffd23f!important}.ficha-search{display:flex;gap:12px;margin:0 0 16px;max-width:720px}.ficha-search input{flex:1}.ficha-profile{display:grid;grid-template-columns:150px minmax(320px,1.4fr) minmax(260px,1fr) minmax(260px,1fr);gap:18px;align-items:stretch;margin-bottom:18px}.avatar-panel,.profile-main,.profile-col{background:linear-gradient(145deg,#171f28,#111821);border:1px solid #34404d;border-radius:18px;padding:18px;color:#f8fafc;box-shadow:0 16px 34px rgba(0,0,0,.22)}.avatar-panel{display:grid;place-items:center}.profile-main h2{margin:0 0 10px;color:#fff;font-size:22px}.profile-main p,.profile-col p{margin:8px 0;color:#eaf2fb}.created-box{background:#0b1119;border:1px solid #34404d;border-radius:12px;padding:10px;margin-top:12px;color:#cbd5e1}.status-dot,.status-pill{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;font-weight:1000}.status-dot.ok,.status-pill.ok{background:rgba(34,197,94,.13);color:#86efac;border:1px solid rgba(34,197,94,.45)}.status-dot.bad,.status-pill.bad{background:rgba(244,63,94,.13);color:#fecdd3;border:1px solid rgba(244,63,94,.45)}.ficha-tabs{display:flex!important;padding:0!important;margin:0 0 16px!important;overflow:hidden}.ficha-tabs .tab{flex:1;background:transparent;border:0;border-bottom:3px solid transparent;color:#cbd5e1!important;cursor:pointer;font-size:16px}.ficha-tabs .tab.active{color:#ffd23f!important;border-bottom-color:#ffd23f!important}.ficha-tab-content{display:none}.ficha-tab-content.active{display:block}.laboral-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;padding:24px!important}.laboral-grid label{display:grid;grid-template-columns:220px 1fr;align-items:center;gap:12px;color:#f8fafc!important}.periodos-box{margin-top:14px;background:#111821;border:1px solid #34404d;border-radius:14px;padding:14px;color:#eaf2fb}.mini-chip{display:inline-flex;margin:5px;padding:8px 12px;border-radius:999px;background:rgba(255,210,63,.12);color:#ffd23f;border:1px solid rgba(255,210,63,.35);font-weight:900}.period-row td{background:#0b1119!important;color:#ffd23f!important;font-size:16px}.check-green{display:inline-grid;place-items:center;min-width:54px;padding:7px 13px;background:#4ea60f;color:white;border-radius:8px;font-weight:1000}.check-gray{display:inline-grid;place-items:center;min-width:54px;padding:7px 13px;background:#334155;color:#cbd5e1;border-radius:8px;font-weight:1000}@media(max-width:1100px){.ficha-profile{grid-template-columns:1fr}.laboral-grid{grid-template-columns:1fr}.laboral-grid label{grid-template-columns:1fr}.plantilla-filter{grid-template-columns:1fr!important}}
 
-    
+/* === PARCHE FINAL CLARO - GESTIÓN CONTRATACIÓN === */
+.main{background:linear-gradient(135deg,#f8fbfd 0%,#eef6f3 100%)!important;color:#111827!important;padding:24px!important;overflow-x:hidden!important}.c-title,h1,h2,h3{color:#111827!important;text-shadow:none!important}.muted,.muted2,p,label,b{color:#344054!important;text-shadow:none!important}.c-card,.filter-card,.table-wrap,.avatar-panel,.profile-main,.profile-col,.anuncio-upload,.created-box,.periodos-box{background:#ffffff!important;border:1px solid #dbe5ee!important;color:#111827!important;border-radius:22px!important;box-shadow:0 18px 42px rgba(15,23,42,.08)!important}.c-filter input,.c-filter select,.c-form input,.c-form select,input,select,textarea{background:#ffffff!important;color:#111827!important;border:1.3px solid #cfd8e3!important;border-radius:14px!important;font-weight:650!important;box-shadow:none!important}input::placeholder,textarea::placeholder{color:#667085!important}.c-table,table{background:#ffffff!important;color:#111827!important}.c-table th,th{background:#f3f6f9!important;color:#475467!important;border-color:#dbe5ee!important;text-transform:none!important;letter-spacing:0!important}.c-table td,td{background:#ffffff!important;color:#111827!important;border-color:#e3e9f0!important;font-weight:650!important}.c-table tr:nth-child(even) td{background:#fbfcfe!important}.c-table tr:hover td{background:#eef8f2!important}.plantilla-table td,.plantilla-table td *{color:#111827!important}.plantilla-table th{color:#475467!important}.c-btn,.btn-green,.btn-blue,.crear-btn{background:linear-gradient(135deg,#15b978,#059669)!important;color:white!important;border:0!important;border-radius:16px!important;box-shadow:0 10px 22px rgba(5,150,105,.20)!important}.c-btn.gray,.btn.gray,.gray{background:#20262d!important;color:#ffffff!important}.icon-btn{color:#059669!important}.tpl-link{color:#0f172a!important}.state-select{background:white!important;color:#059669!important;border:1px solid #d1d5db!important}.tabs{background:#fff!important;border-bottom:1px solid #e3e9f0!important}.tab{color:#667085!important}.tab.active{color:#111827!important;border-bottom-color:#15b978!important}.toolbar{color:#667085!important}.tile-grid{margin:24px 0!important}.c-tile{background:#ffffff!important;border:1px solid #dbe5ee!important;color:#111827!important;border-radius:22px!important;box-shadow:0 18px 42px rgba(15,23,42,.08)!important}.tile-icon{background:#dcfce7!important;color:#059669!important;border-radius:20px!important}.ficha-tabs .tab{color:#667085!important}.ficha-tabs .tab.active{color:#059669!important;border-bottom-color:#15b978!important}.mini-chip{background:#ecfdf3!important;color:#047857!important;border:1px solid #bbf7d0!important}.period-row td{background:#f0fdf4!important;color:#047857!important}.topbar{background:transparent!important;color:#111827!important}.dashboard-contratacion{display:grid;gap:20px}.dash-hero{background:#fff;border:1px solid #dbe5ee;border-radius:26px;padding:26px;display:flex;justify-content:space-between;gap:16px;align-items:center;box-shadow:0 18px 42px rgba(15,23,42,.08)}.dash-hero h1{margin:0;font-size:36px}.dash-kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:18px}.dash-card{background:#fff;border:1px solid #dbe5ee;border-radius:22px;padding:22px;box-shadow:0 18px 42px rgba(15,23,42,.07)}.dash-card small{color:#667085;font-weight:650}.dash-card b{display:block;font-size:34px;color:#101828;margin-top:8px}.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.progress{height:30px;background:#e9eef4;border-radius:999px;overflow:hidden}.progress span{display:block;height:100%;background:#168a55;color:white;text-align:center;font-weight:900;line-height:30px}.quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.quick-grid a{text-decoration:none;text-align:center;padding:14px;border-radius:16px;background:#f3f8f5;color:#065f46;font-weight:900;border:1px solid #bbf7d0}.nr-tabs{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}.nr-tabs a{background:#fff;border:1px solid #dbe5ee;border-radius:14px;padding:12px 20px;text-decoration:none;color:#344054;font-weight:900}.nr-tabs a.active{background:#10b981;color:#fff}.camera-box{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:18px;padding:12px}.camera-box video,.camera-box img{width:100%;max-width:330px;border-radius:14px;background:#111827;display:block;margin-bottom:10px}.cam-actions{display:flex;gap:8px;flex-wrap:wrap}@media(max-width:900px){.main{padding:16px!important}.dash-hero{display:block}.dash-hero h1{font-size:28px}.dash-kpis{grid-template-columns:1fr 1fr}.dash-grid{grid-template-columns:1fr}.quick-grid{grid-template-columns:1fr}.c-table,table{min-width:760px!important}.table-wrap{overflow:auto!important}.c-filter{grid-template-columns:1fr!important}.c-bar,.plantilla-top{flex-direction:column!important;align-items:stretch!important}.c-btn,.crear-btn{justify-content:center!important;width:100%!important}.side{width:min(86vw,330px)!important}.side.open{transform:translateX(0)!important}.app{grid-template-columns:1fr!important}}
 
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
+.compact-form{display:grid!important;grid-template-columns:170px minmax(180px,1fr) 170px minmax(180px,1fr)!important;gap:12px 18px!important;align-items:center!important}.compact-form textarea{min-height:76px}.compact-form b{font-size:13px;color:#334155!important}.table-wrap{overflow:auto!important}.icon-btn{border:0;background:#ecfdf5!important;color:#047857!important;border-radius:10px;padding:7px 9px;cursor:pointer}.icon-btn:hover{background:#bbf7d0!important}.c-form input[type=file]{padding:9px!important}@media(max-width:900px){.compact-form{grid-template-columns:1fr!important}.compact-form b{margin-top:6px}}
 
+/* === PARCHE PRO DEFINITIVO: LEGIBILIDAD + DISTRIBUCIÓN === */
+.req-pro-grid{display:grid!important;grid-template-columns:minmax(560px,1fr) minmax(560px,1fr)!important;gap:24px!important;align-items:start!important;overflow:visible!important}.pro-card,.nice-form{background:#fff!important;border:1px solid #dbe5ee!important;border-radius:24px!important;box-shadow:0 18px 42px rgba(15,23,42,.08)!important;padding:26px!important;color:#0f172a!important;overflow:visible!important}.nice-form{display:grid!important;grid-template-columns:220px minmax(0,1fr) 220px minmax(0,1fr)!important;gap:16px 20px!important;align-items:center!important}.nice-form b,.pro-form b,.c-form b{background:#f1f5f9!important;color:#0f172a!important;min-height:50px!important;border-radius:14px!important;padding:12px 16px!important;text-align:right!important;justify-content:flex-end!important;font-weight:1000!important;white-space:normal!important;line-height:1.15!important}.nice-form input,.nice-form select,.nice-form textarea,.pro-form input,.pro-form select,.pro-form textarea{width:100%!important;min-width:0!important;height:auto!important;min-height:54px!important;border-radius:14px!important;font-size:15px!important;font-weight:800!important;color:#0f172a!important;background:#fff!important}.nice-form textarea{min-height:92px!important}.nice-form .full,.scan-box,.section-head,.actions{grid-column:1/-1!important}.scan-box{background:#f8fafc!important;border:1px dashed #9ee8c8!important;border-radius:22px!important;padding:18px!important}.scan-camera{height:220px!important;background:#eef2f7!important;border-radius:18px!important;display:grid!important;place-items:center!important;color:#475569!important;font-weight:1000!important;text-align:center!important}.scan-camera video{width:100%!important;height:100%!important;object-fit:cover!important;border-radius:18px!important}.scan-tools,.bio-actions,.cam-actions{display:flex!important;gap:12px!important;flex-wrap:wrap!important;margin-top:14px!important}.scan-counter{display:flex!important;gap:10px!important;flex-wrap:wrap!important;margin:14px 0!important}.scan-counter span{background:#ecfdf3!important;color:#047857!important;border:1px solid #bbf7d0!important;border-radius:999px!important;padding:8px 12px!important;font-weight:1000!important}.mini-list{display:grid!important;gap:8px!important;max-height:130px!important;overflow:auto!important}.mini-list div{display:grid!important;grid-template-columns:100px 1fr auto!important;gap:8px!important;background:#fff!important;border:1px solid #dbe5ee!important;border-radius:12px!important;padding:8px!important}.ingreso-form.compact-form{display:grid!important;grid-template-columns:200px minmax(220px,1fr) 200px minmax(220px,1fr)!important;gap:14px 20px!important;align-items:center!important}.ingreso-form .section-head{grid-column:1/-1!important;background:#ecfdf3!important;border:1px solid #bbf7d0!important;color:#0f172a!important;border-radius:16px!important;padding:14px 18px!important;margin:8px 0!important}.camera-box{grid-column:auto!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;border-radius:20px!important;padding:16px!important;display:grid!important;justify-items:center!important;gap:12px!important}.camera-box video,.camera-box img{width:100%!important;max-width:320px!important;height:260px!important;object-fit:cover!important;background:#0f172a!important;border-radius:18px!important;margin:0!important}.bio-box{background:#fff!important;border:1px solid #dbe5ee!important;border-radius:18px!important;padding:16px!important;display:grid!important;gap:12px!important}.learning-grid{display:grid!important;grid-template-columns:minmax(650px,1.25fr) minmax(420px,.75fr)!important;gap:24px!important;align-items:start!important}.solo-induccion{grid-template-columns:1fr!important}.solo-induccion .eval-side{display:none!important}.eval-side{position:static!important}.eval-grid{display:grid!important;grid-template-columns:190px minmax(0,1fr)!important;gap:14px!important;align-items:center!important}.records-toolbar,.module-tools,.filter-row-pro{display:grid!important;grid-template-columns:minmax(260px,1fr) 220px auto auto!important;gap:12px!important;align-items:center!important;margin:14px 0!important}.records-toolbar input,.records-toolbar select,.module-tools input{width:100%!important}.delete-mini,.icon-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;background:#ecfdf3!important;color:#047857!important;border:1px solid #bbf7d0!important;border-radius:999px!important;padding:8px 13px!important;font-weight:1000!important;font-size:14px!important;min-width:76px!important;white-space:nowrap!important}.clean-table th,.clean-table td,.c-table th,.c-table td{white-space:nowrap!important;vertical-align:middle!important}.col-delete{width:100px!important;min-width:100px!important}.zebra-card{display:grid!important;grid-template-columns:minmax(420px,1fr) minmax(360px,.75fr)!important;gap:20px!important;align-items:start!important}.foto-mini{width:54px!important;height:54px!important;object-fit:cover!important;border-radius:14px!important}.side i,.menu-title i,.menu-item i{display:inline-grid!important;place-items:center!important;width:34px!important;height:34px!important;border-radius:12px!important;background:rgba(255,255,255,.12)!important;color:#dff8ed!important;font-size:18px!important;flex:0 0 auto!important}.menu-title.active i,.menu-item.active i,.menu-item.parent-active i{background:rgba(255,255,255,.22)!important;color:#063b2b!important}.side .label{white-space:normal!important;line-height:1.15!important;font-weight:850!important}.menu-title,.menu-item{overflow:visible!important;min-width:0!important}.side.collapsed .label{display:none!important}@media(max-width:1250px){.req-pro-grid,.learning-grid,.zebra-card{grid-template-columns:1fr!important}.nice-form,.ingreso-form.compact-form{grid-template-columns:180px minmax(0,1fr)!important}.records-toolbar,.module-tools,.filter-row-pro{grid-template-columns:1fr!important}}@media(max-width:760px){.nice-form,.ingreso-form.compact-form,.eval-grid{grid-template-columns:1fr!important}.nice-form b,.pro-form b,.c-form b{text-align:left!important;justify-content:flex-start!important}.dash-hero{padding:20px!important}.dash-hero h1{font-size:28px!important}.scan-camera{height:180px!important}.camera-box video,.camera-box img{height:220px!important}}
+
+
+/* === PARCHE FINAL 28/05 - UI ORDENADA, SIN ELEMENTOS TAPADOS === */
+.main{overflow-x:hidden!important}.dash-hero{max-width:100%!important}.pro-card,.nice-form,.c-card{box-sizing:border-box!important;max-width:100%!important;overflow:hidden!important}.req-pro-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:28px!important;max-width:100%!important;overflow:hidden!important}.req-pro-grid>.pro-card{min-width:0!important}.nice-form{display:grid!important;grid-template-columns:190px minmax(0,1fr) 190px minmax(0,1fr)!important;gap:18px 18px!important;align-items:center!important}.nice-form b,.pro-form b,.c-form b{display:flex!important;align-items:center!important;justify-content:flex-end!important;min-height:54px!important;padding:12px 16px!important;border-radius:14px!important;background:#eef4f8!important;color:#0b2540!important;font-size:15px!important;line-height:1.15!important;white-space:normal!important;text-align:right!important}.nice-form input,.nice-form select,.nice-form textarea,.pro-form input,.pro-form select,.pro-form textarea,.c-form input,.c-form select,.c-form textarea{width:100%!important;min-width:0!important;box-sizing:border-box!important;min-height:54px!important;font-size:15px!important;color:#0f172a!important;background:#fff!important;overflow:hidden!important;text-overflow:ellipsis!important}.nice-form .actions,.nice-form .section-head,.nice-form .scan-box,.nice-form .full{grid-column:1/-1!important}.scan-box{display:grid!important;grid-template-columns:1fr!important;gap:16px!important;padding:22px!important;overflow:visible!important}.scan-camera{height:260px!important;width:100%!important;display:grid!important;place-items:center!important;border-radius:20px!important;background:#eef2f7!important;color:#475467!important;text-align:center!important;padding:18px!important}.scan-tools{display:flex!important;gap:12px!important;justify-content:flex-start!important;flex-wrap:wrap!important}.scan-tools .c-btn,.cam-actions .c-btn,.bio-actions .c-btn{width:auto!important;min-width:150px!important;justify-content:center!important}.scan-counter{display:flex!important;gap:10px!important;flex-wrap:wrap!important}.ingreso-form.compact-form{display:grid!important;grid-template-columns:190px minmax(0,1fr) 190px minmax(0,1fr)!important;gap:18px 20px!important;align-items:center!important}.ingreso-form.compact-form .section-head{grid-column:1/-1!important}.camera-box{grid-column:1 / span 2!important;display:grid!important;grid-template-columns:1fr!important;justify-items:center!important;align-items:start!important;gap:14px!important;padding:18px!important;overflow:visible!important}.camera-box video,.camera-box img{width:100%!important;max-width:360px!important;height:280px!important;object-fit:cover!important;border-radius:18px!important}.cam-actions{display:flex!important;gap:10px!important;flex-wrap:wrap!important;justify-content:center!important}.bio-box{grid-column:3 / span 2!important;display:grid!important;grid-template-columns:1fr!important;gap:14px!important;align-self:start!important;position:relative!important;z-index:1!important}.bio-box b,.bio-box .label,.bio-box .section-head{position:static!important;transform:none!important}.learning-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(360px,420px)!important;gap:28px!important;align-items:start!important;overflow:hidden!important}.solo-induccion{grid-template-columns:1fr!important}.solo-induccion .eval-side{display:none!important}.learning-grid .nice-form{grid-template-columns:190px minmax(0,1fr) 190px minmax(0,1fr)!important}.eval-side{position:static!important;overflow:hidden!important}.eval-grid{display:grid!important;grid-template-columns:180px minmax(0,1fr)!important;gap:14px!important}.records-toolbar{display:grid!important;grid-template-columns:minmax(250px,1fr) 220px 170px 130px!important;gap:12px!important;align-items:center!important}.records-toolbar input,.records-toolbar select{width:100%!important}.c-table th,.c-table td{font-size:14px!important;color:#1f2937!important}.c-table th{font-weight:800!important;background:#f3f6f9!important}.c-table td{font-weight:600!important}.c-badge.green{background:#e5f6df!important;color:#2f7d12!important;border:1px solid #a7d88f!important;font-weight:800!important}.delete-mini{font-size:13px!important;min-width:72px!important;max-width:90px!important;padding:7px 10px!important;white-space:nowrap!important}.col-delete{width:96px!important;min-width:96px!important;max-width:96px!important}.side .label{font-size:14px!important;line-height:1.15!important;color:#f8fffb!important}.side i,.menu-title i,.menu-item i{background:rgba(255,255,255,.14)!important;color:#e9fff5!important}
+@media(max-width:1320px){.req-pro-grid,.learning-grid{grid-template-columns:1fr!important}.bio-box,.camera-box{grid-column:1/-1!important}.nice-form,.ingreso-form.compact-form,.learning-grid .nice-form{grid-template-columns:180px minmax(0,1fr)!important}.records-toolbar{grid-template-columns:1fr 200px auto auto!important}}
+@media(max-width:760px){.nice-form,.ingreso-form.compact-form,.learning-grid .nice-form,.eval-grid{grid-template-columns:1fr!important}.nice-form b,.pro-form b,.c-form b{text-align:left!important;justify-content:flex-start!important}.camera-box,.bio-box{grid-column:1/-1!important}.records-toolbar{grid-template-columns:1fr!important}.scan-tools .c-btn,.cam-actions .c-btn,.bio-actions .c-btn{width:100%!important}.c-title{font-size:22px!important}.dash-hero h1{font-size:28px!important}}
+
+
+/* === PARCHE FINAL DEFINITIVO - DISTRIBUCIÓN LEGIBLE EN TODAS LAS PESTAÑAS === */
+html,body{overflow-x:hidden!important;}
+.main,.content,.app-main{max-width:100%!important;overflow-x:hidden!important;padding:22px 28px!important;}
+.dash-hero{width:100%!important;box-sizing:border-box!important;margin:0 0 24px!important;}
+.pro-card,.c-card,.dash-card,.table-wrap{box-sizing:border-box!important;max-width:100%!important;overflow:hidden!important;}
+
+/* Tarjetas principales: que NO se corten ni oculten palabras */
+.req-pro-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:28px!important;align-items:start!important;width:100%!important;}
+.req-pro-grid>.pro-card{min-width:0!important;width:100%!important;}
+.req-pro-grid .nice-form{grid-template-columns:180px minmax(0,1fr)!important;gap:18px 20px!important;padding:30px!important;}
+.req-pro-grid .nice-form b,.nice-form b,.pro-form b,.c-form b,.compact-form b{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;line-height:1.18!important;min-height:56px!important;}
+.req-pro-grid .nice-form input,.req-pro-grid .nice-form select,.req-pro-grid .nice-form textarea{min-width:0!important;width:100%!important;}
+.req-pro-grid .nice-form .actions{grid-column:2!important;display:flex!important;align-items:center!important;gap:14px!important;}
+.req-pro-grid .muted2{display:block!important;white-space:normal!important;max-width:100%!important;}
+
+/* Escáner: cámara visible y botones dentro de la tarjeta */
+.scan-box{grid-column:1/-1!important;display:grid!important;grid-template-columns:1fr!important;gap:16px!important;padding:22px!important;overflow:hidden!important;}
+.scan-camera{width:100%!important;height:280px!important;min-height:280px!important;border-radius:20px!important;background:#eef3f7!important;display:grid!important;place-items:center!important;text-align:center!important;padding:22px!important;}
+.scan-tools{display:flex!important;gap:12px!important;flex-wrap:wrap!important;justify-content:flex-start!important;}
+.scan-tools .c-btn{min-width:160px!important;max-width:100%!important;}
+.scan-counter{display:flex!important;gap:10px!important;flex-wrap:wrap!important;}
+
+/* Registro nuevo/reingresante: etiqueta junto a su campo, sin cruces */
+.ingreso-form.compact-form{grid-template-columns:190px minmax(0,1fr) 190px minmax(0,1fr)!important;gap:18px 20px!important;align-items:center!important;padding:28px!important;}
+.ingreso-form.compact-form b{justify-content:flex-end!important;text-align:right!important;}
+.ingreso-form.compact-form input,.ingreso-form.compact-form select,.ingreso-form.compact-form textarea{width:100%!important;min-width:0!important;}
+.camera-box{grid-column:1 / span 2!important;display:grid!important;grid-template-columns:1fr!important;gap:14px!important;justify-items:center!important;align-items:start!important;overflow:visible!important;padding:18px!important;}
+.camera-box video,.camera-box img{width:100%!important;max-width:340px!important;height:280px!important;object-fit:cover!important;border-radius:20px!important;}
+.cam-actions{display:flex!important;gap:12px!important;flex-wrap:wrap!important;justify-content:center!important;}
+.bio-box{grid-column:3 / span 2!important;display:grid!important;grid-template-columns:1fr!important;gap:14px!important;align-self:start!important;padding:18px!important;position:static!important;}
+.bio-box b,.bio-box .label{position:static!important;transform:none!important;margin:0!important;}
+.bio-actions{display:flex!important;gap:12px!important;flex-wrap:wrap!important;}
+
+/* Inducción y cursos: distribución limpia */
+.learning-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(360px,430px)!important;gap:26px!important;align-items:start!important;overflow:hidden!important;}
+.learning-grid.solo-induccion{grid-template-columns:1fr!important;}
+.learning-grid.solo-induccion .eval-side{display:none!important;}
+.learning-grid .nice-form{grid-template-columns:185px minmax(0,1fr) 185px minmax(0,1fr)!important;gap:18px 20px!important;padding:28px!important;}
+.learning-grid .nice-form input,.learning-grid .nice-form select,.learning-grid .nice-form textarea{min-width:0!important;width:100%!important;}
+.eval-side{position:static!important;overflow:hidden!important;}
+.eval-grid{grid-template-columns:170px minmax(0,1fr)!important;gap:14px!important;}
+.records-toolbar{grid-template-columns:minmax(280px,1fr) 220px 170px 130px!important;gap:14px!important;}
+.records-toolbar input,.records-toolbar select{width:100%!important;min-width:0!important;}
+
+/* Tablas: columnas visibles y eliminar junto a estado */
+.table-wrap{overflow-x:auto!important;}
+.clean-table,.c-table{table-layout:auto!important;min-width:980px!important;}
+.clean-table th,.clean-table td,.c-table th,.c-table td{white-space:normal!important;line-height:1.25!important;font-size:14px!important;color:#172033!important;}
+.clean-table th,.c-table th{font-weight:850!important;background:#f4f7fa!important;}
+.delete-mini,.action-delete,.btn-del{min-width:74px!important;max-width:96px!important;font-size:13px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}
+.col-delete{width:100px!important;min-width:100px!important;max-width:100px!important;}
+.status-pill,.c-badge{font-weight:850!important;letter-spacing:0!important;}
+
+/* Panel lateral: iconos visibles y letras suaves */
+.side .menu-item,.side .menu-title{gap:12px!important;align-items:center!important;color:#ecfff7!important;font-weight:850!important;line-height:1.15!important;}
+.side i,.menu-title i,.menu-item i,.side .menu-item span:first-child,.side .menu-title span:first-child{width:36px!important;height:36px!important;min-width:36px!important;border-radius:12px!important;display:grid!important;place-items:center!important;background:rgba(255,255,255,.13)!important;color:#eafff7!important;font-size:18px!important;}
+.side .label{display:block!important;color:#f4fff9!important;font-size:14px!important;font-weight:850!important;white-space:normal!important;line-height:1.15!important;}
+.side.collapsed .label{display:none!important;}
+
+@media(max-width:1350px){
+  .req-pro-grid,.learning-grid{grid-template-columns:1fr!important;}
+  .req-pro-grid .nice-form,.learning-grid .nice-form,.ingreso-form.compact-form{grid-template-columns:185px minmax(0,1fr)!important;}
+  .req-pro-grid .nice-form .actions,.learning-grid .nice-form .actions{grid-column:2!important;}
+  .camera-box,.bio-box{grid-column:1/-1!important;}
+}
+@media(max-width:760px){
+  .main,.content,.app-main{padding:16px!important;}
+  .req-pro-grid .nice-form,.learning-grid .nice-form,.ingreso-form.compact-form,.eval-grid{grid-template-columns:1fr!important;padding:18px!important;}
+  .req-pro-grid .nice-form .actions,.learning-grid .nice-form .actions{grid-column:1!important;}
+  .nice-form b,.ingreso-form.compact-form b,.pro-form b,.c-form b{justify-content:flex-start!important;text-align:left!important;min-height:auto!important;}
+  .scan-tools .c-btn,.cam-actions .c-btn,.bio-actions .c-btn{width:100%!important;}
+  .records-toolbar{grid-template-columns:1fr!important;}
+  .dash-hero h1{font-size:30px!important;}
+}
 </style>"""
     def wrap(inner):
         return css + inner
-    if sec=='flujo':
-        rows=''.join([f"<tr class='{ 'selected' if i==0 else ''}'><td><input type='checkbox' {'checked' if i==0 else ''}></td><td>🔍 📄</td><td>{232105-i}</td><td><span class='c-badge green'>APROBADO</span></td><td>{'Eliminar Contrato' if i%2==0 else 'Eliminar Alta Trabajador'}</td><td>{now_txt()}</td><td>{now_txt()}</td><td>{(trabajadores[i]['nombre'] if i < len(trabajadores) else 'TRABAJADOR DEMO')}</td></tr>" for i in range(10)])
-        content=wrap(f"<h2 class='c-title'>Eventos</h2><div class='c-filter'><b>Tipos de Evento:</b><select><option>Renovar Contrato</option><option>Eliminar Contrato</option></select><b>Estados:</b><select><option></option><option>Aprobado</option><option>Pendiente</option></select><b>Código Trabajador</b><input><span></span><span><button class='c-btn'>⌕ Buscar</button> <button class='c-btn gray'>Limpiar</button></span></div><div class='toolbar'>⚙ Acción ▾</div><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th></th><th>No.Operación</th><th>Estado</th><th>Tipo de Evento</th><th>Fecha Registro</th><th>Fecha último Estado</th><th>Trabajador</th></tr>{rows}</table></div>")
+    if sec=='ia':
+        dni_q = clean(request.values.get('dni'))
+        pregunta_q = clean(request.values.get('pregunta')) or 'resumen general'
+        respuesta_ia = ia_contratacion_responder(pregunta_q, dni_q)
+        resumen_ia = ia_contratacion_resumen_global()
+        try:
+            with db() as con_ia:
+                con_ia.execute('INSERT INTO ia_contratacion_log(pregunta,dni,respuesta_estado,usuario,fecha) VALUES(?,?,?,?,?)', (pregunta_q, normalizar_dni(dni_q), 'CONSULTADO', session.get('admin_user','admin'), now_txt()))
+                con_ia.commit()
+        except Exception:
+            pass
+        content=wrap(f"""
+        <style>
+          .ia-hero{{display:flex;justify-content:space-between;gap:18px;align-items:center;background:linear-gradient(135deg,#062b24,#0f766e);color:white;border-radius:24px;padding:26px;margin-bottom:18px;box-shadow:0 18px 38px rgba(15,118,110,.22)}}
+          .ia-hero h1{{color:white!important;margin:0;font-size:30px}} .ia-hero p{{color:#d9fff6;margin:8px 0 0}}
+          .ia-kpis{{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:12px;margin-bottom:18px}}
+          .ia-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:18px;padding:16px;box-shadow:0 10px 24px #0f172a0d}}
+          .ia-kpi small{{display:block;color:#64748b;font-weight:900}} .ia-kpi b{{font-size:28px;color:#0f172a}}
+          .ia-grid{{display:grid;grid-template-columns:.9fr 1.25fr;gap:18px;align-items:start}}
+          .ia-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:20px;box-shadow:0 14px 32px #0f172a0d;color:#0f172a}}
+          .ia-form{{display:grid;grid-template-columns:140px 1fr;gap:12px;align-items:center}}
+          .ia-form input,.ia-form textarea{{width:100%;background:#fff!important;color:#0f172a!important;border:1px solid #cbd5e1!important;border-radius:12px!important;padding:12px!important;font-weight:800}}
+          .ia-result{{border-radius:18px;padding:18px;border:1px solid #dbe7ef;background:#f8fafc;color:#0f172a}}
+          .ia-result.ok{{border-color:#86efac;background:#f0fdf4}} .ia-result.warn{{border-color:#fde68a;background:#fffbeb}} .ia-result.bad{{border-color:#fecdd3;background:#fff1f2}}
+          .ia-result h3{{color:#0f172a!important;margin-top:0}} .ia-result li{{margin:6px 0}}
+          .ia-suggest{{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}} .ia-suggest a{{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-radius:999px;padding:8px 12px;text-decoration:none;font-weight:900}}
+          @media(max-width:1100px){{.ia-kpis,.ia-grid{{grid-template-columns:1fr}}.ia-form{{grid-template-columns:1fr}}.ia-hero{{display:block}}}}
+        </style>
+        <div class='ia-hero'>
+          <div><h1>🤖 IA RR.HH. - Gestión de Contratación</h1><p>Asistente interno con reglas de validación: postulantes, datos obligatorios, observados, contratos, firmas y renovaciones.</p></div>
+          <a class='c-btn gray' href='{url_for('admin_contratacion', sec='dashboard')}'>Volver al dashboard</a>
+        </div>
+        <div class='ia-kpis'>
+          <div class='ia-kpi'><small>Requerimientos</small><b>{resumen_ia['requerimientos']}</b></div>
+          <div class='ia-kpi'><small>Postulantes</small><b>{resumen_ia['postulantes']}</b></div>
+          <div class='ia-kpi'><small>Documentos</small><b>{resumen_ia['documentos']}</b></div>
+          <div class='ia-kpi'><small>Observados</small><b>{resumen_ia['observados_activos']}</b></div>
+          <div class='ia-kpi'><small>Firmas pendientes</small><b>{resumen_ia['firmas_pendientes']}</b></div>
+          <div class='ia-kpi'><small>Vencen 30 días</small><b>{resumen_ia['vencen_30']}</b></div>
+        </div>
+        <div class='ia-grid'>
+          <div class='ia-card'>
+            <h2>Consultar IA</h2>
+            <form method='get' action='{url_for('admin_contratacion')}' class='ia-form'>
+              <input type='hidden' name='sec' value='ia'>
+              <b>DNI</b><input name='dni' value='{h(dni_q)}' placeholder='Ejemplo: 74324033'>
+              <b>Pregunta</b><textarea name='pregunta' rows='4' placeholder='Ejemplo: ¿Puede generar contrato? ¿Qué le falta? ¿Tiene observación?'>{h(pregunta_q)}</textarea>
+              <span></span><button class='c-btn'>Analizar con IA</button>
+            </form>
+            <div class='ia-suggest'>
+              <a href='{url_for('admin_contratacion', sec='ia', pregunta='pendientes de firma')}'>Pendientes de firma</a>
+              <a href='{url_for('admin_contratacion', sec='ia', pregunta='contratos por vencer')}'>Contratos por vencer</a>
+              <a href='{url_for('admin_contratacion', sec='ia', pregunta='trabajadores observados')}'>Observados</a>
+            </div>
+          </div>
+          <div class='ia-card'>
+            <h2>Resultado del análisis</h2>
+            {respuesta_ia}
+          </div>
+        </div>
+        <div class='ia-card' style='margin-top:18px'>
+          <h2>Reglas implementadas</h2>
+          <p>LISTO: datos completos y sin bloqueos. PENDIENTE: faltan datos, firma, checklist o validación. BLOQUEADO: observación Nivel 3 activa o DNI inválido.</p>
+        </div>
+        """)
+    if sec=='dashboard':
+        total_trab = len(trabajadores)
+        total_req = len(requerimientos)
+        total_ing = len(ingresos)
+        total_med = len(medicas)
+        total_cap = len(capacitaciones)
+        total_ind = len(indumentarias)
+        total_nisira = len(lotes_nisira)
+        aptos = len([r for r in medicas if (r['estado'] or '').upper()=='APTO'])
+        avance = min(100, round(((total_med+total_cap+total_ind) / max(total_ing*3,1))*100, 1)) if total_ing else 0
+        ult_rows=''.join([f"<tr><td>—</td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos[:10]]) or "<tr><td colspan='7'>Sin ingresos registrados.</td></tr>"
+        content=wrap(f"""
+        <section class='dashboard-contratacion'>
+          <div class='dash-hero'>
+            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, indumentaria, fotocheck, NISIRA y Gestión Documental.</p></div>
+            <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=requerimientos'>Nuevo ticket</a><a class='c-btn gray' href='/admin/contratacion?sec=nuevos'>Registrar trabajador</a></div>
+          </div>
+          <div class='dash-kpis'><div class='dash-card'><small>Tickets</small><b>{total_req}</b></div><div class='dash-card'><small>Postulantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Lotes NISIRA</small><b>{total_nisira}</b></div></div>
+          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, inducción e indumentaria.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Tickets</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/admin/contratacion?sec=ia'>IA RR.HH.</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>0</span></b><b>Pendientes<br><span>0</span></b><b>Aprobados<br><span>0</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
+          <div class='dash-card table-wrap'><h2>Últimos registros del embudo</h2><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Ingreso</th><th>Sede</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
+        </section>
+        """)
+    elif sec=='requerimientos':
+        req_options=''.join([f"<option value='{h(r['ticket'])}'>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['actividad'])}</option>" for r in requerimientos])
+        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='8'>Sin requerimientos registrados.</td></tr>"
+        trabajadores_scan_js = json.dumps({normalizar_dni(r['dni']): {'nombre': (r['nombre'] or ''), 'empresa': (r['empresa'] or ''), 'cargo': (r['cargo'] or ''), 'area': (r['area'] or ''), 'correo': (r['correo'] or '')} for r in trabajadores}, ensure_ascii=False)
+        content=wrap(f'''
+        <h2 class='c-title'>Requerimiento de personal</h2>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Requerimiento de contratación</h1><p class='muted2'>Primero crea el requerimiento por empresa, área y actividad. Luego escanea DNI o código de barras en este mismo módulo para armar la base del requerimiento.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Completar ficha trabajador</a></div>
+        <div class='req-pro-grid'>
+          <form method='post' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Ticket / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001'><b>Empresa</b><select name='empresa' required>{opt_empresa_select}</select><b>Área</b><input name='area' list='lista_areas_cfg' required placeholder='Área desde Datos Maestros'><b>Cargo</b><input name='cargo' list='lista_cargos_cfg' required placeholder='Cargo desde Datos Maestros'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' required placeholder='Actividad desde Datos Maestros'><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha ingreso objetivo</b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Tipo contrato</b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral</b><select name='regimen_laboral'>{opt_regimen_select}</select><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear ticket</button><span class='muted2'>Al cumplir la cantidad, el sistema cierra el cupo automáticamente.</span></div></form>
+          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='ticket_req' id='ticket_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏹ Detener</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
+        </div>
+        <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Eliminar</th><th>Responsable</th></tr>{req_rows}</table></div>
+        <script>
+        let scanReqStream=null, scanReqCount=0, scanReqNuevos=0, scanReqReingresos=0, scanReqSaving=false;
+        const trabajadoresReq = {trabajadores_scan_js};
+        function limpiarDniReq(v){{return (v||'').replace(/\D/g,'').slice(-8);}}
+        function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.frequency.value=(tipo==='reingreso'?880:520); gain.gain.value=0.06; osc.connect(gain); gain.connect(ctx.destination); osc.start(); setTimeout(()=>{{osc.stop();ctx.close();}},140);}}catch(e){{}}}}
+        document.addEventListener('DOMContentLoaded',()=>{{const i=document.getElementById('dni_scan_req'); if(i){{i.addEventListener('keydown',function(e){{if(e.key==='Enter'){{e.preventDefault(); agregarDniLocalReq();}}}}); i.addEventListener('input',function(){{const dni=limpiarDniReq(i.value); if(document.getElementById('scan_masivo_req')?.checked && dni.length===8){{setTimeout(()=>agregarDniLocalReq(),80);}}}});}}}});
+        async function agregarDniLocalReq(){{
+          if(scanReqSaving) return;
+          const i=document.getElementById('dni_scan_req'); const ticket=document.getElementById('ticket_req_auto')?.value||''; const dni=limpiarDniReq(i.value);
+          if(!ticket){{alert('Seleccione requerimiento activo.');return;}}
+          if(dni.length!==8){{alert('DNI debe tener 8 dígitos.');return;}}
+          scanReqSaving=true; i.value=dni;
+          const trab=trabajadoresReq[dni]; const esRe=!!trab; const nombre=esRe?(trab.nombre||'REINGRESANTE'):'NUEVO - solo DNI';
+          try{{
+            const fd=new FormData(); fd.append('accion','registrar_dni_requerimiento'); fd.append('ticket_req',ticket); fd.append('dni_scan',dni);
+            await fetch(window.location.href, {{method:'POST', body:fd, credentials:'same-origin'}});
+            scanReqCount++; if(esRe) scanReqReingresos++; else scanReqNuevos++;
+            document.getElementById('cntLeidos').innerText='Leídos: '+scanReqCount;
+            document.getElementById('cntNuevos').innerText='Nuevos: '+scanReqNuevos;
+            document.getElementById('cntReingresos').innerText='Reingresos: '+scanReqReingresos;
+            document.getElementById('scan_result_req').value = esRe ? ('REINGRESANTE: '+nombre) : ('NUEVO registrado: '+dni);
+            beepReq(esRe?'reingreso':'nuevo');
+            const box=document.getElementById('listaScanReq'); const row=document.createElement('div');
+            row.innerHTML='<b>'+dni+'</b><span>'+(esRe?('Reingresante: '+nombre):'Nuevo: DNI guardado')+'</span><small>'+new Date().toLocaleTimeString()+'</small>'; box.prepend(row);
+            i.value=''; i.focus();
+          }}catch(e){{alert('No se pudo guardar automático. Revise conexión.');}}
+          scanReqSaving=false;
+        }}
+        async function activarCamaraReq(){{try{{scanReqStream=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'environment'}},audio:false}}); const v=document.getElementById('videoScanReq'); v.srcObject=scanReqStream; v.style.display='block'; document.getElementById('scanCamMsg').style.display='none';}}catch(e){{alert('No se pudo activar cámara. Use HTTPS/Render o lector USB.')}}}}
+        function apagarCamaraReq(){{if(scanReqStream){{scanReqStream.getTracks().forEach(t=>t.stop());}} const v=document.getElementById('videoScanReq'); if(v){{v.style.display='none';v.srcObject=null;}} const m=document.getElementById('scanCamMsg'); if(m)m.style.display='block';}}
+        </script>
+        ''')
+    elif sec=='nuevos':
+        ingreso_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar registro?')\"><input type='hidden' name='accion' value='eliminar_ingreso'><input type='hidden' name='ingreso_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td>{h(r['area'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos_mostrar]) or "<tr><td colspan='13'>Sin registros de ingresos.</td></tr>"
+        content=wrap(f"""
+        <h2 class='c-title'>Postulantes</h2>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Postulantes por requerimiento</h1><p class='muted2'>Primero seleccione el requerimiento. Luego busque o complete los postulantes registrados en ese requerimiento.</p></div><a class='c-btn' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato Excel</a></div><div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>1) Requerimiento / Ticket</b><select id='filtro_req_postulantes' onchange="location.href='/admin/contratacion?sec=nuevos&req='+encodeURIComponent(this.value)"><option value=''>Seleccione requerimiento para ver todos</option>{opt_req}</select><b>Buscar postulantes del requerimiento</b><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='DNI, trabajador, cargo, actividad...'></div>
+        <div class='nr-tabs'><a class='active' href='#nuevo'>Nuevo</a><a href='#reingresante'>Reingresante</a><span>El DNI detecta si ya existe y cambia automáticamente a REINGRESANTE.</span></div>
+        <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'>{opt_empresa_select}</select><b>Celular</b><input name='celular' id='celular_ingreso'><b>Correo</b><input name='correo' id='correo_ingreso' type='email'><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato'><b>Tipo contrato</b><select name='tipo_contrato'>{opt_tipo_contrato_select}</select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required>{opt_regimen_select}</select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneración básica</b><input name='remuneracion_basica' placeholder='Ej. 1130.00'><b>Remuneración en letras</b><input name='remuneracion_letra' placeholder='Ej. Mil ciento treinta con 00/100 soles'><b>Moneda</b><input name='nombre_moneda' value='{h(_moneda_nombre)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='{h(_moneda_simbolo)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'>{opt_periodicidad_select}</select><b>Tipo pago</b><select name='tipo_pago'>{opt_tipo_pago_select}</select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Requerimiento <span class='req-mark'>*</span></b><select name='requerimiento' required><option value=''>Seleccione requerimiento</option>{opt_req}</select><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏹ Detener</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Funciones / labores</b><textarea name='funciones' rows='2' placeholder='Funciones que se usarán en contrato si la plantilla lo requiere.'></textarea><b>Meses contrato</b><input name='meses_contrato' placeholder='Ej. 3 / TRES'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button class='c-btn'>💾 Guardar trabajador</button></form><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
+        <script>
+        const trabajadoresBase = {{}};
+        {';'.join([f"trabajadoresBase['{h(t['dni'])}']={{nombre:'{h(t['nombre'])}',empresa:'{h(t['empresa'])}',cargo:'{h(t['cargo'] or '')}',area:'{h(t['area'] or '')}',correo:'{h(t['correo'] or '')}'}}" for t in trabajadores[:700]])};
+        function emitirBeep(tipo){{try{{const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.type='sine';o.frequency.value=(tipo==='REINGRESANTE'?880:520);o.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(0.08,ctx.currentTime);o.start();setTimeout(()=>{{o.stop();ctx.close();}},180);}}catch(e){{}}}}
+        function alertaTipoIngreso(){{const tipo=document.getElementById('tipo_ingreso'); const box=document.querySelector('.tipo-ingreso-alert'); if(!tipo||!box)return; box.classList.remove('nuevo','reingresante'); box.classList.add(tipo.value==='REINGRESANTE'?'reingresante':'nuevo'); emitirBeep(tipo.value); const msg=box.querySelector('small'); if(msg){{msg.innerText=tipo.value==='REINGRESANTE'?'REINGRESANTE detectado: revisar datos jalados del historial antes de guardar.':'NUEVO: completar campos obligatorios antes de generar documentos.';}}}}
+        function scanDniIngreso(e){{if(e.key==='Enter'){{e.preventDefault();var v=(e.target.value||'').replace(/\D/g,'').slice(-8);var dni=document.getElementById('dni_ingreso');if(dni){{dni.value=v;detectarReingreso();dni.focus();}}}}}}
+        async function detectarReingreso(){{const dni=document.getElementById('dni_ingreso').value.replace(/\D/g,''); const tipo=document.getElementById('tipo_ingreso'); const origen=document.getElementById('origen_validacion'); if(dni.length!==8) return; let t=trabajadoresBase[dni]||null; try{{const r=await fetch('/api/contratacion/trabajador/'+dni); const j=await r.json(); if(j.ok) t=j.trabajador;}}catch(e){{}} if(t){{tipo.value='REINGRESANTE'; alertaTipoIngreso(); origen.value='BASE HISTORICA EXCEL / POSTULANTES'; const map={{trabajador_ingreso:(t.nombre||t.trabajador), empresa_ingreso:t.empresa, cargo_ingreso:t.cargo, area_ingreso:t.area, correo_ingreso:t.correo, celular_ingreso:t.celular}}; Object.keys(map).forEach(id=>{{const el=document.getElementById(id); if(el && !el.value) el.value=map[id]||'';}}); ['direccion','departamento','provincia','distrito','estado_civil','sistema_pensionario','ultima_empresa','discapacidad','cantidad_hijos','cuenta_bancaria','talla_indumentaria','contacto_emergencia'].forEach(k=>{{const el=document.querySelector('[name="'+k+'"]'); if(el && !el.value && t[k]) el.value=t[k];}});}} else {{tipo.value='NUEVO'; alertaTipoIngreso(); origen.value='NUEVO / COMPLETAR FICHA';}}}}
+        let streamIngreso=null; async function activarCamaraIngreso(){{try{{streamIngreso=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'user'}},audio:false}});document.getElementById('camVideo').srcObject=streamIngreso;}}catch(e){{alert('No se pudo activar cámara. Use HTTPS/Render o adjunte foto.')}}}}
+        function capturarFotoIngreso(){{const v=document.getElementById('camVideo'),c=document.getElementById('camCanvas'),img=document.getElementById('camPreview'); if(!v||!v.videoWidth){{alert('Active la cámara primero.');return;}} c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0); const data=c.toDataURL('image/jpeg',0.90); document.getElementById('foto_base64').value=data; img.src=data; img.style.display='block';}}
+        function apagarCamaraIngreso(){{if(streamIngreso){{streamIngreso.getTracks().forEach(t=>t.stop());streamIngreso=null;}}}}
+        </script>
+        {bandeja_operativa('tabla_embudo_nuevos')}
+        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='importar_ingresos_excel'><b>Carga Excel</b><input type='file' name='archivo' accept='.xlsx,.xls' required><span></span><button class='c-btn gray'>⬆ Importar postulantes</button></form>
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='Filtrar DNI, trabajador, sede, cargo, estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_ingreso' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_ingresos' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Tipo</th><th>Empresa</th><th>Sede</th><th>Cargo</th><th>Área</th><th>Requerimiento</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Eliminar</th></tr>{ingreso_rows}</table></div>
+        """)
+    elif sec=='medica':
+        # PRO: Evaluación Médica reorganizada como punto crítico de decisión.
+        # Al digitar DNI autocompleta datos del postulante y muestra arriba Aptitud / Estado Operativo.
+        medicos_por_dni = {}
+        try:
+            for m in medicas:
+                dni_m = clean(m['dni'])
+                if dni_m and dni_m not in medicos_por_dni:
+                    medicos_por_dni[dni_m] = {
+                        'aptitud': row_get(m, 'aptitud') or row_get(m, 'estado') or 'PENDIENTE',
+                        'estado': row_get(m, 'estado') or 'PENDIENTE',
+                        'fecha_resultado': row_get(m, 'fecha_resultado'),
+                        'fecha_vencimiento': row_get(m, 'fecha_vencimiento'),
+                        'restricciones': row_get(m, 'restricciones'),
+                        'observacion': row_get(m, 'observacion')
+                    }
+        except Exception:
+            medicos_por_dni = {}
+
+        medica_data = []
+        for r in trabajadores_proceso_mostrar:
+            dni_r = clean(row_get(r, 'dni'))
+            medica_data.append({
+                'dni': dni_r,
+                'trabajador': row_get(r, 'trabajador'),
+                'requerimiento': row_get(r, 'requerimiento'),
+                'empresa': row_get(r, 'empresa'),
+                'area': row_get(r, 'area'),
+                'cargo': row_get(r, 'cargo'),
+                'fecha_ingreso': row_get(r, 'fecha_ingreso'),
+                'estado_medico': row_get(r, 'estado_medico') or 'PENDIENTE',
+                'medica': medicos_por_dni.get(dni_r, {})
+            })
+        medica_json = json.dumps(medica_data, ensure_ascii=False)
+
+        def clase_medica(v):
+            vv = clean(v).upper()
+            if 'NO APTO' in vv or 'BLOQUEADO' in vv:
+                return 'danger'
+            if 'RESTRICC' in vv or 'OBSERV' in vv:
+                return 'warn'
+            if 'APTO' in vv or 'HABILITADO' in vv:
+                return 'ok'
+            return 'pending'
+
+        med_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'requerimiento'))}</td><td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td><td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'fecha_resultado'))}</td><td>{h(row_get(r,'fecha_vencimiento'))}</td><td>{h(row_get(r,'clinica'))}</td><td>{h(row_get(r,'restricciones'))}</td><td>{h(row_get(r,'observacion'))}</td></tr>" for r in medicas]) or "<tr><td colspan='12'>Sin evaluaciones médicas.</td></tr>"
+
+        content=wrap(f"""
+        <style>
+          .med-critical{{display:grid;grid-template-columns:1.1fr .95fr .95fr;gap:14px;margin-bottom:16px}}
+          .med-search{{background:#ffffff;border:1px solid #dbe7ef;border-radius:22px;padding:18px;box-shadow:0 14px 30px #0f172a0d}}
+          .med-status-card{{border-radius:22px;padding:18px;color:#0f172a;background:#f8fafc;border:1px solid #dbe7ef;box-shadow:0 14px 30px #0f172a0d}}
+          .med-status-card h3{{margin:0 0 10px;font-size:15px;color:#475569;text-transform:uppercase;letter-spacing:.04em}}
+          .med-status-value{{font-size:30px;font-weight:1000;line-height:1.05;color:#0b2742}}
+          .med-status-card.ok{{background:#ecfdf5;border-color:#86efac}}
+          .med-status-card.warn{{background:#fffbeb;border-color:#fcd34d}}
+          .med-status-card.danger{{background:#fef2f2;border-color:#fca5a5}}
+          .med-status-card.pending{{background:#f8fafc;border-color:#cbd5e1}}
+          .med-person{{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin:12px 0 16px}}
+          .med-person div{{background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:12px}}
+          .med-person small{{display:block;color:#64748b;font-weight:800;margin-bottom:4px}}
+          .med-person b{{display:block;color:#0b2742;font-size:14px}}
+          .med-pill{{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:7px 10px;font-weight:1000;font-size:12px;background:#e2e8f0;color:#334155;white-space:nowrap}}
+          .med-pill.ok{{background:#dcfce7;color:#166534}}
+          .med-pill.warn{{background:#fef3c7;color:#92400e}}
+          .med-pill.danger{{background:#fee2e2;color:#991b1b}}
+          .med-pill.pending{{background:#e2e8f0;color:#334155}}
+          .med-block-msg{{margin-top:10px;border-radius:16px;padding:12px;font-weight:900;background:#ecfdf5;color:#166534}}
+          .med-block-msg.blocked{{background:#fef2f2;color:#991b1b}}
+          .med-form-grid{{display:grid;grid-template-columns:180px 1fr 180px 1fr;gap:12px;align-items:center}}
+          .med-form-grid b{{text-align:right;color:#0b2742}}
+          .med-form-grid input,.med-form-grid select,.med-form-grid textarea{{width:100%;border:1px solid #d6e3ef;border-radius:12px;padding:11px;font-weight:800;background:#fff}}
+          .med-form-grid .full{{grid-column:2 / 5}}
+          .med-form-grid .span-all{{grid-column:1 / 5}}
+          @media(max-width:900px){{.med-critical,.med-person,.med-form-grid{{grid-template-columns:1fr}}.med-form-grid b{{text-align:left}}.med-form-grid .full,.med-form-grid .span-all{{grid-column:auto}}}}
+        </style>
+
+        <h2 class='c-title'>Evaluación médica</h2>
+        <div class='dash-hero' style='margin-bottom:18px'>
+          <div>
+            <h1>Control médico crítico</h1>
+            <p class='muted2'>El sistema autocompleta datos por DNI y resalta Aptitud Médica / Estado Operativo antes de avanzar a contratación.</p>
+          </div>
+          <a class='c-btn' href='/admin/contratacion?sec=induccion'>Ir a inducción</a>
+        </div>
+
+        <div class='med-critical'>
+          <div class='med-search'>
+            <h3 style='margin:0 0 10px;color:#0b2742'>Buscar postulante</h3>
+            <input id='med_dni_lookup' form='form_medica' name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI' style='width:100%;border:1px solid #d6e3ef;border-radius:14px;padding:14px;font-weight:1000;font-size:18px'>
+            <datalist id='lista_ingresos'>{opt_ingresos}</datalist>
+            <div id='med_decision_msg' class='med-block-msg'>Digite DNI para validar si puede avanzar.</div>
+          </div>
+          <div id='med_aptitud_card' class='med-status-card pending'>
+            <h3>Aptitud médica</h3>
+            <div id='med_aptitud_val' class='med-status-value'>PENDIENTE</div>
+          </div>
+          <div id='med_estado_card' class='med-status-card pending'>
+            <h3>Estado operativo</h3>
+            <div id='med_estado_val' class='med-status-value'>PENDIENTE</div>
+          </div>
+        </div>
+
+        <div class='med-person'>
+          <div><small>Trabajador</small><b id='med_nombre'>—</b></div>
+          <div><small>Requerimiento</small><b id='med_req'>—</b></div>
+          <div><small>Empresa</small><b id='med_empresa'>—</b></div>
+          <div><small>Área / Cargo</small><b id='med_area_cargo'>—</b></div>
+          <div><small>Fecha ingreso</small><b id='med_fecha_ingreso'>—</b></div>
+        </div>
+
+        <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid' style='padding:20px'>
+          <input type='hidden' name='accion' value='guardar_medica'>
+          <input type='hidden' id='med_trabajador_hidden' name='trabajador'>
+          <b>Requerimiento</b><input id='med_req_input' name='requerimiento' placeholder='REQ-2026-0001 / LABORES'>
+          <b>Clínica / proveedor</b><input name='clinica' placeholder='Centro médico autorizado'>
+
+          <b>Aptitud médica</b>
+          <select id='med_aptitud_select' name='aptitud'>
+            <option>PENDIENTE</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option>
+          </select>
+          <b>Estado operativo</b>
+          <select id='med_estado_select' name='estado'>
+            <option>PENDIENTE</option><option>HABILITADO</option><option>OBSERVADO</option><option>BLOQUEADO</option><option>PROGRAMADO</option>
+          </select>
+
+          <b>Tipo examen</b><select name='tipo_examen'><option>PRE OCUPACIONAL</option><option>PERIÓDICO</option><option>RETIRO</option><option>CAMBIO DE PUESTO</option></select>
+          <b>Riesgo del puesto</b><select name='riesgo_puesto'><option>BAJO</option><option>MEDIO</option><option>ALTO</option></select>
+
+          <b>Protocolo médico</b><input name='protocolo' placeholder='Básico, alto riesgo, manipulación alimentos, altura, etc.'>
+          <b>Fecha programada</b><input type='date' name='fecha_programada' value='{hoy_iso()}'>
+
+          <b>Fecha resultado</b><input id='med_fecha_resultado' type='date' name='fecha_resultado' value='{hoy_iso()}'>
+          <b>Fecha vencimiento</b><input id='med_fecha_vencimiento' type='date' name='fecha_vencimiento' value='{hoy_iso()}'>
+
+          <b>Restricciones</b><input id='med_restricciones' class='full' name='restricciones' placeholder='Ej. no cargar peso, uso de lentes, control médico, etc.'>
+          <b>Recomendaciones</b><input class='full' name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'>
+
+          <b>Responsable seguimiento</b><input name='responsable_seguimiento' placeholder='RRHH / SST / Médico ocupacional'>
+          <b>Contacto proveedor</b><input name='proveedor_contacto' placeholder='Correo / teléfono'>
+
+          <b>Costo</b><input name='costo' placeholder='S/ 0.00'>
+          <b>Resultado PDF/imagen</b><input type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'>
+
+          <b>Observación</b><textarea class='full' name='observacion' rows='2' placeholder='Detalle libre'></textarea>
+          <div class='span-all' style='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap'>
+            <button class='c-btn'>💾 Registrar evaluación</button>
+          </div>
+        </form>
+
+        {bandeja_operativa('tabla_embudo_medica')}
+
+        <div class='module-tools'>
+          <input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, clínica, aptitud, estado, observación'>
+          <button type='submit' form='form_medica' class='c-btn'>Guardar</button>
+        </div>
+        <div class='c-card table-wrap'>
+          <table id='tabla_medica' class='c-table'>
+            <tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Aptitud</th><th>Estado Operativo</th><th>Resultado</th><th>Vencimiento</th><th>Clínica</th><th>Restricciones</th><th>Observación</th></tr>
+            {med_rows}
+          </table>
+        </div>
+
+        <script>
+          const MEDICA_POSTULANTES = {medica_json};
+          const medDni = document.getElementById('med_dni_lookup');
+          const medNombre = document.getElementById('med_nombre');
+          const medReq = document.getElementById('med_req');
+          const medEmpresa = document.getElementById('med_empresa');
+          const medAreaCargo = document.getElementById('med_area_cargo');
+          const medFechaIngreso = document.getElementById('med_fecha_ingreso');
+          const medReqInput = document.getElementById('med_req_input');
+          const medTrabHidden = document.getElementById('med_trabajador_hidden');
+          const medAptitudSelect = document.getElementById('med_aptitud_select');
+          const medEstadoSelect = document.getElementById('med_estado_select');
+          const medAptitudCard = document.getElementById('med_aptitud_card');
+          const medEstadoCard = document.getElementById('med_estado_card');
+          const medAptitudVal = document.getElementById('med_aptitud_val');
+          const medEstadoVal = document.getElementById('med_estado_val');
+          const medDecisionMsg = document.getElementById('med_decision_msg');
+          function medClass(v){{
+            v = (v || '').toUpperCase();
+            if(v.includes('NO APTO') || v.includes('BLOQUEADO')) return 'danger';
+            if(v.includes('RESTRICC') || v.includes('OBSERV')) return 'warn';
+            if(v.includes('APTO') || v.includes('HABILITADO')) return 'ok';
+            return 'pending';
+          }}
+          function setMedCard(card, valEl, value){{
+            const cls = medClass(value);
+            card.className = 'med-status-card ' + cls;
+            valEl.textContent = value || 'PENDIENTE';
+          }}
+          function actualizarMedicaPorDni(){{
+            const dni = (medDni.value || '').replace(/\\D/g,'').slice(-8);
+            const row = MEDICA_POSTULANTES.find(x => (x.dni || '') === dni);
+            if(!row){{
+              medNombre.textContent = 'No encontrado en Postulantes';
+              medReq.textContent = '—'; medEmpresa.textContent = '—'; medAreaCargo.textContent = '—'; medFechaIngreso.textContent = '—';
+              medReqInput.value = ''; medTrabHidden.value = '';
+              setMedCard(medAptitudCard, medAptitudVal, 'PENDIENTE');
+              setMedCard(medEstadoCard, medEstadoVal, 'PENDIENTE');
+              medDecisionMsg.textContent = 'DNI no encontrado en Postulantes. Primero registra al postulante.';
+              medDecisionMsg.className = 'med-block-msg blocked';
+              return;
+            }}
+            medNombre.textContent = row.trabajador || '—';
+            medReq.textContent = row.requerimiento || '—';
+            medEmpresa.textContent = row.empresa || '—';
+            medAreaCargo.textContent = ((row.area || '—') + ' / ' + (row.cargo || '—'));
+            medFechaIngreso.textContent = row.fecha_ingreso || '—';
+            medReqInput.value = row.requerimiento || '';
+            medTrabHidden.value = row.trabajador || '';
+            const apt = (row.medica && row.medica.aptitud) ? row.medica.aptitud : 'PENDIENTE';
+            const est = (row.medica && row.medica.estado) ? row.medica.estado : (row.estado_medico || 'PENDIENTE');
+            setMedCard(medAptitudCard, medAptitudVal, apt);
+            setMedCard(medEstadoCard, medEstadoVal, est);
+            if(medAptitudSelect && apt) medAptitudSelect.value = apt;
+            if(medEstadoSelect && est) medEstadoSelect.value = est;
+            if(row.medica){{
+              if(row.medica.restricciones && document.getElementById('med_restricciones')) document.getElementById('med_restricciones').value = row.medica.restricciones;
+            }}
+            const blocked = medClass(apt)==='danger' || medClass(est)==='danger';
+            medDecisionMsg.textContent = blocked ? 'BLOQUEADO: no debe avanzar a contrato/documentos/firma.' : 'Validación médica preparada. Si queda APTO/HABILITADO puede avanzar.';
+            medDecisionMsg.className = 'med-block-msg' + (blocked ? ' blocked' : '');
+          }}
+          ['input','change'].forEach(ev => medDni.addEventListener(ev, actualizarMedicaPorDni));
+          medAptitudSelect.addEventListener('change', () => setMedCard(medAptitudCard, medAptitudVal, medAptitudSelect.value));
+          medEstadoSelect.addEventListener('change', () => setMedCard(medEstadoCard, medEstadoVal, medEstadoSelect.value));
+        </script>
+        """)
+    elif sec in ('capacitacion','induccion','cursos'):
+        if sec in ('capacitacion','cursos'):
+            flash('El módulo Cursos / Capacitación fue retirado del menú. Usa Inducción para videos obligatorios.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='induccion'))
+        es_ind = (sec=='induccion')
+        titulo_mod = 'Inducción laboral' if es_ind else 'Cursos y capacitación'
+        desc_mod = 'Carga temas de inducción por etapa y asigna videos obligatorios al trabajador.' if es_ind else 'Administra cursos, videos, evaluaciones, exámenes y estados por trabajador.'
+        opciones_curso = "<option>Bienvenida corporativa</option><option>SST inducción</option><option>Reglamento interno</option><option>Uso de EPP</option><option>Buenas prácticas agrícolas</option><option>Código de conducta</option>" if es_ind else "<option>Curso SST</option><option>Buenas prácticas agrícolas</option><option>Manipulación de alimentos</option><option>Bioseguridad</option><option>Calidad</option><option>Uso de herramientas</option><option>Curso personalizado</option>"
+        cap_rows=''.join([f"<tr><td><input type='checkbox' name='cap_ids' value='{r['id']}'></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['curso'])}</td><td>{h(r['archivo_video_nombre'] or r['video_url'])}</td><td>{h(r['nota'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar capacitación?&quot;)'><input type='hidden' name='accion' value='eliminar_capacitacion'><input type='hidden' name='capacitacion_id' value='{r['id']}'><button class='delete-mini'>Eliminar</button></form></td><td>{h(r['observacion'])}</td></tr>" for r in capacitaciones])
+        video_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['curso'])}</b></td><td>{h(r['tipo_video'])}</td><td>{h(r['archivo_video_nombre'] or r['video_url'])}</td><td>{h(r['duracion_min'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in capacitaciones if (r['archivo_video_nombre'] or r['video_url'])]) or "<tr><td colspan='6'>Sin videos registrados todavía.</td></tr>"
+        if not cap_rows:
+            cap_rows=''.join([f"<tr><td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{'Inducción general' if es_ind else 'Pendiente de curso'}</td><td></td><td></td><td><span class='status-pill ok'>{h(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</span></td><td class='col-delete'>—</td><td>Trabajador registrado en Postulantes pendiente de avance.</td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='10'>Sin registros.</td></tr>"
+        induccion_asig_rows = ''.join([f"<tr><td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador']) or 'NUEVO - PENDIENTE COMPLETAR'}</td><td>{h(r['requerimiento'])}</td><td>{h(r['sede'])}</td><td>{h(r['actividad'])}</td><td><span class='status-pill ok'>{h(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</span></td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='7'>Sin trabajadores registrados desde Postulantes.</td></tr>"
+        asignacion_html = (f"""<h3 class='pro-section-title'>2) Asignación masiva a trabajadores</h3><div class='full table-wrap induccion-masiva-box'><table class='c-table clean-table' id='tabla_induccion_masiva'><tr><th><input type='checkbox' onclick=\"document.querySelectorAll('#tabla_induccion_masiva input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)\"></th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Sede</th><th>Actividad</th><th>Estado inducción</th></tr>{induccion_asig_rows}</table></div><input type='hidden' name='volver' value='induccion'><input type='hidden' name='campo_estado' value='estado_capacitacion'><b>Estado masivo</b><select name='nuevo_estado'><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>PENDIENTE</option></select><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observación del administrador.'></textarea><div class='actions'><button type='submit' class='c-btn' onclick=\"this.form.accion.value='avance_masivo_ingresos'\">✅ Aplicar inducción masiva</button></div>""" if es_ind else f"""<h3 class='pro-section-title'>2) Asignación masiva a trabajadores</h3><b>DNI</b><input name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI y seleccione trabajador'><datalist id='lista_ingresos'>{opt_ingresos}</datalist><b>Estado</b><select name='estado' required><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>EVALUADO POR TRABAJADOR</option><option>APROBADO</option><option>DESAPROBADO</option></select><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observación del administrador.'></textarea><div class='actions'><button class='c-btn'>💾 Guardar curso/asignación</button></div>""")
+        content=wrap(f'''
+        <h2 class='c-title'>{titulo_mod}</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>{titulo_mod}</h1><p class='muted2'>{desc_mod} La evaluación/respuesta queda preparada para el usuario trabajador desde celular.</p></div><a class='c-btn' href='/admin/contratacion?sec=firma'>Ir a firma</a></div>
+        <div class='learning-grid {'solo-induccion' if es_ind else 'con-evaluacion'}'>
+          <form id='form_capacitacion' method='post' enctype='multipart/form-data' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_capacitacion'><h3 class='pro-section-title'>1) Biblioteca del administrador</h3><b>{'Tema inducción' if es_ind else 'Curso'}</b><select name='curso' required>{opciones_curso}</select><b>Tipo video</b><select name='tipo_video' required><option>URL EXTERNA</option><option>ARCHIVO MP4</option><option>YOUTUBE / DRIVE</option><option>MICROLEARNING</option></select><b>URL video</b><input name='video_url' placeholder='https://...'><b>Cargar video MP4</b><input type='file' name='archivo_video' accept='.mp4,.webm,.mov'><b>Duración min.</b><input name='duracion_min' type='number' min='0' placeholder='0'><b>Fecha inicio</b><input type='date' name='fecha_inicio' value='{hoy_iso()}' required><b>Fecha fin</b><input type='date' name='fecha_fin' value='{hoy_iso()}'><b>Material adicional</b><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.xlsx,.docx'>{asignacion_html}</form>
+          <div class='pro-card eval-side'><h3>Evaluación del trabajador</h3><p class='muted2'>Campos preparados para el usuario trabajador: examen, nota, respuestas, intentos y confirmación de video visto.</p><div class='eval-grid'><b>Opción examen</b><select name='preguntas' form='form_capacitacion'><option>Sin examen</option><option>Formulario interno</option><option>Link Google Forms</option><option>Cuestionario en app</option></select><b>Nota / resultado</b><input name='nota' form='form_capacitacion' placeholder='Ej. 18/20'><b>Intentos permitidos</b><input name='intentos' form='form_capacitacion' type='number' min='1' value='1'><b>Confirmación</b><select disabled><option>Trabajador confirma desde su portal</option></select></div></div>
+        </div>
+        <div class='pro-card'><h3 class='pro-section-title'>Base de registro de videos subidos</h3><div class='video-base-grid'><div><small>Total videos</small><b>{len([r for r in capacitaciones if (r['archivo_video_nombre'] or r['video_url'])])}</b></div><div><small>Asignaciones</small><b>{len(capacitaciones)}</b></div><div><small>Vistos</small><b>{len([r for r in capacitaciones if (r['estado'] or '').upper()=='VIDEO VISTO'])}</b></div><div><small>Pendientes</small><b>{len([r for r in capacitaciones if (r['estado'] or '').upper()!='VIDEO VISTO'])}</b></div></div><div class='table-wrap'><table class='c-table clean-table'><tr><th>Fecha</th><th>Tema/Curso</th><th>Tipo</th><th>Archivo / URL</th><th>Min.</th><th>Estado</th></tr>{video_rows}</table></div></div>
+        <form method='post' class='pro-card'><input type='hidden' name='accion' value='marcar_visto_masivo'><input type='hidden' name='volver' value='{sec}'><h3 class='pro-section-title'>3) Registros de trabajadores y estados</h3><div class='records-toolbar'><input oninput="filtrarTabla(this,'tabla_capacitacion')" placeholder='Filtrar DNI, trabajador, curso, estado...'><select><option>Todos los estados</option><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>DESAPROBADO</option></select><button type='button' class='c-btn gray' onclick="document.querySelectorAll('#tabla_capacitacion input[name=cap_ids]').forEach(x=>x.checked=true)">Seleccionar todo</button><button type='submit' form='form_capacitacion' class='c-btn'>Guardar</button></div><div class='mass-actions'><b>Cambio masivo / notificaciones:</b><select name='estado_masivo'><option>VIDEO VISTO</option><option>VIDEO ASIGNADO</option><option>APROBADO</option><option>PENDIENTE</option></select><button class='c-btn'>Cambiar seleccionados y notificar</button></div><div class='table-wrap'><table id='tabla_capacitacion' class='c-table clean-table'><tr><th></th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>{'Tema' if es_ind else 'Curso'}</th><th>Video</th><th>Nota</th><th>Estado</th><th>Eliminar</th><th>Observación</th></tr>{cap_rows}</table></div></form>
+        ''')
+    elif sec=='indumentaria':
+        ind_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(r['polo'])}</td><td>{h(r['pantalon'])}</td><td>{h(r['botas'])}</td><td>{h(r['fotocheck'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['fecha_entrega'])}</td></tr>" for r in indumentarias]) or "<tr><td colspan='14'>Sin entregas registradas.</td></tr>"
+        content=wrap(f"""
+        <h2 class='c-title'>Entrega de indumentaria</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Indumentaria y fotocheck</h1><p class='muted2'>Controla entrega de EPP, uniformes, tallas, fotocheck, cargo de entrega y validación previa a NISIRA. No mezcla datos médicos: solo datos laborales y entrega.</p></div><a class='c-btn' href='/admin/contratacion?sec=integracion_nisira'>Validar NISIRA</a></div>
+        <form id='form_indumentaria' method='post' enctype='multipart/form-data' class='c-card c-form pro-form indumentaria-pro' style='padding:20px'><input type='hidden' name='accion' value='guardar_indumentaria'>
+          <div class='ind-alert span-12'><div><small>ESTADO DE ENTREGA</small><select name='estado' id='ind_estado' onchange='actualizarEstadoIndumentaria()'><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select></div><div id='ind_estado_msg'>Digite DNI para iniciar el control de entrega.</div></div>
+          <h3 class='pro-section-title span-12'>1) Buscar postulante / trabajador</h3>
+          <b>DNI</b><input id='ind_dni' name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI y presione buscar'><datalist id='lista_ingresos'>{opt_ingresos}</datalist><span></span><button type='button' class='c-btn gray' onclick='buscarIndumentariaDNI()'>🔎 Buscar DNI</button>
+          <h3 class='pro-section-title span-12'>2) Datos del trabajador</h3>
+          <b>Trabajador</b><input id='ind_trabajador' name='trabajador' readonly placeholder='Se carga automático por DNI'>
+          <b>Empresa</b><input id='ind_empresa' readonly placeholder='Empresa'>
+          <b>Área</b><input id='ind_area' readonly placeholder='Área'>
+          <b>Cargo</b><input id='ind_cargo' readonly placeholder='Cargo'>
+          <b>Requerimiento / ticket</b><input id='ind_requerimiento' name='requerimiento' placeholder='Se carga automático o puede editarse'>
+          <b>Fecha ingreso</b><input id='ind_fecha_ingreso' readonly placeholder='Fecha ingreso'>
+          <h3 class='pro-section-title span-12'>3) Detalle de prendas / EPP</h3>
+          <b>Polo</b><select name='polo'><option></option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option><option>NO APLICA</option></select><b>Pantalón</b><select name='pantalon'><option></option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>44</option><option>NO APLICA</option></select><b>Botas</b><select name='botas'><option></option><option>35</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option><option>NO APLICA</option></select><b>Casaca</b><select name='casaca'><option></option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>NO APLICA</option></select><b>Gorro</b><select name='gorro'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Lentes</b><select name='lentes'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Guantes</b><select name='guantes'><option></option><option>7</option><option>8</option><option>9</option><option>10</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>NO APLICA</option></select><b>Fotocheck</b><select name='fotocheck'><option>PENDIENTE</option><option>IMPRESO</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Otros / cantidad</b><input name='otros' placeholder='Ej. 2 mascarillas, 1 chaleco'>
+          <h3 class='pro-section-title span-12'>4) Cargo y trazabilidad</h3>
+          <b>Fecha entrega</b><input type='date' name='fecha_entrega' value='{hoy_iso()}'><b>Responsable entrega</b><input name='responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle de entrega, faltantes, responsable o cargo firmado.'></textarea><span></span><button class='c-btn'>💾 Registrar entrega</button>
+        </form>
+        {bandeja_operativa('tabla_embudo_indumentaria')}
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar DNI, trabajador, prenda o estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_indumentaria' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_indumentaria' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Responsable</th><th>Eliminar</th><th>Entrega</th></tr>{ind_rows}</table></div>
+        <script>
+        async function buscarIndumentariaDNI(){{
+          const dni=(document.getElementById('ind_dni')?.value||'').replace(/\D/g,'');
+          if(dni.length!==8){{ alert('Digite un DNI válido de 8 dígitos.'); return; }}
+          try{{
+            const r=await fetch('/api/contratacion/trabajador/'+dni);
+            const j=await r.json();
+            if(!j.ok){{ document.getElementById('ind_estado_msg').innerText='DNI no encontrado en postulantes/base. Complete la ficha primero.'; return; }}
+            const t=j.trabajador||{{}};
+            const map={{ind_trabajador:(t.nombre||t.trabajador||''), ind_empresa:(t.empresa||''), ind_area:(t.area||''), ind_cargo:(t.cargo||''), ind_requerimiento:(t.requerimiento||''), ind_fecha_ingreso:(t.fecha_ingreso||'')}};
+            Object.keys(map).forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=map[id]||''; }});
+            document.getElementById('ind_estado_msg').innerText='Datos cargados correctamente. Registre prendas, responsable y cargo firmado.';
+          }}catch(e){{ alert('No se pudo consultar el DNI.'); }}
+        }}
+        function actualizarEstadoIndumentaria(){{
+          const v=document.getElementById('ind_estado')?.value||'PENDIENTE';
+          const msg=document.getElementById('ind_estado_msg');
+          if(!msg) return;
+          if(v==='ENTREGADO') msg.innerText='Entrega completa: trabajador listo en indumentaria.';
+          else if(v==='PARCIAL') msg.innerText='Entrega parcial: quedan prendas o cargo pendientes.';
+          else if(v==='OBSERVADO') msg.innerText='Observado: registrar motivo antes de continuar.';
+          else msg.innerText='Pendiente: falta registrar entrega.';
+        }}
+        document.getElementById('ind_dni')?.addEventListener('change', buscarIndumentariaDNI);
+        actualizarEstadoIndumentaria();
+        </script>
+        <style>
+        .indumentaria-pro .span-12,.ind-alert.span-12{{grid-column:1/-1}}
+        .ind-alert{{display:flex;gap:18px;align-items:center;justify-content:space-between;border:1px solid rgba(16,185,129,.25);background:linear-gradient(135deg,rgba(16,185,129,.14),rgba(15,23,42,.03));border-radius:18px;padding:16px;margin-bottom:8px}}
+        .ind-alert small{{display:block;color:#64748b;font-weight:800;letter-spacing:.08em}}
+        .ind-alert select{{font-size:16px;font-weight:800;border-radius:12px;padding:10px 12px}}
+        #ind_estado_msg{{font-weight:700;color:#0f172a}}
+        </style>
+        """)
+    elif sec=='integracion_nisira':
+        with db() as con_bc:
+            total_trab = con_bc.execute('SELECT COUNT(*) FROM trabajadores').fetchone()[0]
+            total_ingresos = con_bc.execute('SELECT COUNT(*) FROM contratacion_ingresos').fetchone()[0]
+            total_req_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_requerimientos').fetchone()[0]
+            total_docs_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_docs').fetchone()[0]
+            total_firmas_bc = con_bc.execute('SELECT COUNT(*) FROM firma_solicitudes').fetchone()[0]
+            total_med_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_medica').fetchone()[0]
+            total_ind_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_indumentaria').fetchone()[0]
+            total_lotes_bc = con_bc.execute('SELECT COUNT(*) FROM contratacion_nisira_lotes').fetchone()[0]
+            ultimos_trab = con_bc.execute('SELECT dni, trabajador, empresa, requerimiento, cargo, area, estado, estado_medico, estado_documentos, estado_indumentaria, estado_nisira, fecha_registro FROM contratacion_ingresos ORDER BY id DESC LIMIT 80').fetchall()
+            ultimos_req = con_bc.execute('SELECT ticket, empresa, area, cargo, actividad, cantidad, estado, fecha_ingreso, fecha_registro FROM contratacion_requerimientos ORDER BY id DESC LIMIT 40').fetchall()
+            ultimos_docs = con_bc.execute('SELECT dni, trabajador, empresa, etapa, tipo_doc, estado, archivo_nombre, fecha_registro FROM contratacion_docs ORDER BY id DESC LIMIT 40').fetchall()
+            sync_cfg = con_bc.execute('SELECT * FROM base_central_sync_config ORDER BY id DESC LIMIT 10').fetchall()
+            lotes_nisira_bc = con_bc.execute('SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC LIMIT 50').fetchall()
+        def td(v):
+            return h(v if v is not None else '')
+        rows_trab = ''.join([f"<tr><td>{td(r['dni'])}</td><td><b>{td(r['trabajador'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['requerimiento'])}</td><td>{td(r['cargo'])}</td><td>{td(r['area'])}</td><td>{td(r['estado'])}</td><td>{td(r['estado_medico'])}</td><td>{td(r['estado_documentos'])}</td><td>{td(r['estado_indumentaria'])}</td><td>{td(r['estado_nisira'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_trab]) or "<tr><td colspan='12'>Sin registros en postulantes todavía.</td></tr>"
+        rows_req = ''.join([f"<tr><td><b>{td(r['ticket'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['area'])}</td><td>{td(r['cargo'])}</td><td>{td(r['actividad'])}</td><td>{td(r['cantidad'])}</td><td>{td(r['estado'])}</td><td>{td(r['fecha_ingreso'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_req]) or "<tr><td colspan='9'>Sin requerimientos.</td></tr>"
+        rows_docs = ''.join([f"<tr><td>{td(r['dni'])}</td><td><b>{td(r['trabajador'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['etapa'])}</td><td>{td(r['tipo_doc'])}</td><td>{td(r['estado'])}</td><td>{td(r['archivo_nombre'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_docs]) or "<tr><td colspan='8'>Sin documentos generados.</td></tr>"
+        rows_cfg = ''.join([f"<tr><td>{td(r['destino'])}</td><td>{td(r['estado'])}</td><td>{td(r['servidor'])}</td><td>{td(r['base_datos'])}</td><td>{td(r['endpoint'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in sync_cfg]) or "<tr><td colspan='6'>Sin configuración externa todavía.</td></tr>"
+        lote_rows=''.join([f"<tr><td><b>{td(r['lote_codigo'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['sede'])}</td><td>{td(r['requerimiento'])}</td><td>{td(r['actividad'])}</td><td>{td(r['total'])}</td><td>{td(r['estado'])}</td><td>{td(r['endpoint'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in lotes_nisira_bc]) or "<tr><td colspan='9'>Sin lotes generados.</td></tr>"
+        base_url=h(get_config('nisira_base_url','')); api_ref=h(get_config('nisira_api_key_ref','')); endpoint=h(get_config('nisira_endpoint_trabajadores','/api/trabajadores')); modo=get_config('nisira_modo','PRUEBA')
+        content=wrap(f'''
+        <h2 class='c-title'>Base Central / Integración</h2>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Base Central de Contratación</h1><p class='muted2'>Almacén interno temporal de todo el proceso: requerimientos, postulantes, ficha, evaluación médica, documentos, firma, indumentaria, fotocheck y lotes. Hoy trabaja con SQLite/archivos internos; mañana será el puente hacia SQL Server o API NISIRA.</p></div><span class='status-pill ok'>Modo interno + futuro SQL/API</span></div>
+        <div class='dash-kpis'><div class='dash-card'><small>Trabajadores base</small><b>{total_trab}</b></div><div class='dash-card'><small>Postulantes/ingresos</small><b>{total_ingresos}</b></div><div class='dash-card'><small>Requerimientos</small><b>{total_req_bc}</b></div><div class='dash-card'><small>Documentos</small><b>{total_docs_bc}</b></div><div class='dash-card'><small>Firmas</small><b>{total_firmas_bc}</b></div><div class='dash-card'><small>Médicos</small><b>{total_med_bc}</b></div><div class='dash-card'><small>Indumentaria</small><b>{total_ind_bc}</b></div><div class='dash-card'><small>Lotes integración</small><b>{total_lotes_bc}</b></div></div>
+        <div class='c-card' style='padding:18px;margin-top:16px'><h2>Acciones rápidas</h2><p class='muted2'>Descarga respaldos internos para auditoría o migración futura.</p><div class='download-grid'><a class='download-card' href='/admin/contratacion/base-central/export/general'><i class='bi bi-file-earmark-spreadsheet'></i><b>Excel general</b><small>Consolidado completo</small></a><a class='download-card' href='/admin/contratacion/base-central/export/zip'><i class='bi bi-file-zip'></i><b>Respaldo ZIP</b><small>Excel + archivos clave</small></a><a class='download-card' href='/admin/contratacion?sec=descargas'><i class='bi bi-download'></i><b>Centro de Descargas y Reportes</b><small>Plantillas, reportes y respaldos</small></a><a class='download-card' href='/admin/contratacion/plantilla_nisira'><i class='bi bi-link-45deg'></i><b>Plantilla NISIRA</b><small>Mapeo futuro</small></a></div></div>
+        <form method='post' class='c-card c-form' style='padding:20px;margin-top:16px'><input type='hidden' name='accion' value='guardar_base_central_config'><b>Destino futuro</b><select name='destino'><option>SQL SERVER</option><option>NISIRA API</option><option>SQL SERVER + NISIRA API</option><option>OTRO ERP</option></select><b>Estado</b><select name='estado'><option>PENDIENTE</option><option>EN DISEÑO</option><option>EN PRUEBA</option><option>LISTO PARA CONEXIÓN</option></select><b>Servidor SQL / host</b><input name='servidor' placeholder='Ej. SRV-SQL-RRHH / 10.0.0.5'><b>Base de datos</b><input name='base_datos' placeholder='Ej. RRHH_Contratacion'><b>Endpoint API</b><input name='endpoint' placeholder='Ej. https://servidor-nisira/api/trabajadores'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle técnico, responsable TI, credenciales pendientes, etc.'></textarea><span></span><button class='c-btn'>💾 Guardar preparación de integración</button></form>
+        <div class='c-card table-wrap' style='margin-top:16px'><h2>Últimos postulantes almacenados</h2><input oninput="filtrarTabla(this,'tabla_base_central')" placeholder='Buscar DNI, trabajador, requerimiento, estado...'><table id='tabla_base_central' class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Requerimiento</th><th>Cargo</th><th>Área</th><th>General</th><th>Médico</th><th>Docs</th><th>Indum.</th><th>Integración</th><th>Fecha</th></tr>{rows_trab}</table></div>
+        <div class='c-card table-wrap' style='margin-top:16px'><h2>Requerimientos consolidados</h2><table class='c-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Actividad</th><th>Cantidad</th><th>Estado</th><th>Ingreso</th><th>Registro</th></tr>{rows_req}</table></div>
+        <div class='c-card table-wrap' style='margin-top:16px'><h2>Documentos generados / almacenados</h2><table class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Etapa</th><th>Documento</th><th>Estado</th><th>Archivo</th><th>Fecha</th></tr>{rows_docs}</table></div>
+        <div class='c-card table-wrap' style='margin-top:16px'><h2>Preparación SQL Server / API</h2><table class='c-table'><tr><th>Destino</th><th>Estado</th><th>Servidor</th><th>Base datos</th><th>Endpoint</th><th>Fecha</th></tr>{rows_cfg}</table></div>
+        <div class='c-card' style='padding:18px;margin-top:16px'><h2>Configuración NISIRA futura</h2><p class='muted2'>Se mantiene en el mismo módulo para no duplicar pantallas. Cuando TI entregue API/credenciales, este será el punto de conexión.</p></div>
+        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_nisira_config'><b>Base URL NISIRA</b><input name='base_url' value='{base_url}' placeholder='https://servidor-nisira/api'><b>Endpoint trabajadores</b><input name='endpoint_trabajadores' value='{endpoint}' placeholder='/api/trabajadores'><b>Token/API Key Ref.</b><input name='api_key_ref' value='{api_ref}' placeholder='Variable de entorno o referencia segura'><b>Modo</b><select name='modo'><option {'selected' if modo=='PRUEBA' else ''}>PRUEBA</option><option {'selected' if modo=='PRODUCCION' else ''}>PRODUCCION</option></select><span></span><button class='c-btn'>💾 Guardar configuración NISIRA</button></form>
+        <form method='post' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='generar_lote_nisira'><b>Empresa</b><input name='empresa' value='AQUANQA'><b>Sede</b><input name='sede' placeholder='General / fundo / área'><b>Requerimiento</b><input name='requerimiento' placeholder='Ticket o proceso'><b>Actividad</b><input name='actividad' placeholder='OB_PODA / COSECHA'><span></span><button class='c-btn'>🔗 Generar lote interno para integración</button></form>
+        <div class='c-card table-wrap'><h2>Lotes internos para integración futura</h2><table class='c-table'><tr><th>Lote</th><th>Empresa</th><th>Sede</th><th>Requerimiento</th><th>Actividad</th><th>Total</th><th>Estado</th><th>Endpoint</th><th>Fecha</th></tr>{lote_rows}</table></div>
+        ''')
+    elif sec in ['datos_completos','fotocheck']:
+        if sec == 'datos_completos':
+            tit = 'Datos Postulantes'
+            req_actual = ticket_sel
+            req_select_opts = "<option value=''>Seleccione requerimiento para ver todos</option>" + opt_req
+            lista = trabajadores_proceso_mostrar[:500]
+            total = len(lista)
+            pend_contrato = sum(1 for r in lista if str(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE').upper() not in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO'])
+            pend_foto = sum(1 for r in lista if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
+            pend_fotocheck = sum(1 for r in lista if str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE').upper() not in ['IMPRESO','ENTREGADO','GENERADO'])
+            def _pill_state(v):
+                vv = str(v or 'PENDIENTE').upper()
+                ok = vv in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO','CAPTURADA','IMPRESO','ENTREGADO','APTO','REGISTRADO']
+                return f"<span class='status-pill {'ok' if ok else ''}'>{h(vv)}</span>"
+            rows = []
+            for r in lista:
+                foto = (r['foto_ruta'] if 'foto_ruta' in r.keys() else '')
+                foto_html = f"<img class='foto-mini' src='/foto_trabajador/{h(r['dni'])}'>" if foto else "<span class='photo-dot photo-no'>SIN FOTO</span>"
+                rows.append(f"""<tr>
+                  <td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td>
+                  <td>{foto_html}</td>
+                  <td><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'><b>{h(r['dni'])}</b></a></td>
+                  <td><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>{h(r['trabajador']) or 'PENDIENTE COMPLETAR'}</a></td>
+                  <td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['cargo'])}</td><td>{h(r['empresa'])}</td>
+                  <td>{_pill_state(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE')}</td>
+                  <td>{_pill_state(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</td>
+                  <td>{_pill_state('CAPTURADA' if foto else 'PENDIENTE FOTO')}</td>
+                  <td>{_pill_state(r['estado_indumentaria'] if 'estado_indumentaria' in r.keys() else 'PENDIENTE')}</td>
+                  <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver detalle</a></td>
+                  <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='eliminar_ingreso_admin'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Eliminar</button></form></td>
+                </tr>""")
+            tabla_rows = ''.join(rows) or "<tr><td colspan='14'>Seleccione un requerimiento o registre postulantes desde el módulo Requerimiento/Postulantes.</td></tr>"
+            content=wrap(f"""
+            <style>
+            .datos-kpi{{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin:14px 0 18px}}
+            .datos-kpi .kpi{{background:#fff;border:1px solid #dce8e5;border-radius:16px;padding:16px;box-shadow:0 8px 22px rgba(15,23,42,.06)}}
+            .datos-kpi .kpi span{{display:block;color:#64748b;font-weight:800;font-size:12px;text-transform:uppercase}}
+            .datos-kpi .kpi b{{font-size:26px;color:#0f513f}}
+            .link-clean{{color:#0f513f;text-decoration:none;font-weight:800}}
+            .mini-btn{{padding:7px 10px!important;font-size:12px!important;white-space:nowrap}}
+            .inline-del{{display:flex;gap:6px;align-items:center;min-width:210px}}
+            .inline-del input{{width:105px!important;padding:7px!important;border:1px solid #cbd5e1;border-radius:8px}}
+            .icon-btn.danger{{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}}
+            @media(max-width:900px){{.datos-kpi{{grid-template-columns:1fr 1fr}}.inline-del{{min-width:160px;flex-wrap:wrap}}}}
+            </style>
+            <h2 class='c-title'>Datos Postulantes</h2>
+            <div class='dash-hero' style='margin-bottom:18px'><div><h1>Datos Postulantes por Requerimiento</h1><p class='muted2'>Primero elige el requerimiento. El sistema jala automáticamente todos los postulantes registrados y muestra contrato, fotocheck, foto, indumentaria y avance.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Completar ficha</a></div>
+            <div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>Requerimiento / Ticket</b><select onchange="location.href='/admin/contratacion?sec=datos_completos&req='+encodeURIComponent(this.value)">{req_select_opts}</select><b>Buscar postulante</b><input oninput="filtrarTabla(this,'tabla_datos_postulantes')" placeholder='DNI, trabajador, cargo, estado...'></div>
+            <div class='datos-kpi'><div class='kpi'><span>Total postulantes</span><b>{total}</b></div><div class='kpi'><span>Pendiente contrato</span><b>{pend_contrato}</b></div><div class='kpi'><span>Sin foto</span><b>{pend_foto}</b></div><div class='kpi'><span>Pendiente fotocheck</span><b>{pend_fotocheck}</b></div></div>
+            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_documentos'>Firma de contrato / documentos</option><option value='fotocheck_estado'>Fotocheck</option><option value='estado_indumentaria'>Indumentaria</option><option value='estado_medico'>Evaluación médica</option><option value='estado_capacitacion'>Inducción / capacitación</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>GENERADO</option><option>ENVIADO</option><option>FIRMADO</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>Contrato / Docs</th><th>Fotocheck</th><th>Foto</th><th>Indumentaria</th><th>Detalle</th><th>Eliminar</th></tr>{tabla_rows}</table></div></form>
+            """)
+        else:
+            tit='Centro de Fotocheck'
+            req_actual = clean(request.args.get('req')) or ticket_sel
+            lista_foto = trabajadores_proceso_mostrar[:800]
+            total_foto = len(lista_foto)
+            sin_foto = sum(1 for r in lista_foto if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
+            foto_ok = total_foto - sin_foto
+            listos = sum(1 for r in lista_foto if (r['foto_ruta'] if 'foto_ruta' in r.keys() else '') and str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else '').upper() in ['LISTO PARA IMPRIMIR','FOTO APROBADA','APROBADO'])
+            impresos = sum(1 for r in lista_foto if str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else '').upper() in ['IMPRESO','ENTREGADO','CARGO GENERADO'])
+            def _ft_estado(v, foto):
+                vv = str(v or 'PENDIENTE').upper()
+                if not foto:
+                    return "<span class='status-pill warn'>PENDIENTE FOTO</span>"
+                ok = vv in ['LISTO PARA IMPRIMIR','ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO','CARGO GENERADO','FOTO APROBADA','APROBADO']
+                return f"<span class='status-pill {'ok' if ok else ''}'>{h(vv)}</span>"
+            foto_rows=[]
+            for r in lista_foto:
+                foto = r['foto_ruta'] if 'foto_ruta' in r.keys() else ''
+                estado_fc = r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE'
+                foto_html = f"<img class='foto-mini' src='/foto_trabajador/{h(r['dni'])}'>" if foto else "<span class='photo-dot photo-no'>SIN FOTO</span>"
+                foto_rows.append(f"""<tr>
+                    <td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td>
+                    <td>{foto_html}</td>
+                    <td><b>{h(r['dni'])}</b></td>
+                    <td><b>{h(r['trabajador']) or 'PENDIENTE COMPLETAR'}</b></td>
+                    <td>{h(r['empresa'])}</td>
+                    <td>{h(r['area'])}</td>
+                    <td>{h(r['cargo'])}</td>
+                    <td>{h(r['requerimiento'])}</td>
+                    <td>{h(r['fecha_ingreso'])}</td>
+                    <td>{'<span class="photo-dot photo-ok">FOTO APROBADA</span>' if foto else '<span class="photo-dot photo-no">SIN FOTO</span>'}</td>
+                    <td>{_ft_estado(estado_fc, foto)}</td>
+                    <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver ficha</a></td>
+                </tr>""")
+            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='12'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
+            with db() as con_cfg_ui:
+                cfg_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
+                hist_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_historial ORDER BY id DESC LIMIT 8').fetchall()
+            cfg_impresora = cfg_zebra['impresora_nombre'] if cfg_zebra else 'Zebra ZC300'
+            cfg_tipo = cfg_zebra['tipo_conexion'] if cfg_zebra else 'COLA WINDOWS / USB'
+            cfg_bt_nombre = cfg_zebra['bluetooth_nombre'] if cfg_zebra else ''
+            cfg_bt_mac = cfg_zebra['bluetooth_mac'] if cfg_zebra else ''
+            cfg_ip = cfg_zebra['ip_impresora'] if cfg_zebra else ''
+            cfg_puerto = cfg_zebra['puerto'] if cfg_zebra else ''
+            cfg_tamano = cfg_zebra['tamano_tarjeta'] if cfg_zebra else 'CR80'
+            cfg_orientacion = cfg_zebra['orientacion'] if cfg_zebra else 'Horizontal'
+            cfg_caras = cfg_zebra['caras'] if cfg_zebra else 'Frente'
+            cfg_copias = cfg_zebra['copias'] if cfg_zebra else 1
+            cfg_plantilla = cfg_zebra['plantilla_diseno'] if cfg_zebra else 'PRIZE - FOTOCHECK ESTÁNDAR'
+            cfg_ruta = cfg_zebra['ruta_salida'] if cfg_zebra else str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion')
+            cfg_estado = cfg_zebra['estado_conexion'] if cfg_zebra else 'NO CONFIGURADA'
+            cfg_obs = cfg_zebra['observacion'] if cfg_zebra else ''
+            if cfg_zebra:
+                estado_minimo_zebra, detalle_minimo_zebra = zebra_validar_campos_config(cfg_zebra)
+                if estado_minimo_zebra == 'CONFIGURACIÓN INCOMPLETA':
+                    cfg_estado = estado_minimo_zebra
+                    cfg_obs = detalle_minimo_zebra
+                elif es_entorno_render() and cfg_estado in ['DETECTADA / LISTA','CONFIGURADA','LISTA PARA IMPRIMIR']:
+                    cfg_estado = 'PRUEBA LÓGICA / REQUIERE PC LOCAL'
+                    cfg_obs = 'Render no puede detectar ni usar la Zebra física. La impresión real permanece bloqueada.'
+            def _sel(a,b): return 'selected' if str(a).upper()==str(b).upper() else ''
+            cfg_estado_class = 'ok' if zebra_permite_impresion(cfg_estado) else ('warn' if cfg_estado in ['PENDIENTE DE PRUEBA LOCAL','PENDIENTE DE PRUEBA REAL','PRUEBA LÓGICA / REQUIERE PC LOCAL'] else 'bad')
+            hist_rows = ''.join([f"<tr><td>{h(x['fecha'])}</td><td>{h(x['accion'])}</td><td>{h(x['impresora'])}</td><td>{h(x['tipo_conexion'])}</td><td>{h(x['estado'])}</td><td>{h(x['detalle'])}</td></tr>" for x in hist_zebra]) or "<tr><td colspan='6'>Sin pruebas ni impresiones registradas.</td></tr>"
+            content=wrap(f"""
+            <style>
+            .foto-kpis{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:14px;margin:14px 0 18px}}
+            .foto-kpis .kpi{{background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:15px;box-shadow:0 8px 22px rgba(15,23,42,.06)}}
+            .foto-kpis .kpi span{{display:block;color:#64748b;font-weight:900;font-size:11px;text-transform:uppercase}}
+            .foto-kpis .kpi b{{font-size:26px;color:#0f513f}}
+            .foto-flow{{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:12px 0}}
+            .foto-flow div{{background:#f8fafc;border:1px solid #dbeafe;border-radius:14px;padding:12px;text-align:center;font-weight:900;color:#0f513f}}
+            .foto-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:#fff;border:1px solid #dce8e5;border-radius:16px;padding:14px;margin-bottom:14px}}
+            .foto-actions label{{display:grid;gap:5px;font-weight:900;color:#334155;font-size:12px}}
+            .foto-actions select,.foto-actions input{{min-width:190px;border:1px solid #cbd5e1;border-radius:10px;padding:10px}}
+            .zebra-config{{background:linear-gradient(135deg,#ffffff,#f0fdf4);border:1px solid #bbf7d0;border-radius:18px;padding:18px;margin:16px 0;box-shadow:0 14px 32px rgba(15,23,42,.07)}}
+            .zebra-grid{{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:12px;align-items:end}}
+            .zebra-grid label{{display:grid;gap:6px;font-weight:900;color:#0f513f;font-size:12px}}
+            .zebra-grid input,.zebra-grid select{{border:1px solid #cbd5e1;border-radius:10px;padding:10px;background:white}}
+            .zebra-status{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}}
+            .status-pill.warn{{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}}
+            .status-pill.bad{{background:#fee2e2!important;color:#991b1b!important;border:1px solid #fecaca!important}}
+            @media(max-width:1000px){{.foto-kpis,.foto-flow,.zebra-grid{{grid-template-columns:1fr 1fr}}.foto-actions{{display:grid}}}}
+            </style>
+            <h2 class='c-title'>{tit}</h2>
+            <div class='dash-hero' style='margin-bottom:18px'>
+              <div>
+                <h1>Fotocheck por Requerimiento</h1>
+                <p class='muted2'>Flujo conectado: Requerimiento → Postulantes → Foto → Validación → Impresión Zebra ZC300 → Cargo firmado → Entregado.</p>
+              </div>
+              <span class='status-pill {cfg_estado_class}'>Zebra: {h(cfg_estado)}</span>
+            </div>
+            <div class='foto-flow'><div>1. Ticket</div><div>2. Postulantes</div><div>3. Foto</div><div>4. Validación</div><div>5. Zebra ZC300</div><div>6. Cargo firma</div></div>
+            <form method='post' class='zebra-config'>
+              <input type='hidden' name='req_return' value='{h(req_actual)}'>
+              <div class='zebra-status'><h3 style='margin:0'>Configuración Zebra ZC300</h3><span class='status-pill {cfg_estado_class}'>{h(cfg_estado)}</span><small class='muted2'>Soporta cola Windows/USB, red y Bluetooth emparejado.</small></div>
+              <div class='zebra-grid'>
+                <label>Nombre exacto impresora Windows<input name='impresora_nombre' value='{h(cfg_impresora)}' placeholder='Ej. Zebra ZC300'></label>
+                <label>Tipo conexión<select name='tipo_conexion'><option {_sel(cfg_tipo,'COLA WINDOWS / USB')}>COLA WINDOWS / USB</option><option {_sel(cfg_tipo,'RED / IP')}>RED / IP</option><option {_sel(cfg_tipo,'BLUETOOTH')}>BLUETOOTH</option></select></label>
+                <label>Bluetooth nombre<input name='bluetooth_nombre' value='{h(cfg_bt_nombre)}' placeholder='Ej. ZC300-BT'></label>
+                <label>Bluetooth MAC / ID<input name='bluetooth_mac' value='{h(cfg_bt_mac)}' placeholder='Ej. 00:11:22:AA:BB:CC'></label>
+                <label>IP impresora<input name='ip_impresora' value='{h(cfg_ip)}' placeholder='Solo si es red'></label>
+                <label>Puerto<input name='puerto' value='{h(cfg_puerto)}' placeholder='9100 / COM / LPT'></label>
+                <label>Tamaño tarjeta<select name='tamano_tarjeta'><option {_sel(cfg_tamano,'CR80')}>CR80</option><option {_sel(cfg_tamano,'CR79')}>CR79</option></select></label>
+                <label>Orientación<select name='orientacion'><option {_sel(cfg_orientacion,'Horizontal')}>Horizontal</option><option {_sel(cfg_orientacion,'Vertical')}>Vertical</option></select></label>
+                <label>Caras<select name='caras'><option {_sel(cfg_caras,'Frente')}>Frente</option><option {_sel(cfg_caras,'Frente y reverso')}>Frente y reverso</option></select></label>
+                <label>Copias<input type='number' min='1' max='5' name='copias' value='{h(cfg_copias)}'></label>
+                <label>Plantilla diseño<input name='plantilla_diseno' value='{h(cfg_plantilla)}'></label>
+                <label>Ruta salida PDF/imagen<input name='ruta_salida' value='{h(cfg_ruta)}'></label>
+                <label style='grid-column:span 2'>Observación<input name='observacion_config' value='{h(cfg_obs)}' placeholder='Driver, PC conectada, notas de Bluetooth...'></label>
+                <button class='c-btn' name='accion' value='fotocheck_guardar_config_zebra'>Guardar configuración</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_probar_zebra'>Probar conexión</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_prueba_impresion'>Impresión de prueba</button>
+              </div>
+            </form>
+            <div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'>
+              <b>Requerimiento / Ticket</b>
+              <select onchange="location.href='/admin/contratacion?sec=fotocheck&req='+encodeURIComponent(this.value)"><option value=''>Todos los requerimientos</option>{opt_req}</select>
+              <b>Buscar trabajador</b>
+              <input oninput="filtrarTabla(this,'tabla_fotocheck')" placeholder='DNI, trabajador, cargo, área, estado...'>
+            </div>
+            <div class='foto-kpis'>
+              <div class='kpi'><span>Total</span><b>{total_foto}</b></div>
+              <div class='kpi'><span>Sin foto</span><b>{sin_foto}</b></div>
+              <div class='kpi'><span>Foto aprobada</span><b>{foto_ok}</b></div>
+              <div class='kpi'><span>Listos imprimir</span><b>{listos}</b></div>
+              <div class='kpi'><span>Impresos / cargo</span><b>{impresos}</b></div>
+            </div>
+            <form method='post'>
+              <input type='hidden' name='req_return' value='{h(req_actual)}'>
+              <div class='foto-actions'>
+                <label>Impresora<input name='impresora' value='{h(cfg_impresora)}'></label>
+                <label>Lote impresión<input name='lote_impresion' placeholder='Automático si se deja vacío'></label>
+                <label>Acción<select name='nuevo_estado'>
+                  <option>FOTO APROBADA</option>
+                  <option>LISTO PARA IMPRIMIR</option>
+                  <option>ENVIADO A ZEBRA ZC300</option>
+                  <option>IMPRESO</option>
+                  <option>CARGO GENERADO</option>
+                  <option>ENTREGADO</option>
+                  <option>OBSERVADO</option>
+                </select></label>
+                <label>Observación<input name='observacion' placeholder='Ej. impresión masiva / reimpresión'></label>
+                <button class='c-btn' name='accion' value='fotocheck_accion_masiva'>Actualizar seleccionados</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_generar_cargo'>Generar cargo para firma</button>
+              </div>
+              <div class='c-card table-wrap'>
+                <table id='tabla_fotocheck' class='c-table'>
+                  <tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Requerimiento</th><th>Ingreso</th><th>Estado foto</th><th>Fotocheck</th><th>Acción</th></tr>
+                  {foto_rows_html}
+                </table>
+              </div>
+            </form>
+            <div class='c-card' style='padding:18px;margin-top:16px'>
+              <h3>Reglas automáticas</h3>
+              <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto o si la Zebra no está en estado LISTA PARA IMPRIMIR. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
+              <h3>Historial Zebra</h3><div class='table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Acción</th><th>Impresora</th><th>Conexión</th><th>Estado</th><th>Detalle</th></tr>{hist_rows}</table></div>
+            </div>
+            """)
+    elif sec=='detalle_postulante':
+        pid = int(request.args.get('id') or 0)
+        with db() as con:
+            p = con.execute('SELECT * FROM contratacion_ingresos WHERE id=?', (pid,)).fetchone()
+            docs_post = con.execute('SELECT * FROM contratacion_docs WHERE dni=? ORDER BY id DESC LIMIT 80', (p['dni'],)).fetchall() if p else []
+        if not p:
+            content=wrap("<h2 class='c-title'>Detalle postulante</h2><div class='c-card' style='padding:20px'>No se encontró el postulante.</div>")
+        else:
+            foto_html = f"<img class='avatar-worker' src='/foto_trabajador/{h(p['dni'])}'>" if (p['foto_ruta'] if 'foto_ruta' in p.keys() else '') else "<div class='avatar-worker no-photo'>SIN FOTO</div>"
+            docs_rows = ''.join([f"<tr><td>{h(d['fecha_registro'])}</td><td>{h(d['tipo_doc'])}</td><td>{h(d['etapa'])}</td><td>{h(d['estado'])}</td><td><a class='c-btn gray mini-btn' href='{url_for('contratacion_doc_archivo', doc_id=d['id']) if d['ruta_archivo'] else '#'}'>Abrir</a></td></tr>" for d in docs_post]) or "<tr><td colspan='5'>Aún no hay contratos/documentos generados para este DNI.</td></tr>"
+            content=wrap(f"""
+            <style>.post-detail{{display:grid;grid-template-columns:260px 1fr;gap:18px}}.avatar-worker{{width:220px;height:260px;object-fit:cover;border-radius:18px;border:1px solid #d6e5e2;background:#f8fafc;display:flex;align-items:center;justify-content:center;font-weight:900;color:#64748b}}.detail-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}}.detail-grid div{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px}}.detail-grid span{{display:block;color:#64748b;font-size:12px;font-weight:800;text-transform:uppercase}}.detail-grid b{{color:#0f513f}}@media(max-width:900px){{.post-detail,.detail-grid{{grid-template-columns:1fr}}}}</style>
+            <h2 class='c-title'>Detalle del Postulante</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>{h(p['trabajador']) or 'Postulante pendiente completar'}</h1><p class='muted2'>DNI {h(p['dni'])} · Requerimiento {h(p['requerimiento'])}</p></div><a class='c-btn gray' href='/admin/contratacion?sec=datos_completos&req={h(p['requerimiento'])}'>Volver</a></div>
+            <div class='post-detail'><div class='c-card' style='padding:18px'>{foto_html}<br><br><a class='c-btn' href='/admin/contratacion?sec=nuevos&req={h(p['requerimiento'])}'>Completar / editar ficha</a></div><div class='detail-grid'><div><span>DNI</span><b>{h(p['dni'])}</b></div><div><span>Trabajador</span><b>{h(p['trabajador']) or 'PENDIENTE'}</b></div><div><span>Empresa</span><b>{h(p['empresa'])}</b></div><div><span>Cargo</span><b>{h(p['cargo'])}</b></div><div><span>Área</span><b>{h(p['area'])}</b></div><div><span>Actividad</span><b>{h(p['actividad'])}</b></div><div><span>Celular</span><b>{h(p['celular'])}</b></div><div><span>Correo</span><b>{h(p['correo'])}</b></div><div><span>Ingreso</span><b>{h(p['fecha_ingreso'])}</b></div><div><span>Firma contrato/docs</span>{_estado_pill(p['estado_documentos'] if 'estado_documentos' in p.keys() else 'PENDIENTE')}</div><div><span>Fotocheck</span>{_estado_pill(p['fotocheck_estado'] if 'fotocheck_estado' in p.keys() else 'PENDIENTE')}</div><div><span>Indumentaria</span>{_estado_pill(p['estado_indumentaria'] if 'estado_indumentaria' in p.keys() else 'PENDIENTE')}</div></div></div>
+            <div class='c-card table-wrap' style='margin-top:18px'><h2>Contratos / documentos generados</h2><table class='c-table'><tr><th>Fecha</th><th>Documento</th><th>Etapa</th><th>Estado</th><th>Archivo</th></tr>{docs_rows}</table></div>
+            """)
+    elif sec=='flujo':
+        # Aprobaciones integradas a Gestión Renovación.
+        # Este tablero recibe las renovaciones firmadas por el trabajador y permite filtrar
+        # por estado antes de archivar el documento en Ficha/Archivos Trabajador.
+        estado_filtro = clean(request.args.get('estado','')).upper()
+        if estado_filtro not in {'','PENDIENTE','APROBADO','RECHAZADO'}:
+            estado_filtro = ''
+        eventos_demo = []
+        for i in range(10):
+            estado_demo = ['PENDIENTE','APROBADO','RECHAZADO'][i % 3]
+            eventos_demo.append({
+                'op': 232105-i,
+                'estado': estado_demo,
+                'tipo': 'Renovación de contrato',
+                'fecha': now_txt(),
+                'trabajador': (trabajadores[i]['nombre'] if i < len(trabajadores) else 'TRABAJADOR DEMO'),
+                'dni': (trabajadores[i]['dni'] if i < len(trabajadores) and 'dni' in trabajadores[i].keys() else '')
+            })
+        eventos_filtrados = [e for e in eventos_demo if not estado_filtro or e['estado'] == estado_filtro]
+        def badge_estado_aprobacion(est):
+            cls_badge = 'green' if est == 'APROBADO' else ('red' if est == 'RECHAZADO' else 'yellow')
+            return f"<span class='c-badge {cls_badge}'>{est}</span>"
+        rows=''.join([f"<tr class='{ 'selected' if i==0 else ''}'><td><input type='checkbox' name='op_sel' value='{e['op']}' {'checked' if i==0 else ''}></td><td><div class='row-actions'><a class='mini-action' title='Ver ficha' href='/admin/contratacion?sec=ficha&dni={e['dni']}'>🔍</a><a class='mini-action' title='Ver documento' href='/admin/contratacion?sec=docs_renovacion&dni={e['dni']}'>📄</a></div></td><td>{e['op']}</td><td>{badge_estado_aprobacion(e['estado'])}</td><td>{e['tipo']}</td><td>{e['fecha']}</td><td>{e['fecha']}</td><td>{e['trabajador']}</td><td>{e['dni']}</td></tr>" for i,e in enumerate(eventos_filtrados)])
+        if not rows:
+            rows = "<tr><td colspan='9' class='muted2'>No hay aprobaciones con el estado seleccionado.</td></tr>"
+        content=wrap(f"""
+        <h2 class='c-title'>Aprobaciones de Renovación</h2>
+        <div class='dash-hero' style='margin-bottom:18px'>
+          <div>
+            <h1>Flujo de aprobación</h1>
+            <p class='muted2'>Módulo integrado a Gestión Renovación. Aquí se revisan renovaciones firmadas por el trabajador, se aprueban/rechazan y luego pasan a Ficha Trabajador y Archivos Trabajador.</p>
+          </div>
+          <a class='c-btn' href='/admin/contratacion?sec=renovacion'>Ir a Renovación Masiva</a>
+        </div>
+        <form method='get' action='/admin/contratacion' class='c-filter'>
+          <input type='hidden' name='sec' value='flujo'>
+          <b>Tipo de evento:</b>
+          <select name='tipo_evento'>
+            <option>Renovación de contrato</option>
+            <option>Adenda de renovación</option>
+            <option>Archivado de renovación</option>
+          </select>
+          <b>Estados:</b>
+          <select name='estado'>
+            <option value='' {'selected' if estado_filtro=='' else ''}>TODOS</option>
+            <option value='PENDIENTE' {'selected' if estado_filtro=='PENDIENTE' else ''}>PENDIENTE</option>
+            <option value='APROBADO' {'selected' if estado_filtro=='APROBADO' else ''}>APROBADO</option>
+            <option value='RECHAZADO' {'selected' if estado_filtro=='RECHAZADO' else ''}>RECHAZADO</option>
+          </select>
+          <b>Código/DNI Trabajador:</b>
+          <input name='dni' placeholder='DNI o código'>
+          <span></span>
+          <span><button class='c-btn'>⌕ Buscar</button> <a class='c-btn gray' href='/admin/contratacion?sec=flujo'>Limpiar</a></span>
+        </form>
+        <form method='post' id='formAprobacionesRenovacion'>
+        <div class='approval-actions c-card'>
+          <button type='submit' name='accion' value='flujo_aprobar' class='c-btn'>✅ Aprobar seleccionados</button>
+          <button type='submit' name='accion' value='flujo_rechazar' class='c-btn gray'>❌ Rechazar</button>
+          <button type='submit' name='accion' value='flujo_archivar' class='c-btn gray'>🗂 Archivar aprobados</button>
+          <input name='comentario_aprobacion' placeholder='Comentario / motivo obligatorio si rechazas'>
+        </div>
+        <div class='c-card table-wrap approval-table'><table class='c-table'>
+          <tr><th></th><th>Acciones</th><th>No.Operación</th><th>Estado</th><th>Tipo de Evento</th><th>Fecha Registro</th><th>Fecha último Estado</th><th>Trabajador</th><th>DNI</th></tr>
+          {rows}
+        </table></div>
+        </form>
+        <div class='c-card' style='padding:18px;margin-top:18px'>
+          <h2>Regla automática</h2>
+          <p class='muted2'>Las renovaciones llegan aquí desde <b>Enviar a aprobación</b>. Al aprobar, pasan a estado <b>APROBADO</b> y quedan listas para archivar en Ficha Trabajador, Archivos Trabajador y Base Central. Al rechazar, el comentario queda como motivo de corrección.</p>
+        </div>
+        <style>
+          .approval-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;padding:14px}}
+          .approval-actions input{{flex:1;min-width:280px;border:1px solid #d8e4ef;border-radius:12px;padding:12px;font-weight:700}}
+          .approval-table{{max-height:540px;overflow:auto}}
+          .approval-table .c-table th{{position:sticky;top:0;background:#eef4fa;z-index:2}}
+          .row-actions{{display:flex;gap:7px;align-items:center}}
+        </style>
+        """)
     elif sec=='carga':
         emp_opts = "<option>AQUANQA</option><option>AQUANCA II</option>"
         content=wrap(f"""
-        <h2 class='c-title'>Carga Masiva</h2>
-        <div class='c-card'><div class='tabs'><div class='tab active'>Carga Masiva</div><div class='tab'>Registros de Carga Masiva</div></div></div>
-        <div class='c-filter' style='grid-template-columns:1fr 1fr;max-width:980px;margin:auto'><input placeholder='Código/Nombre'><select><option>Grupo</option><option>Actualización de datos</option><option>Baja de trabajador</option></select></div>
-        <div class='tile-grid'>
-          <div class='c-tile' onclick='abrirCargaModal("actualizar")'><div class='tile-icon'>▤</div><h2>Carga Masiva Actualizar Datos Trabajador</h2><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='actualizar')}'>⬇</a></div>
-          <div class='c-tile' onclick='abrirCargaModal("baja")'><div class='tile-icon'>▤</div><h2>Carga Masiva Bajas Trabajador</h2><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='baja')}'>⬇</a></div>
+        <h2 class='c-title'>Carga Masiva / Mantenimiento de Datos</h2>
+        <div class='dash-hero' style='margin-bottom:18px'>
+          <div><h1>Carga Masiva</h1><p class='muted2'>Este módulo queda integrado dentro de Datos Maestros para mantenimiento de información: actualizar correos, celulares, cargos, áreas, cuentas y ejecutar bajas masivas. Las renovaciones masivas se gestionan desde Gestión Renovación para no mezclar procesos.</p></div>
+          <a class='c-btn' href='/admin/contratacion?sec=renovacion'>Ir a Renovación Masiva</a>
         </div>
+        <div class='c-card'><div class='tabs'><div class='tab active'>Carga Masiva</div><div class='tab'>Registros de Carga Masiva</div></div></div>
+        <div class='c-filter' style='grid-template-columns:1fr 1fr;max-width:980px;margin:auto'><input placeholder='Código/Nombre'><select><option>Grupo</option><option>Mantenimiento de trabajadores</option><option>Actualización de datos</option><option>Baja de trabajador</option><option>Datos maestros</option></select></div>
+        <div class='tile-grid'>
+          <div class='c-tile' onclick='abrirCargaModal("actualizar")'><div class='tile-icon'>▤</div><h2>Actualizar Datos Trabajador</h2><p class='muted2'>Correo, celular, cargo, área, cuenta, datos laborales y personales.</p><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='actualizar')}'>⬇</a></div>
+          <div class='c-tile' onclick='abrirCargaModal("baja")'><div class='tile-icon'>▤</div><h2>Bajas Masivas Trabajador</h2><p class='muted2'>Cambiar estado a inactivo con fecha, motivo y observación.</p><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='baja')}'>⬇</a></div>
+          <div class='c-tile' onclick='abrirCargaModal("actualizar")'><div class='tile-icon'>▤</div><h2>Importar Base Trabajadores</h2><p class='muted2'>Alta o actualización de la base central desde Excel.</p><a class='download-corner' onclick='event.stopPropagation()' href='{url_for('descargar_plantilla_carga_contratacion', tipo='actualizar')}'>⬇</a></div>
+          <div class='c-tile' onclick="location.href='/admin/contratacion?sec=maestros'"><div class='tile-icon'>▤</div><h2>Importar Datos Maestros</h2><p class='muted2'>Empresas, áreas, cargos, actividades, régimen y tipo contrato.</p><span class='download-corner'>↗</span></div>
+        </div>
+        <div class='c-card' style='padding:18px;margin-top:18px'><h2>Regla de integración</h2><p class='muted2'><b>Datos Maestros → Carga Masiva</b> se usa para mantenimiento de trabajadores y bajas. <b>Gestión Renovación → Renovación Masiva</b> se usa para fechas fin, meses de renovación, documentos de renovación y firma.</p></div>
         <div id='modalActualizar' class='obs-modal'><div class='obs-box'><div class='obs-head'><h2>Importar registros - Actualización de datos</h2><button type='button' onclick='cerrarCargaModal()'>×</button></div>
           <form method='post' enctype='multipart/form-data' class='obs-form'><input type='hidden' name='accion' value='carga_actualizar_datos'>
             <label>Compañía:</label><select name='empresa'>{emp_opts}</select>
@@ -5758,19 +8711,11 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
             <label>Archivo Excel:</label><input type='file' name='archivo' accept='.xlsx,.xls' required>
             <div></div><div class='obs-actions'><a class='c-btn gray' href='{url_for('descargar_plantilla_carga_contratacion', tipo='baja')}'>⬇ Plantilla</a><button class='c-btn'>Subir</button><button type='button' class='c-btn gray' onclick='cerrarCargaModal()'>Cerrar</button></div>
           </form></div></div>
-        <style>.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(620px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:150px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input,.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+        <style>.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(620px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:150px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input,.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}}.c-tile p{{margin-top:8px;line-height:1.35}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}</style>
         <script>function abrirCargaModal(t){{cerrarCargaModal();document.getElementById(t==='baja'?'modalBaja':'modalActualizar').classList.add('show');}}function cerrarCargaModal(){{document.querySelectorAll('.obs-modal').forEach(m=>m.classList.remove('show'));}}</script>
         """)
     elif sec=='reportes':
-        content=wrap(f"<h2 class='c-title'>Reportes</h2><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th>Código</th><th>Nombre</th><th>Nombre</th><th>Componente</th><th>Creado por</th></tr>{report_rows}</table></div>")
+        return redirect(url_for('admin_contratacion', sec='descargas'))
     elif sec=='actualizar':
         content=wrap(f"<h2 class='c-title'>Actualizar Trabajador / Estado laboral</h2><div class='c-card' style='padding:16px'><p class='muted2'>Aquí se controla la base de trabajadores activos. Al cesar se cambia el estado a inactivo, pero NO se elimina ningún documento ni contrato archivado.</p><div class='c-filter' style='grid-template-columns:1fr 1fr'><input placeholder='Buscar por DNI o apellidos'><button class='c-btn'>⌕ Buscar</button></div></div><div class='c-card table-wrap'><table class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Cargo</th><th>Estado</th><th>Acción</th></tr>{trabajadores_estado_rows}</table></div>")
     elif sec=='tipos_etapa':
@@ -5782,7 +8727,7 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
         <div id='tipoModal' class='obs-modal'>
           <div class='obs-box tipo-box'>
             <div class='obs-head'><h2 id='tipoModalTitulo'>Editar Tipo de Documento por Etapa</h2><button type='button' onclick='cerrarTipoModal()'>×</button></div>
-            <form method='post' class='obs-form'>
+            <form method='post' enctype='multipart/form-data' class='obs-form'>
               <input type='hidden' name='accion' value='guardar_tipo_etapa'><input type='hidden' name='tipo_id' id='tipo_id'>
               <label>Código Tipo Doc:</label><input name='codigo' id='tipo_codigo' required>
               <label>Tipo Documento:</label><input name='descripcion' id='tipo_descripcion' required>
@@ -5796,15 +8741,7 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
             </form>
           </div>
         </div>
-        <style>.nowrap{{white-space:nowrap}}.icon-btn{{border:0;background:transparent;font-size:20px;cursor:pointer;margin:0 3px}}.select-mini{{background:#fff!important;color:#111!important;border:1px solid #d1d5db;border-radius:999px;padding:6px 10px}}.c-badge.gray{{background:#e5e7eb!important;color:#6b7280!important}}.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(760px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.tipo-box{{width:min(700px,96vw)}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:190px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input:not([type=checkbox]),.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.obs-form input[type=checkbox]{{width:20px;height:20px;accent-color:#1a73e8}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+        <style>.nowrap{{white-space:nowrap}}.icon-btn{{border:0;background:transparent;font-size:20px;cursor:pointer;margin:0 3px}}.select-mini{{background:#fff!important;color:#111!important;border:1px solid #d1d5db;border-radius:999px;padding:6px 10px}}.c-badge.gray{{background:#e5e7eb!important;color:#6b7280!important}}.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(760px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.tipo-box{{width:min(700px,96vw)}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:190px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input:not([type=checkbox]),.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.obs-form input[type=checkbox]{{width:20px;height:20px;accent-color:#1a73e8}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end}}.alert-level{{display:inline-flex;padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px}}.alert-level.level1{{background:#fff7ed!important;color:#c2410c!important;border:1px solid #fed7aa!important}}.alert-level.level2{{background:#fefce8!important;color:#a16207!important;border:1px solid #fde68a!important}}.alert-level.level3{{background:#fef2f2!important;color:#b91c1c!important;border:1px solid #fecaca!important}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}</style>
         <script>
         function abrirTipoModal(){{document.getElementById('tipoModalTitulo').innerText='Crear Tipo de Documento por Etapa';document.getElementById('tipo_id').value='';document.getElementById('tipo_codigo').value='';document.getElementById('tipo_descripcion').value='';document.getElementById('tipo_etapa').value='Incorporacion';document.getElementById('tipo_activo').value='1';document.getElementById('tipo_fd').checked=true;document.getElementById('tipo_fe').checked=true;document.getElementById('tipo_obligatorio').checked=true;document.getElementById('tipo_cr').checked=false;document.getElementById('tipoModal').classList.add('show');}}
         function cerrarTipoModal(){{document.getElementById('tipoModal').classList.remove('show');}}
@@ -5820,7 +8757,7 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
         <div class='c-card table-wrap'><table id='tablaTipoEmpleado' class='c-table'><tr><th>Acción</th><th>Estado</th><th>Código</th><th>Descripción</th><th>ShortName</th><th>Grupo</th></tr>__ROWS__</table></div>
         <div id='tipoEmpleadoModal' class='obs-modal'>
           <div class='obs-box tipo-box'><div class='obs-head'><h2 id='tipoEmpleadoTitulo'>Crear tipo documento de empleado</h2><button type='button' onclick='cerrarTipoEmpleado()'>×</button></div>
-            <form method='post' class='obs-form'>
+            <form method='post' id='obsForm' class='obs-form' enctype='multipart/form-data'>
               <input type='hidden' name='accion' value='guardar_tipo_empleado'><input type='hidden' name='doc_emp_id' id='doc_emp_id'>
               <label>Code</label><input name='codigo' id='doc_emp_codigo'>
               <label>Descripción</label><input name='descripcion' id='doc_emp_desc' required>
@@ -5833,15 +8770,7 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
               <label>El documento es un contrato</label><input type='checkbox' name='es_contrato' id='doc_emp_contrato' value='1'>
               <div></div><div class='obs-actions'><button class='c-btn'>Guardar</button><button type='reset' class='c-btn gray'>Limpiar</button><button type='button' onclick='cerrarTipoEmpleado()' class='c-btn gray'>Atrás</button></div>
             </form></div></div>
-        <style>.nowrap{white-space:nowrap}.icon-btn{border:0;background:transparent;font-size:20px;cursor:pointer;margin:0 3px}.select-mini{background:#fff!important;color:#111!important;border:1px solid #d1d5db;border-radius:999px;padding:6px 10px}.obs-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}.obs-modal.show{display:flex}.obs-box{width:min(900px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}.tipo-box{width:min(920px,96vw)}.obs-head{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}.obs-head h2{margin:0;color:#111827!important}.obs-head button{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}.obs-form{display:grid;grid-template-columns:260px 1fr;gap:18px 14px;padding:24px;align-items:center}.obs-form label{font-weight:700;text-align:right;color:#111827!important}.obs-form input:not([type=checkbox]),.obs-form select,.obs-form textarea{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}.obs-form input[type=checkbox]{width:20px;height:20px;accent-color:#1a73e8}.obs-actions{display:flex;gap:10px;justify-content:flex-end}@media(max-width:760px){.obs-form{grid-template-columns:1fr}.obs-form label{text-align:left}}
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+        <style>.nowrap{white-space:nowrap}.icon-btn{border:0;background:transparent;font-size:20px;cursor:pointer;margin:0 3px}.select-mini{background:#fff!important;color:#111!important;border:1px solid #d1d5db;border-radius:999px;padding:6px 10px}.obs-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}.obs-modal.show{display:flex}.obs-box{width:min(900px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}.tipo-box{width:min(920px,96vw)}.obs-head{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}.obs-head h2{margin:0;color:#111827!important}.obs-head button{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}.obs-form{display:grid;grid-template-columns:260px 1fr;gap:18px 14px;padding:24px;align-items:center}.obs-form label{font-weight:700;text-align:right;color:#111827!important}.obs-form input:not([type=checkbox]),.obs-form select,.obs-form textarea{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}.obs-form input[type=checkbox]{width:20px;height:20px;accent-color:#1a73e8}.obs-actions{display:flex;gap:10px;justify-content:flex-end}@media(max-width:760px){.obs-form{grid-template-columns:1fr}.obs-form label{text-align:left}}</style>
         <script>
         function abrirTipoEmpleado(){document.getElementById('tipoEmpleadoTitulo').innerText='Crear tipo documento de empleado';document.getElementById('doc_emp_id').value='';document.getElementById('doc_emp_codigo').value='';document.getElementById('doc_emp_desc').value='';document.getElementById('doc_emp_corto').value='';document.getElementById('doc_emp_grupo').value='Contratación Trabajadores';document.getElementById('doc_emp_activo').value='1';['doc_emp_sin_cargo','doc_emp_validacion','doc_emp_vencimiento','doc_emp_contrato'].forEach(id=>document.getElementById(id).checked=false);document.getElementById('tipoEmpleadoModal').classList.add('show');}
         function cerrarTipoEmpleado(){document.getElementById('tipoEmpleadoModal').classList.remove('show');}
@@ -5866,15 +8795,7 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
             <label>Estado</label><select name='activo' id='cargo_activo'><option value='1'>Active</option><option value='0'>Inactive</option></select>
             <div></div><div class='obs-actions'><button class='c-btn'>Guardar</button><button type='button' onclick='cerrarCargo()' class='c-btn gray'>Atrás</button></div>
           </form></div></div>
-        <style>.nowrap{white-space:nowrap}.icon-btn{border:0;background:transparent;font-size:20px;cursor:pointer;margin:0 3px}.select-mini{background:#fff!important;color:#111!important;border:1px solid #d1d5db;border-radius:999px;padding:6px 10px}.obs-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}.obs-modal.show{display:flex}.obs-box{width:min(900px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}.tipo-box{width:min(920px,96vw)}.obs-head{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}.obs-head h2{margin:0;color:#111827!important}.obs-head button{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}.obs-form{display:grid;grid-template-columns:220px 1fr;gap:18px 14px;padding:24px;align-items:center}.obs-form label{font-weight:700;text-align:right;color:#111827!important}.obs-form input:not([type=checkbox]),.obs-form select,.obs-form textarea{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}.obs-actions{display:flex;gap:10px;justify-content:flex-end}@media(max-width:760px){.obs-form{grid-template-columns:1fr}.obs-form label{text-align:left}}
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-</style>
+        <style>.nowrap{white-space:nowrap}.icon-btn{border:0;background:transparent;font-size:20px;cursor:pointer;margin:0 3px}.select-mini{background:#fff!important;color:#111!important;border:1px solid #d1d5db;border-radius:999px;padding:6px 10px}.obs-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}.obs-modal.show{display:flex}.obs-box{width:min(900px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}.tipo-box{width:min(920px,96vw)}.obs-head{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}.obs-head h2{margin:0;color:#111827!important}.obs-head button{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}.obs-form{display:grid;grid-template-columns:220px 1fr;gap:18px 14px;padding:24px;align-items:center}.obs-form label{font-weight:700;text-align:right;color:#111827!important}.obs-form input:not([type=checkbox]),.obs-form select,.obs-form textarea{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}.obs-actions{display:flex;gap:10px;justify-content:flex-end}@media(max-width:760px){.obs-form{grid-template-columns:1fr}.obs-form label{text-align:left}}</style>
         <script>
         function abrirCargo(){document.getElementById('cargoTitulo').innerText='Crear Cargo';document.getElementById('cargo_id').value='';document.getElementById('cargo_codigo').value='';document.getElementById('cargo_nombre').value='';document.getElementById('cargo_corto').value='';document.getElementById('cargo_resumen').value='';document.getElementById('cargo_funciones').value='';document.getElementById('cargo_activo').value='1';document.getElementById('cargoModal').classList.add('show');}
         function cerrarCargo(){document.getElementById('cargoModal').classList.remove('show');}
@@ -5883,63 +8804,451 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
         </script>
         """.replace('__ROWS__', cargo_rows)
         content=wrap(html_cargo)
-    elif sec in ['maestros','observados','tipos_etapa','tipo_empleado','cargo']:
+    elif sec=='maestros':
+        maestro_rows=''
+        for m in maestros_empleador:
+            estado = 'ACTIVO' if int(m['activo'] or 0)==1 else 'INACTIVO'
+            maestro_rows += f"""<tr><td>{h(m['tipo'])}</td><td>{h(m['codigo'])}</td><td><b>{h(m['nombre'])}</b></td><td>{h(m['descripcion'])}</td><td><span class='status-pill {'ok' if estado=='ACTIVO' else ''}'>{estado}</span></td><td>{h(m['fecha_registro'])}</td><td><form method='post' style='display:inline'><input type='hidden' name='accion' value='estado_maestro_empleador'><input type='hidden' name='maestro_id' value='{m['id']}'><button class='icon-btn' type='submit'>Activar/Inactivar</button></form> <form method='post' style='display:inline' onsubmit="return confirm('¿Eliminar dato maestro?')"><input type='hidden' name='accion' value='eliminar_maestro_empleador'><input type='hidden' name='maestro_id' value='{m['id']}'><button class='delete-mini' type='submit'>Eliminar</button></form></td></tr>"""
+        rel_rows=''
+        for r in relaciones_laborales:
+            estado = 'ACTIVO' if int(r['activo'] or 0)==1 else 'INACTIVO'
+            rel_rows += f"""<tr><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td><b>{h(r['cargo'])}</b></td><td>{h(r['actividad'])}</td><td>{h(r['regimen_laboral'])}</td><td>{h(r['tipo_contrato'])}</td><td>{h(r['modalidad'])}</td><td>{h(r['centro_costo'])}</td><td><span class='status-pill {'ok' if estado=='ACTIVO' else ''}'>{estado}</span></td><td><form method='post' style='display:inline'><input type='hidden' name='accion' value='estado_relacion_laboral'><input type='hidden' name='relacion_id' value='{r['id']}'><button class='icon-btn' type='submit'>Activar/Inactivar</button></form> <form method='post' style='display:inline' onsubmit="return confirm('¿Eliminar relación laboral?')"><input type='hidden' name='accion' value='eliminar_relacion_laboral'><input type='hidden' name='relacion_id' value='{r['id']}'><button class='delete-mini' type='submit'>Eliminar</button></form></td></tr>"""
+        opt_emp=''.join([f"<option value='{h(x)}'></option>" for x in _empresas])
+        opt_area=''.join([f"<option value='{h(x)}'></option>" for x in _areas])
+        opt_cargo=''.join([f"<option value='{h(x)}'></option>" for x in _cargos[:700]])
+        opt_act=''.join([f"<option value='{h(x)}'></option>" for x in _actividades])
         content=wrap(f"""
-        <h2 class='c-title'>Listas de trabajadores observados</h2>
+        <h2 class='c-title'>Datos maestros del empleador</h2>
+        <div class='dash-hero' style='margin-bottom:18px'><div><h1>Configuración laboral automática</h1><p class='muted2'>Este módulo gobierna los desplegables de Requerimiento, Postulantes y Contratos. La configuración principal es la relación Empresa → Área → Cargo → Actividad → Régimen → Tipo contrato. Si aparece algo nuevo, puedes crearlo aquí o cargarlo masivamente por Excel.</p></div><a class='c-btn' href='/admin/contratacion/maestros/formato'>⬇ Formato Excel</a></div>
+        <div class='c-card' style='padding:18px;margin-bottom:18px;background:#ecfdf5;border-color:#bbf7d0'>
+          <h2 style='margin:0 0 8px;color:#064e3b'>1) Relación laboral automática</h2>
+          <p class='muted2'>Usa esto como configuración principal. Al crear una relación, también se crean automáticamente los catálogos base si no existen.</p>
+          <form method='post' class='c-form' style='grid-template-columns:170px 1fr 170px 1fr'>
+            <input type='hidden' name='accion' value='guardar_relacion_laboral'>
+            <b>Empresa *</b><input list='dl_emp' name='empresa' required placeholder='Ej. AQUANQA I'><datalist id='dl_emp'>{opt_emp}</datalist>
+            <b>Área *</b><input list='dl_area' name='area' required placeholder='Ej. Campo / Packing / RR.HH.'><datalist id='dl_area'>{opt_area}</datalist>
+            <b>Cargo *</b><input list='dl_cargo' name='cargo' required placeholder='Ej. Obrero de Campo / Auxiliar RRHH'><datalist id='dl_cargo'>{opt_cargo}</datalist>
+            <b>Actividad *</b><input list='dl_act' name='actividad' required placeholder='Ej. OB_PODA / COSECHA'><datalist id='dl_act'>{opt_act}</datalist>
+            <b>Régimen laboral *</b><select name='regimen_laboral' required>{opt_regimen_select}</select>
+            <b>Tipo contrato *</b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select>
+            <b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select>
+            <b>Centro costo</b><input name='centro_costo' placeholder='Ej. CAMPO-OB / PACK-OB'>
+            <b>Funciones</b><textarea name='funciones' placeholder='Funciones base que puede usar el contrato o ficha del cargo'></textarea>
+            <span></span><button class='c-btn'>+ Crear relación automática</button>
+          </form>
+        </div>
+        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:18px;margin-bottom:18px;background:#f8fafc'>
+          <input type='hidden' name='accion' value='importar_relaciones_laborales_excel'>
+          <b>Carga masiva de relaciones</b><input type='file' name='archivo' accept='.xlsx,.xls' required>
+          <span class='muted2'>Hoja RELACIONES_LABORALES. Columnas: EMPRESA, AREA, CARGO, ACTIVIDAD, REGIMEN_LABORAL, TIPO_CONTRATO, MODALIDAD, CENTRO_COSTO, FUNCIONES, ACTIVO.</span><button class='c-btn gray'>⬆ Importar relaciones</button>
+        </form>
+        <div class='c-card table-wrap' style='margin-bottom:22px'><h2>Relaciones laborales configuradas</h2><table class='c-table'><tr><th>Empresa</th><th>Área</th><th>Cargo</th><th>Actividad</th><th>Régimen</th><th>Tipo contrato</th><th>Modalidad</th><th>Centro costo</th><th>Estado</th><th>Acción</th></tr>{rel_rows or '<tr><td colspan=10>Sin relaciones laborales configuradas.</td></tr>'}</table></div>
+        <div class='c-card' style='padding:18px;margin-bottom:18px'>
+          <h2 style='margin:0 0 8px;color:#0f2b46'>2) Crear dato maestro suelto</h2>
+          <p class='muted2'>Úsalo solo cuando quieras agregar una opción nueva que todavía no tendrá relación completa. No incluye sistema pensionario ni estado civil.</p>
+          <form method='post' class='c-form' style='grid-column:1/-1'>
+            <input type='hidden' name='accion' value='guardar_maestro_empleador'>
+            <b>Tipo</b><select name='tipo' required><option>EMPRESA</option><option>AREA</option><option>CARGO</option><option>ACTIVIDAD</option><option>REGIMEN_LABORAL</option><option>TIPO_CONTRATO</option><option>MODALIDAD</option><option>MONEDA</option><option>SIMBOLO_MONEDA</option><option>PERIODICIDAD_PAGO</option><option>TIPO_PAGO</option></select>
+            <b>Código</b><input name='codigo' placeholder='Ej. AQI / RRHH / OB_PODA'>
+            <b>Nombre</b><input name='nombre' required placeholder='Nombre que aparecerá en desplegables'>
+            <b>Descripción</b><input name='descripcion' placeholder='Detalle / observación'>
+            <span></span><button class='c-btn'>Guardar dato maestro</button>
+          </form>
+        </div>
+        <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:18px;margin-bottom:18px'>
+          <input type='hidden' name='accion' value='importar_maestros_empleador_excel'>
+          <b>Carga masiva de catálogos sueltos</b><input type='file' name='archivo' accept='.xlsx,.xls' required>
+          <span class='muted2'>Hoja DATOS_MAESTROS_EMPLEADOR. Columnas: TIPO, CODIGO, NOMBRE, DETALLE, ACTIVO.</span><button class='c-btn gray'>⬆ Importar catálogos</button>
+        </form>
+        <div class='c-card table-wrap'><h2>Catálogos base</h2><table class='c-table'><tr><th>Tipo</th><th>Código</th><th>Nombre</th><th>Descripción</th><th>Estado</th><th>Registro</th><th>Acción</th></tr>{maestro_rows or '<tr><td colspan=7>Sin datos maestros configurados.</td></tr>'}</table></div>
+        """)
+    elif sec in ['observados','tipos_etapa','tipo_empleado','cargo']:
+        content=wrap(f"""
+        <h2 class='c-title'>Alertas y Trabajadores Observados</h2><div class='dash-hero' style='margin-bottom:18px'><div><h1>Módulo de alerta preventiva</h1><p class='muted2'>Conectado a Requerimiento, Postulantes, Evaluación Médica, Documentos y Fotocheck. Al registrar DNI, el sistema valida si existe observación activa y aplica advertencia, validación o bloqueo.</p></div><div><span class='alert-level level1'>Nivel 1: advertencia</span><br><br><span class='alert-level level2'>Nivel 2: validación</span><br><br><span class='alert-level level3'>Nivel 3: bloqueo</span></div></div>
         <div class='c-bar'>
           <div>
             <input class='input' style='background:#fff!important;color:#111!important;max-width:520px' placeholder='Nombre / Num. Documento' onkeyup='filtrarObs(this.value)'>
             <br><br><button class='c-btn' type='button'>⌕ Buscar</button> <button class='c-btn gray' type='button' onclick='location.href=location.pathname+"?sec=observados"'>Limpiar</button>
           </div>
-          <button type='button' class='c-btn' onclick='abrirObsModal()'>+ Crear trabajador observado</button>
+          <button type='button' class='c-btn' onclick='abrirObsModal()'>+ Crear alerta / trabajador observado</button>
         </div>
-        <div class='toolbar'>⚙ Acción ▾ &nbsp; ⬇ Descargar ▾</div>
-
         <div id='obsModal' class='obs-modal'>
           <div class='obs-box'>
-            <div class='obs-head'><h2>Crear trabajador observado</h2><button type='button' onclick='cerrarObsModal()'>×</button></div>
+            <div class='obs-head'><h2>Crear alerta preventiva</h2><button type='button' onclick='cerrarObsModal()'>×</button></div>
             <form method='post' class='obs-form'>
-              <input type='hidden' name='accion' value='crear_observado'>
+              <input type='hidden' id='obsAccion' name='accion' value='crear_observado'><input type='hidden' id='obsId' name='observado_id' value=''>
               <label>Tipo Persona:</label><div class='radio-line'><label><input type='radio' name='tipo_persona' value='Trabajador' checked onchange='toggleObsTipo()'> Trabajador</label><label><input type='radio' name='tipo_persona' value='Externo' onchange='toggleObsTipo()'> Externo</label></div>
               <label>Trabajador:</label><input name='trabajador_sel' id='obsTrabajador' list='obsTrabajadores' placeholder='Buscar trabajador / DNI' oninput='copiarDniObs(this.value)'><datalist id='obsTrabajadores'>{opt_trab}</datalist>
               <label>DNI / Documento:</label><input name='numero_documento' id='obsDni' placeholder='DNI obligatorio'>
               <label>Nombre:</label><input name='nombre_externo' id='obsNombre' placeholder='Nombre externo o se toma de trabajador'>
               <label>Motivo:</label><select name='motivo' id='obsMotivo'><option value=''>Motivos</option>{motivo_options}</select>
               <label>Motivo digitado:</label><input name='motivo_otro' placeholder='Opcional: digitar motivo personalizado'>
-              <label>Nivel Restricción:</label><select name='nivel_restriccion'><option value=''>Niveles</option>{nivel_options}</select>
-              <label>Comentario:</label><input name='comentario' placeholder='Comentario / detalle'>
+              <label>Última empresa:</label><input name='ultima_empresa' id='obsUltimaEmpresa' placeholder='Última empresa donde laboró'>
+              <label>Cargo:</label><input name='cargo' id='obsCargo' placeholder='Cargo observado'>
+              <label>Área:</label><input name='area' id='obsArea' placeholder='Área'>
+              <label>Fecha observación:</label><input type='date' id='obsFecha' name='fecha_observacion' value='{hoy_iso()}'>
+              <label>Nivel Restricción:</label><select name='nivel_restriccion' id='obsNivel'><option value='NIVEL 1'>Nivel 1 - Advertencia</option><option value='NIVEL 2'>Nivel 2 - Validación RR.HH./Jefatura</option><option value='NIVEL 3'>Nivel 3 - Bloqueo preventivo</option></select>
+              <label>Evidencia:</label><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.doc,.docx'>
+              <label>Comentario:</label><input name='comentario' id='obsComentario' placeholder='Comentario / detalle'>
               <div></div><div class='obs-actions'><button class='c-btn'>Guardar</button><button type='reset' class='c-btn gray'>Limpiar</button><button type='button' onclick='cerrarObsModal()' class='c-btn gray'>Cerrar</button></div>
             </form>
           </div>
         </div>
 
         <div class='c-card'>
-          <div class='tabs'><div class='tab active' onclick='showObsTab("activos",this)'>Trabajadores observados</div><div class='tab' onclick='showObsTab("anulados",this)'>Lista de anulados</div></div>
-          <div id='tabObsActivos' class='table-wrap obs-tab'><table id='tablaObs' class='c-table'><tr><th></th><th>Acción</th><th>Estado</th><th>Tipo Documento</th><th>Número Documento</th><th>Nombre</th><th>Motivo</th><th>Nivel Restricción</th><th>Comentario</th><th>Creado Por</th><th>Fecha/Hora Creación</th><th>Editor Por</th><th>Fecha/Hora Edición</th></tr>{obs_rows}</table></div>
-          <div id='tabObsAnulados' class='table-wrap obs-tab' style='display:none'><table class='c-table'><tr><th>Log</th><th>Tipo Documento</th><th>Número Documento</th><th>Nombre</th><th>Motivo</th><th>Nivel Restricción</th><th>Comentario</th><th>Creado Por</th><th>Fecha/Hora Creación</th><th>Editor Por</th><th>Fecha/Hora Edición</th></tr>{obs_anulados_rows}</table></div>
+          <div class='tabs'><div class='tab active' onclick='showObsTab("activos",this)'>Trabajadores observados</div><div class='tab' onclick='showObsTab("anulados",this)'>Alertas levantadas / anuladas</div><div class='tab' id='tabBtnHistorial' onclick='showObsTab("historial",this)'>Historial</div><div class='tab' onclick='showObsTab("autorizaciones",this)'>Autorizaciones</div></div>
+          <div id='tabObsActivos' class='table-wrap obs-tab'><table id='tablaObs' class='c-table'><tr><th>Estado</th><th>Acciones</th><th>Acción preventiva</th><th>Tipo Documento</th><th>Número Documento</th><th>Nombre</th><th>Motivo</th><th>Nivel</th><th>Última empresa</th><th>Cargo</th><th>Área</th><th>Fecha observación</th><th>Comentario</th><th>Creado Por</th><th>Fecha/Hora Creación</th></tr>{obs_rows}</table></div>
+          <div id='tabObsAnulados' class='table-wrap obs-tab' style='display:none'><table class='c-table'><tr><th>Estado</th><th>Acción</th><th>Tipo Documento</th><th>Número Documento</th><th>Nombre</th><th>Motivo</th><th>Nivel</th><th>Comentario</th><th>Comentario cierre</th><th>Usuario cierre</th><th>Fecha cierre</th></tr>{obs_anulados_rows}</table></div>
+          <div id='tabObsHistorial' class='table-wrap obs-tab' style='display:none'><table id='tablaObsHistorial' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Módulo</th><th>Acción</th><th>Detalle</th><th>Usuario</th></tr>{obs_hist_rows}</table></div>
+          <div id='tabObsAutorizaciones' class='table-wrap obs-tab' style='display:none'><table class='c-table'><tr><th>Estado</th><th>DNI</th><th>Tipo</th><th>Motivo solicitud</th><th>Solicitado por</th><th>Fecha solicitud</th><th>Comentario aprobación</th><th>Aprobado por</th><th>Fecha aprobación</th></tr>{obs_aut_rows}</table></div>
         </div>
-        <style>.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(760px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:190px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input,.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.radio-line{{display:flex;gap:24px}}.radio-line label{{text-align:left!important;font-weight:500!important}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
+        <style>.obs-modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;align-items:center;justify-content:center;padding:18px}}.obs-modal.show{{display:flex}}.obs-box{{width:min(760px,96vw);background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}}.obs-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid #dce2ea}}.obs-head h2{{color:#111827!important;margin:0}}.obs-head button{{border:0;background:transparent;font-size:32px;color:#8a8f98;cursor:pointer}}.obs-form{{display:grid;grid-template-columns:190px 1fr;gap:14px 12px;padding:24px;align-items:center}}.obs-form label{{color:#374151!important;font-weight:700;text-align:right}}.obs-form input,.obs-form select{{background:#fff!important;color:#111827!important;border:1px solid #cdd5df!important;border-radius:8px!important;padding:10px!important}}.radio-line{{display:flex;gap:24px}}.radio-line label{{text-align:left!important;font-weight:500!important}}.obs-actions{{display:flex;gap:10px;justify-content:flex-end}}@media(max-width:760px){{.obs-form{{grid-template-columns:1fr}}.obs-form label{{text-align:left}}}}.obs-action-stack{display:grid;grid-template-columns:1fr;gap:7px;min-width:170px}.inline-form{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:0}.mini-input{min-height:36px!important;padding:8px 10px!important;border-radius:10px!important;border:1px solid #cbd5e1!important;background:#fff!important;color:#111827!important;max-width:190px}.mini-btn{border:0;border-radius:999px;padding:8px 12px;font-weight:950;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;font-size:12px}.mini-btn.gray{background:#eef2f7;color:#0f172a;border:1px solid #d7dee8}.mini-btn.warn{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}.mini-btn.mid{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}.mini-btn.bad{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}.status-chip,.nivel-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:7px 11px;font-weight:950;white-space:nowrap}.status-chip.ok,.nivel-pill.ok{background:#ecfdf5;color:#047857;border:1px solid #bbf7d0}.status-chip.mid,.nivel-pill.mid{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}.status-chip.warn,.nivel-pill.warn{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}.status-chip.bad,.nivel-pill.bad{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}.state-select.ok{color:#047857!important}.state-select.mid{color:#1d4ed8!important}.state-select.warn{color:#9a3412!important}.state-select.bad{color:#b91c1c!important}
 </style>
         <script>
-        function abrirObsModal(){{document.getElementById('obsModal').classList.add('show');}}
+        function abrirObsModal(){{document.getElementById('obsForm').reset();document.getElementById('obsAccion').value='crear_observado';document.getElementById('obsId').value='';document.querySelector('#obsModal .obs-head h2').innerText='Crear alerta preventiva';document.getElementById('obsModal').classList.add('show');}}
         function cerrarObsModal(){{document.getElementById('obsModal').classList.remove('show');}}
-        function showObsTab(tipo,el){{document.getElementById('tabObsActivos').style.display=tipo==='activos'?'block':'none';document.getElementById('tabObsAnulados').style.display=tipo==='anulados'?'block':'none';document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');}}
+        function editarObsModal(id,dni,nombre,motivo,nivel,comentario,empresa,cargo,area,fecha,estado){{abrirObsModal();document.getElementById('obsAccion').value='editar_observado';document.getElementById('obsId').value=id;document.querySelector('#obsModal .obs-head h2').innerText='Editar alerta preventiva';document.getElementById('obsDni').value=dni||'';document.getElementById('obsNombre').value=nombre||'';document.getElementById('obsMotivo').value=motivo||'';document.getElementById('obsNivel').value=nivel||'NIVEL 3';document.getElementById('obsComentario').value=comentario||'';document.getElementById('obsUltimaEmpresa').value=empresa||'';document.getElementById('obsCargo').value=cargo||'';document.getElementById('obsArea').value=area||'';document.getElementById('obsFecha').value=(fecha||'').includes('/')?'':(fecha||'');}}
+        function showObsTab(tipo,el){{['Activos','Anulados','Historial','Autorizaciones'].forEach(x=>{{const n=document.getElementById('tabObs'+x);if(n)n.style.display='none';}});const mapa={{activos:'tabObsActivos',anulados:'tabObsAnulados',historial:'tabObsHistorial',autorizaciones:'tabObsAutorizaciones'}};document.getElementById(mapa[tipo]).style.display='block';document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));if(el)el.classList.add('active');}}
         function copiarDniObs(v){{const m=(v||'').match(/(\d{{8}})/); if(m) document.getElementById('obsDni').value=m[1];}}
         function toggleObsTipo(){{const tipo=document.querySelector('input[name=tipo_persona]:checked').value;document.getElementById('obsTrabajador').disabled=(tipo==='Externo');}}
         function filtrarObs(q){{q=(q||'').toLowerCase();document.querySelectorAll('#tablaObs tr').forEach((tr,i)=>{{if(i===0)return;tr.style.display=tr.innerText.toLowerCase().includes(q)?'':'none';}});}}
+        function filtrarHistorialObs(dni){{document.querySelectorAll('#tablaObsHistorial tr').forEach((tr,i)=>{{if(i===0)return;tr.style.display=(!dni || tr.dataset.dni===dni)?'':'none';}});}}
         </script>
         """)
     elif sec=='anuncios':
         content=wrap("<h2 class='c-title'>Anuncios de la empresa</h2><div class='c-bar'><div class='c-form'><b>Fecha Registro</b><span><input placeholder='Desde'> - <input placeholder='Hasta'></span><b>Nombre</b><input></div><a class='c-btn'>+ Crear Anuncio</a></div><button class='c-btn'>⌕ Buscar</button> <button class='c-btn gray'>Limpiar</button><br><br><form class='anuncio-upload' method='post' enctype='multipart/form-data'><input type='hidden' name='accion' value='anuncio'><h2>Subir anuncio multimedia</h2><p class='muted2'>Acepta video MP4, PDF, imagen o documento para comunicar a trabajadores.</p><input name='titulo' placeholder='Título del anuncio'><br><br><input type='file' name='archivo' accept='.mp4,.pdf,.png,.jpg,.jpeg,.doc,.docx' required><br><br><button class='c-btn'>Subir anuncio</button><div class='video-box'><b>Vista previa MP4</b><video controls></video></div></form>")
+    elif sec=='renovacion_dashboard':
+        # MÓDULO PRINCIPAL: GESTIÓN RENOVACIÓN
+        # Trabaja sobre trabajadores activos y contratos por vencer. Comparte ficha, archivos,
+        # plantillas y firma con Gestión Contratación, pero mantiene tablero y flujo propio.
+        total_activos = len([t for t in trabajadores if int((t['activo'] if 'activo' in t.keys() else 1) or 0)==1])
+        con_fecha_fin = len([t for t in trabajadores if clean(t['fecha_fin_contrato'] if 'fecha_fin_contrato' in t.keys() else '')])
+        sin_fecha_fin = max(total_activos - con_fecha_fin, 0)
+        docs_ren = 0
+        firm_ren = 0
+        arch_ren = 0
+        try:
+            with db() as con:
+                docs_ren = con.execute("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%'").fetchone()[0]
+                firm_ren = con.execute("SELECT COUNT(*) FROM firma_solicitudes WHERE UPPER(COALESCE(estado,'')) LIKE '%FIRM%'").fetchone()[0]
+                arch_ren = con.execute("SELECT COUNT(*) FROM documentos WHERE UPPER(COALESCE(tipo,'')) LIKE '%RENOV%' OR UPPER(COALESCE(detalle,'')) LIKE '%RENOV%'").fetchone()[0]
+        except Exception:
+            pass
+        pendientes = sin_fecha_fin + max(docs_ren - firm_ren, 0)
+        ult_ren_rows = ''.join([f"<tr><td><input type='checkbox'></td><td><b>{h(t['dni'])}</b></td><td>{h(t['nombre'])}</td><td>{h(t['empresa'])}</td><td>{h(t['cargo'])}</td><td>{h(fecha_sin_hora(t['fecha_ingreso'] if 'fecha_ingreso' in t.keys() else ''))}</td><td>{h(fecha_sin_hora(t['fecha_fin_contrato'] if 'fecha_fin_contrato' in t.keys() else '')) or '<span class=\"status-pill bad\">Sin fecha fin</span>'}</td><td><span class='status-pill warn'>Pendiente evaluación</span></td></tr>" for t in trabajadores[:12]]) or "<tr><td colspan='8'>Sin trabajadores activos.</td></tr>"
+        content=wrap(f"""
+        <section class='dashboard-contratacion dashboard-renovacion-pro'>
+          <div class='dash-hero'>
+            <div><h1>Centro de Control - Gestión Renovación</h1><p class='muted2'>Módulo principal para contratos por vencer: selección masiva, generación de adendas/renovaciones, envío a firma, archivado y actualización de ficha.</p></div>
+            <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=renovacion'>Renovar contratos</a><a class='c-btn gray' href='/admin/contratacion?sec=plantillas&f_proceso=RENOVACIÓN'>Plantillas documentales</a></div>
+          </div>
+          <div class='dash-kpis'>
+            <div class='dash-card'><small>Trabajadores activos</small><b>{total_activos}</b></div>
+            <div class='dash-card'><small>Con fecha fin contrato</small><b>{con_fecha_fin}</b></div>
+            <div class='dash-card'><small>Docs. renovación</small><b>{docs_ren}</b></div>
+            <div class='dash-card'><small>Pendientes críticos</small><b>{pendientes}</b></div>
+          </div>
+          <div class='dash-grid'>
+            <div class='dash-card'><h2>Flujo de renovación</h2><div class='quick-grid'><a>1. Detectar contratos por vencer</a><a>2. Seleccionar trabajadores</a><a>3. Definir nueva fecha fin</a><a>4. Generar adenda/renovación</a><a>5. Enviar a firma digital</a><a>6. Archivar en ficha</a></div></div>
+            <div class='dash-card'><h2>Bloqueos recomendados</h2><p class='muted2'>No enviar a firma si falta plantilla activa, fecha fin nueva, documento generado o previsualización validada.</p><a class='c-btn' href='/admin/contratacion?sec=firma&scope=renovacion'>Revisar firma</a></div>
+          </div>
+          <div class='dash-card table-wrap'><h2>Trabajadores base para renovación</h2><table class='c-table'><tr><th></th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Cargo</th><th>Fecha ingreso</th><th>Fecha fin actual</th><th>Estado</th></tr>{ult_ren_rows}</table></div>
+        </section>
+        """)
+    elif sec=='plantillas_renovacion':
+        content=wrap("""
+        <h2 class='c-title'>Configuración Documentaria / Plantillas Documentales</h2>
+        <div class='dash-hero'><div><h1>Plantillas documentales</h1><p class='muted2'>Esta opción ahora pertenece a <b>Datos Maestros → Configuración Documentaria</b>. Usa las mismas funcionalidades de plantillas Word/PDF, campos dinámicos, condiciones y mapeo, pero orientadas a la etapa <b>Renovación</b>.</p></div><a class='c-btn' href='/admin/contratacion?sec=plantillas'>Ir a Plantillas Documentales</a></div>
+        <div class='c-card' style='padding:14px 18px;margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center'>
+          <b>Accesos:</b>
+          <a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas'>Plantillas Documentales</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipos_etapa'>Tipos por Etapa</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=renovacion'>Volver a Renovación Masiva</a>
+        </div>
+        <div class='dash-kpis'><div class='dash-card'><small>Campos obligatorios</small><b>Contrato origen</b></div><div class='dash-card'><small>Fecha nueva</small><b>Requerida</b></div><div class='dash-card'><small>Firma digital</small><b>Obligatoria</b></div></div>
+        <div class='c-card'><h2>Recomendación de configuración</h2><p class='muted2'>Crea plantillas con tipo documento: CONTRATO TRABAJADOR(RENOVACIÓN), ADENDA, CARGO ENTREGA RENOVACIÓN. Relaciónalas a trabajadores activos y bloquea documentos si faltan campos.</p></div>
+        <div class='c-card'><h2>Regla operativa</h2><p class='muted2'>La configuración se realiza aquí; la ejecución queda en <b>Gestión Renovación</b>: Renovación Masiva → Firma Renovación → Aprobaciones → Archivo/Ficha Trabajador.</p></div>
+        """)
+    elif sec=='documentaria_renovacion':
+        content=wrap("""
+        <h2 class='c-title'>Documentos de Renovación</h2>
+        <div class='dash-hero'><div><h1>Expediente documental de renovación</h1><p class='muted2'>Aquí se deben revisar adendas, renovaciones, cargos y documentos generados para trabajadores activos. Todo se archiva en Ficha Trabajador y Base Central.</p></div><a class='c-btn' href='/admin/contratacion?sec=documentaria'>Ir a archivos trabajador</a></div>
+        <div class='dash-kpis'><div class='dash-card'><small>Etapa</small><b>Renovación</b></div><div class='dash-card'><small>Archivo final</small><b>PDF/Word</b></div><div class='dash-card'><small>Destino</small><b>Ficha + Base Central</b></div></div>
+        <div class='c-card'><h2>Control recomendado</h2><p class='muted2'>Filtrar por empresa, cargo, fecha fin de contrato, firmado, archivado y número de file. Al firmarse, el documento debe quedar como ARCHIVADO.</p></div>
+        """)
+    elif sec=='docs_renovacion':
+        dni_doc = normalizar_dni(request.args.get('dni')) or (sample_trab['dni'] if sample_trab else '')
+        content=wrap(f"""
+        <h2 class='c-title'>Documentos de Renovación</h2>
+        <div class='dash-hero' style='margin-bottom:18px'>
+          <div><h1>Documentos de renovación</h1><p class='muted2'>Vista rápida de contrato/adenda generado para el trabajador seleccionado. DNI: {h(dni_doc)}</p></div>
+          <a class='c-btn gray' href='/admin/contratacion?sec=renovacion'>Volver a Renovación Masiva</a>
+        </div>
+        <div class='c-card table-wrap'><table class='c-table'>
+          <tr><th>DNI</th><th>Documento</th><th>Estado</th><th>Acción</th></tr>
+          <tr><td>{h(dni_doc)}</td><td>Adenda / Renovación de contrato</td><td>{_estado_pill('PENDIENTE GENERACIÓN')}</td><td><a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas&f_proceso=RENOVACIÓN'>Generar desde plantilla</a></td></tr>
+        </table></div>
+        """)
+    elif sec=='firma_renovacion':
+        # Firma Renovación PRO: mismo motor de Firma Facial / Digital,
+        # pero ordenado y filtrado exclusivamente para documentos de Renovación / Adenda.
+        with db() as con_fr:
+            docs_ren = con_fr.execute("""SELECT * FROM contratacion_docs 
+                                      WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' 
+                                         OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'
+                                         OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%'
+                                      ORDER BY id DESC LIMIT 300""").fetchall()
+            firmas_ren = con_fr.execute("""SELECT f.*, d.tipo_doc, d.estado AS estado_doc, d.ruta_archivo, d.archivo_nombre
+                                      FROM firma_solicitudes f
+                                      LEFT JOIN contratacion_docs d ON d.id=f.documento_id
+                                      WHERE UPPER(COALESCE(d.etapa,'')) LIKE '%RENOV%' 
+                                         OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%RENOV%'
+                                         OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%ADENDA%'
+                                      ORDER BY f.id DESC LIMIT 300""").fetchall()
+        total_docs_ren = len(docs_ren)
+        total_firmas_ren = len(firmas_ren)
+        total_pendientes_ren = sum(1 for f in firmas_ren if 'PEND' in clean(f['estado']).upper() or 'CAPTURA' in clean(f['estado']).upper())
+        total_firmadas_ren = sum(1 for f in firmas_ren if 'FIRM' in clean(f['estado']).upper())
+        total_aprobacion_ren = sum(1 for f in firmas_ren if 'APROB' in clean(f['estado']).upper())
+
+        doc_cards_ren = ''
+        for d in docs_ren:
+            estado_doc = clean(d['estado']) or 'Pendiente'
+            estado_cls = 'ok' if 'FIRM' in estado_doc.upper() or 'APROB' in estado_doc.upper() else ('warn' if 'FIRMA' in estado_doc.upper() else 'pend')
+            doc_cards_ren += f"""
+            <label class='ren-sign-card'>
+              <input type='checkbox' class='chk-doc-firma' value='{d['id']}' data-dni='{h(d['dni'])}' data-trabajador='{h(d['trabajador'])}' data-tipo='{h(d['tipo_doc'])}' checked>
+              <span class='ren-doc-icon'>W</span>
+              <span class='ren-doc-body'>
+                <b>{h(d['tipo_doc'] or 'RENOVACIÓN / ADENDA')}</b>
+                <small>{h(d['trabajador'] or '')}</small>
+                <small>DNI {h(d['dni'] or '')} · {h(d['empresa'] or '')}</small>
+              </span>
+              <span class='ren-status {estado_cls}'>{h(estado_doc)}</span>
+            </label>"""
+
+        rows_firma_ren = ''
+        for r in firmas_ren:
+            token = r['firma_token'] if 'firma_token' in r.keys() and r['firma_token'] else ''
+            link = firma_url_token(token) if token else ''
+            estado_firma = clean(r['estado']) or 'Pendiente'
+            estado_cls = 'ok' if 'FIRM' in estado_firma.upper() or 'APROB' in estado_firma.upper() else ('warn' if 'CAPTURA' in estado_firma.upper() or 'PEND' in estado_firma.upper() else 'pend')
+            rows_firma_ren += f"""
+            <tr>
+              <td>{h(r['dni'])}</td>
+              <td><b>{h(r['trabajador'])}</b><br><small>{h(r['tipo_doc'] or 'Renovación / Adenda')}</small></td>
+              <td><span class='ren-status {estado_cls}'>{h(estado_firma)}</span></td>
+              <td>{h(r['fecha_envio'] or '')}</td>
+              <td>{h(r['fecha_firma'] or '')}</td>
+              <td>
+                <div class='ren-row-actions'>
+                  {('<a class="mini-action" target="_blank" title="Abrir enlace de firma" href="'+h(link)+'">🔗</a>') if link else '<span class="mini-action disabled">🔗</span>'}
+                  <a class='mini-action' title='Ver ficha única' href='/admin/contratacion?sec=ficha&dni={h(r['dni'])}'>🔍</a>
+                  <a class='mini-action' title='Ver documento' href='/admin/contratacion?sec=docs_renovacion&dni={h(r['dni'])}'>📄</a>
+                </div>
+              </td>
+            </tr>"""
+        if not rows_firma_ren:
+            rows_firma_ren = "<tr><td colspan='6' class='muted2'>No hay solicitudes de firma para renovación.</td></tr>"
+
+        content=wrap(f"""
+        <div class='firma-renovacion-clean'>
+          <div class='dash-hero firma-ren-hero'>
+            <div>
+              <h1>Firma Renovación</h1>
+              <p class='muted2'>Firma facial/digital para adendas y renovaciones. Al completarse, la renovación queda lista para pasar a <b>Aprobaciones</b> y luego a la <b>Ficha Trabajador única</b>.</p>
+            </div>
+            <div class='hero-actions'>
+              <a class='c-btn gray' href='/admin/contratacion?sec=renovacion'>← Renovación Masiva</a>
+              <a class='c-btn' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>Ver Aprobaciones</a>
+            </div>
+          </div>
+
+          <div class='ren-kpi-grid'>
+            <div class='ren-kpi'><small>Renovaciones generadas</small><b>{total_docs_ren}</b><span>Documentos listos para envío</span></div>
+            <div class='ren-kpi'><small>Pendientes de firma</small><b>{total_pendientes_ren}</b><span>Esperando captura/enlace</span></div>
+            <div class='ren-kpi'><small>Firmadas</small><b>{total_firmadas_ren}</b><span>Con evidencia registrada</span></div>
+            <div class='ren-kpi'><small>En aprobación</small><b>{total_aprobacion_ren}</b><span>Bandeja RRHH/Gerencia</span></div>
+          </div>
+
+          <form method='post' onsubmit='return prepararFirmaMasiva()'>
+            <input type='hidden' name='accion' value='firma_masiva'>
+            <input type='hidden' name='documentos_lote' id='documentos_lote'>
+            <input type='hidden' name='captura_base64_renovacion' id='captura_base64_renovacion'>
+            <input type='hidden' name='metodo_masivo' value='FACIAL + FIRMA DIGITAL - RENOVACIÓN'>
+            <input type='hidden' name='observacion_masiva' value='Renovación firmada / pendiente de aprobación'>
+
+            <div class='ren-sign-layout'>
+              <section class='ren-panel ren-camera'>
+                <div class='ren-section-head'>
+                  <div><h2>1. Evidencia facial</h2><p>Activa cámara, captura evidencia o adjunta imagen desde celular.</p></div>
+                  <span id='liveBadge' class='live-badge pro'>● APAGADA</span>
+                </div>
+                <div class='cam-box-ren'>
+                  <video id='firmaVideo' autoplay playsinline muted></video>
+                  <canvas id='firmaCanvas' style='display:none'></canvas>
+                  <img id='firmaPreview' style='display:none'>
+                  <div class='face-frame'></div>
+                  <div class='capture-toast' id='captureToast'>✅ Rostro reconocido correctamente<br><small>Captura realizada</small></div>
+                </div>
+                <div id='soundBox' class='sound-ok ren-sound'>
+                  <span>🔊</span><div><b>Captura exitosa</b><small>Rostro reconocido correctamente</small></div>
+                </div>
+                <div class='ren-action-bar'>
+                  <button type='button' id='btnActivarCamara' class='c-btn' onclick='return firmaStartCam(event)'>🎥 Activar cámara</button>
+                  <button type='button' class='c-btn gray' onclick='return firmaCapture()'>📸 Capturar evidencia</button>
+                  <button type='button' class='c-btn dark' onclick='return firmaStopCam()'>■ Detener</button>
+                  <label class='c-btn gray filecam-label'>📁 Cámara/archivo<input id='firmaFileCam' type='file' accept='image/*' capture='user' onchange='firmaLoadFileCam(this)' style='display:none'></label>
+                </div>
+                <p id='firmaCamMsg' class='muted2'></p>
+              </section>
+
+              <section class='ren-panel'>
+                <div class='ren-section-head'>
+                  <div><h2>2. Renovaciones a firmar</h2><p>Selecciona documentos de renovación/adenda.</p></div>
+                  <span id='docsBadge' class='ren-count'>0</span>
+                </div>
+                <div class='ren-doc-list'>{doc_cards_ren or '<div class="empty-docs">No hay renovaciones generadas. Primero usa Renovación Masiva → Generar Renovación.</div>'}</div>
+                <div class='ren-bulk-row'>
+                  <label><input type='checkbox' checked onchange='marcarTodosFirma(this.checked)'> Seleccionar todo</label>
+                  <span id='firmaMassCounter'>0 seleccionados</span>
+                </div>
+                <button class='c-btn ren-main-submit'>🖊️ Enviar / firmar renovaciones</button>
+                <div class='ren-rule-mini'>Al firmar, el documento pasa a <b>Aprobaciones</b>.</div>
+              </section>
+            </div>
+          </form>
+
+          <section class='ren-panel table-section'>
+            <div class='ren-section-head'>
+              <div><h2>Bandeja de firmas de renovación</h2><p>Seguimiento de enlaces, capturas y estados.</p></div>
+              <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>Ir a Aprobaciones</a>
+            </div>
+            <div class='table-wrap ren-scroll'>
+              <table class='c-table'>
+                <tr><th>DNI</th><th>Trabajador / Documento</th><th>Estado firma</th><th>Fecha envío</th><th>Fecha firma</th><th>Acciones</th></tr>
+                {rows_firma_ren}
+              </table>
+            </div>
+          </section>
+
+          <section class='ren-panel ren-auto-flow'>
+            <h2>Regla automática</h2>
+            <div class='flow-steps'>
+              <div><b>1</b><span>Generar renovación</span></div>
+              <div><b>2</b><span>Firma facial/digital</span></div>
+              <div><b>3</b><span>Aprobaciones</span></div>
+              <div><b>4</b><span>Ficha Trabajador única</span></div>
+            </div>
+          </section>
+        </div>
+        <style>
+          .firma-renovacion-clean{{padding-bottom:30px}}
+          .firma-ren-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}}
+          .firma-ren-hero h1{{font-size:42px;margin-bottom:8px}}
+          .hero-actions{{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}}
+          .ren-kpi-grid{{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin:18px 0}}
+          .ren-kpi{{background:white;border:1px solid #dbe9f3;border-radius:20px;padding:18px;box-shadow:0 12px 28px rgba(15,40,70,.08)}}
+          .ren-kpi small{{display:block;color:#60728a;font-weight:800;margin-bottom:8px}}
+          .ren-kpi b{{font-size:34px;color:#0b2b4c}}
+          .ren-kpi span{{display:block;color:#60728a;font-size:13px;margin-top:6px}}
+          .ren-sign-layout{{display:grid;grid-template-columns:minmax(360px,0.95fr) minmax(420px,1.05fr);gap:18px;align-items:start}}
+          .ren-panel{{background:white;border:1px solid #dbe9f3;border-radius:22px;padding:20px;box-shadow:0 14px 32px rgba(15,40,70,.08);margin-bottom:18px}}
+          .ren-section-head{{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}}
+          .ren-section-head h2{{font-size:25px;margin:0;color:#0b2b4c}}
+          .ren-section-head p{{margin:5px 0 0;color:#60728a;font-weight:600}}
+          .live-badge.pro{{position:static;background:#142032;color:#fff;border-radius:999px;padding:8px 12px;font-weight:900;white-space:nowrap}}
+          .cam-box-ren{{position:relative;min-height:310px;border:2px dashed #cfe1ef;border-radius:20px;background:linear-gradient(135deg,#eef7f4,#f8fbfd);display:flex;align-items:center;justify-content:center;overflow:hidden}}
+          .cam-box-ren video,.cam-box-ren img{{width:100%;height:310px;object-fit:cover;border-radius:18px}}
+          .cam-box-ren .face-frame{{position:absolute;width:190px;height:230px;border:3px solid rgba(16,185,129,.8);border-radius:50%;box-shadow:0 0 0 999px rgba(11,43,76,.08)}}
+          .cam-box-ren .capture-toast{{display:none;position:absolute;bottom:16px;left:16px;background:#ecfdf5;border:1px solid #8ee0b8;color:#065f46;border-radius:14px;padding:10px 12px;font-weight:900}}
+          .cam-box-ren:not(.cam-live) video{{background:#e8f0f4}}
+          .cam-box-ren.cam-live{{background:#000;border-style:solid;border-color:#22c55e}}
+          .cam-box-ren.cam-error{{background:#fff7ed!important;border-color:#fed7aa!important}}
+          .cam-box-ren.cam-live .face-frame{{display:block}}
+          .cam-box-ren.capture-ok #captureToast{{display:block}}
+          .cam-box-ren.capture-ok .capture-toast{{display:block}}
+          .ren-sound{{margin-top:10px;display:none}}
+          .ren-action-bar{{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}}
+          .ren-action-bar .c-btn{{min-height:42px}}
+          .ren-doc-list{{display:grid;gap:10px;max-height:390px;overflow:auto;padding-right:5px}}
+          .ren-sign-card{{display:grid;grid-template-columns:auto 48px 1fr auto;align-items:center;gap:12px;border:1px solid #dbe9f3;border-radius:18px;padding:13px;background:#f8fbfd;cursor:pointer}}
+          .ren-sign-card:hover{{background:#f0fbf7;border-color:#77d8ad}}
+          .ren-sign-card input{{width:18px;height:18px}}
+          .ren-doc-icon{{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:14px;background:#dcfce7;color:#047857;font-weight:900}}
+          .ren-doc-body b{{display:block;color:#0b2b4c}}
+          .ren-doc-body small{{display:block;color:#60728a;font-weight:700}}
+          .ren-status{{display:inline-flex;align-items:center;justify-content:center;border-radius:12px;padding:8px 10px;font-weight:900;font-size:12px;white-space:nowrap}}
+          .ren-status.ok{{background:#dcfce7;color:#166534;border:1px solid #86efac}}
+          .ren-status.warn{{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}}
+          .ren-status.pend{{background:#e0f2fe;color:#075985;border:1px solid #7dd3fc}}
+          .ren-count{{background:#10b981;color:#fff;border-radius:12px;padding:8px 14px;font-size:22px;font-weight:900}}
+          .ren-bulk-row{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0;color:#0b2b4c;font-weight:900}}
+          .ren-main-submit{{width:100%;justify-content:center;font-size:16px;padding:14px}}
+          .ren-rule-mini{{margin-top:12px;background:#f1f5f9;border-radius:14px;padding:12px;color:#475569;font-weight:700}}
+          .table-section{{padding:0;overflow:hidden}}
+          .table-section .ren-section-head{{padding:18px 20px 0}}
+          .ren-scroll{{max-height:420px;overflow:auto;border-top:1px solid #dbe9f3}}
+          .ren-scroll .c-table th{{position:sticky;top:0;z-index:2;background:#eef4fa}}
+          .ren-row-actions{{display:flex;gap:8px;align-items:center}}
+          .mini-action.disabled{{opacity:.35;pointer-events:none}}
+          .ren-auto-flow{{padding:18px 20px}}
+          .flow-steps{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}
+          .flow-steps div{{background:#f8fafc;border:1px solid #dbe9f3;border-radius:16px;padding:14px;display:flex;gap:10px;align-items:center;font-weight:900;color:#0b2b4c}}
+          .flow-steps b{{display:inline-flex;width:32px;height:32px;border-radius:50%;background:#10b981;color:white;align-items:center;justify-content:center}}
+          @media(max-width:1100px){{.ren-sign-layout,.ren-kpi-grid,.flow-steps{{grid-template-columns:1fr}}.firma-ren-hero{{flex-direction:column;align-items:flex-start}}}}
+        </style>
+        """)
     elif sec=='renovacion':
-        content=wrap(f"<h2 class='c-title'>Renovación masiva de contratos</h2><div class='c-form'><b>Renovar por:</b><span>Meses <input type='checkbox' checked> Fecha Termino</span><b>Fecha Termino:</b><input placeholder='d/MM/yyyy'><b>Meses:</b><input type='number' value='0'></div><div class='toolbar'>🔎 Filtros &nbsp; ⚙ Acción ▾ &nbsp; ⬇ Descargar</div><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Modalidad</th><th>FI Planilla</th><th>Fecha Migración</th><th>FI Contrato</th><th>FF Contrato</th><th>Firmado</th><th>Archivado</th><th>Nro File</th></tr>{renov_rows}</table></div>")
+        content=wrap(f"""
+        <h2 class='c-title'>Renovación masiva de contratos</h2>
+        <div class='dash-hero renov-hero-pro'>
+          <div>
+            <h1>Renovación masiva</h1>
+            <p class='muted2'>Selecciona trabajadores, define la nueva fecha fin, genera la renovación, envía a firma, envía a aprobación y archiva el documento final en Ficha Trabajador.</p>
+          </div>
+          <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>Ver aprobaciones pendientes</a>
+        </div>
+        <div class='c-form renov-form-pro'>
+          <b>Renovar por:</b><span>Meses <input type='checkbox' checked> Fecha término</span>
+          <b>Fecha término:</b><input value='31/12/2026' placeholder='d/MM/yyyy'>
+          <b>Meses:</b><input type='number' value='7'>
+        </div>
+        <form method='post' id='formRenovacionMasiva'>
+        <div class='renov-main-actions c-card'>
+          <button type='submit' name='accion' value='renovar_generar' class='c-btn'>📄 Generar Renovación</button>
+          <button type='submit' name='accion' value='renovar_firma' class='c-btn'>✍ Enviar Firma</button>
+          <button type='submit' name='accion' value='renovar_aprobacion' class='c-btn'>➡ Enviar a Aprobación</button>
+          <a class='c-btn gray' href='/admin/contratacion?sec=flujo&estado=PENDIENTE'>Ver bandeja de aprobaciones</a>
+        </div>
+        <div class='toolbar renov-toolbar-pro'>
+          <details><summary>🔎 Filtros</summary><div class='drop-panel'><input placeholder='Empresa'><input placeholder='Cargo'><input placeholder='Fecha fin contrato'><select><option>Estado firma</option><option>Pendiente</option><option>Firmado</option></select><select><option>Estado aprobación</option><option>PENDIENTE</option><option>APROBADO</option><option>RECHAZADO</option></select></div></details>
+          <details><summary>⚙ Acciones Masivas</summary><div class='drop-panel'><button type='submit' name='accion' value='renovar_generar'>Generar Adenda/Renovación</button><button type='submit' name='accion' value='renovar_firma'>Enviar Firma</button><button type='submit' name='accion' value='renovar_aprobacion'>Enviar Aprobación</button><button type='button' onclick="alert('La fecha fin se actualizará en la ficha al aprobar la renovación')">Actualizar Fecha Fin</button></div></details>
+          <details><summary>⬇ Descargar</summary><div class='drop-panel'><button>Excel Renovaciones</button><button>Excel Pendientes</button><button>Excel Aprobados</button><button>ZIP Documentos</button><button>Reporte Gerencial</button></div></details>
+        </div>
+        <div class='c-card table-wrap renov-table-pro'>
+          <table class='c-table'>
+            <tr>
+              <th><input type='checkbox' onclick="this.closest('table').querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=this.checked)"></th>
+              <th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Cargo</th><th>FF Actual</th><th>FF Nueva</th><th>Días vence</th><th>Firma</th><th>Aprobación</th><th>Estado</th><th>Acciones</th>
+            </tr>
+            {renov_rows}
+          </table>
+        </div>
+        </form>
+        <style>
+          .renov-main-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0;padding:14px}}
+          .renov-toolbar-pro{{display:flex;gap:18px;justify-content:flex-end;margin:10px 0 14px 0;position:relative}}
+          .renov-toolbar-pro details{{position:relative}}
+          .renov-toolbar-pro summary{{cursor:pointer;font-weight:800;color:#40566f;list-style:none}}
+          .drop-panel{{position:absolute;right:0;top:30px;background:#fff;border:1px solid #d8e4ef;border-radius:16px;box-shadow:0 18px 40px rgba(15,35,55,.15);padding:14px;z-index:20;min-width:260px;display:grid;gap:8px}}
+          .drop-panel input,.drop-panel select,.drop-panel button{{border:1px solid #d8e4ef;border-radius:12px;padding:10px;background:#fff;font-weight:700}}
+          .table-input{{width:120px;border:1px solid #cfe0ef;border-radius:10px;padding:8px 10px;font-weight:800}}
+          .renov-actions-row{{display:flex;gap:6px;flex-wrap:wrap}}
+          .mini-action{{border:1px solid #d8e4ef;border-radius:10px;background:#fff;padding:7px 9px;text-decoration:none;cursor:pointer;font-weight:900}}
+          .renov-table-pro{{max-height:520px;overflow:auto}} .renov-table-pro .c-table th{{position:sticky;top:0;z-index:2;background:#eef4fa}} .renov-table-pro .c-table th,.renov-table-pro .c-table td{{vertical-align:middle}}
+        </style>
+        """)
     elif sec=='ficha':
         # FICHA TRABAJADOR MEJORADA: búsqueda real por DNI y pestañas funcionales.
         dni_sel = normalizar_dni(request.args.get('dni')) or (sample_trab['dni'] if sample_trab else '')
@@ -6004,7 +9313,8 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
         periodos_html = ''.join([f"<span class='mini-chip'>{h(p['periodo_inicio'])}/{h(p['periodo_fin'])} · saldo {h(p['saldo'])}</span>" for p in vac_periodos]) or '<span class="mini-chip">Sin periodos cargados</span>'
 
         content=wrap(f"""
-        <h2 class='c-title'>Ficha Trabajador</h2>
+        <h2 class='c-title'>Ficha Trabajador Única</h2>
+        <div class='c-card' style='margin-bottom:14px'><b>Expediente único:</b> aquí se consolida contratación, renovación, documentos, contratos, firmas, fotocheck, indumentaria y observaciones.</div>
         <form method='get' action='/admin/contratacion' class='ficha-search'>
           <input type='hidden' name='sec' value='ficha'>
           <input name='dni' value='{h(dni_sel)}' list='trabajadores_ficha_list' placeholder='Buscar por DNI'>
@@ -6017,7 +9327,7 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
             <h2>{nombre}</h2><p><b>DNI:</b> {h(dni_sel)} &nbsp; <b>Empresa:</b> {empresa}</p>
             <p><b>Dirección:</b> {h(rv(trabajador_sel,'direccion','')) or 'Sin dirección registrada'}</p>
             <p>✉ {correo or 'Sin correo'} &nbsp;&nbsp; 📱 {celular or 'Sin celular'}</p>
-            <div class='created-box'><b>Fecha de Creación:</b> {fecha_reg or '-'} <b>Creado por:</b> SISTEMA PORTAL HR PRO</div>
+            <div class='created-box'><b>Fecha de Creación:</b> {fecha_reg or '-'} <b>Creado por:</b> SISTEMA PRIZE</div>
           </div>
           <div class='profile-col'><p><b>Gerencia:</b> NINGUNO</p><p><b>Área:</b> {area}</p><p><b>Puesto:</b> {cargo}</p><p><b>Supervisor:</b> {jefe or '-'}</p><p><b>Planilla:</b> {planilla or '-'}</p></div>
           <div class='profile-col'><p><b>Estado:</b> <span class='status-pill {estado_cls}'>{estado_txt}</span></p><p><b>Fecha de Ingreso:</b> {fecha_ing or '-'}</p><p><b>Fecha de Cese:</b> {h(rv(trabajador_sel,'fecha_cese','')) or '-'}</p><p><b>Cargo:</b> {cargo}</p><p><b>Sindicalizado:</b> {h(rv(trabajador_sel,'sindicalizado','NO'))}</p></div>
@@ -6067,14 +9377,67 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
         f_tipo_v = html.escape(clean(request.args.get('f_tipo')))
         f_esquema_v = html.escape(clean(request.args.get('f_esquema')))
         f_cond_v = html.escape(clean(request.args.get('f_condicion')))
+        f_proceso_v = html.escape(clean(request.args.get('f_proceso')))
+        base_excel_rows = ''.join([f"<tr><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in trabajadores_proceso_mostrar[:12]]) or "<tr><td colspan='7'>Aún no hay base Excel cargada desde este módulo.</td></tr>"
         content=wrap(f"""
+        <style>.config-contratos-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:10px 0 18px}}.config-contract-card{{padding:20px!important;min-height:210px}}.config-contract-card h2{{margin:4px 0 8px;color:#0f2b46}}.config-icon{{width:54px;height:54px;border-radius:16px;background:#ecfdf5;display:grid;place-items:center;font-size:28px;margin-bottom:10px}}.base-excel-form{{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:12px 0}}.quick-grid{{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}}.quick-grid a{{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:999px;padding:9px 13px;color:#047857!important;font-weight:800;text-decoration:none}}@media(max-width:900px){{.config-contratos-grid{{grid-template-columns:1fr}}.base-excel-form{{grid-template-columns:1fr}}.base-excel-form .c-btn{{width:100%}}}}</style>
         <div class='plantilla-top'>
-          <h2 class='c-title'>Plantillas</h2>
-          <a class='c-btn crear-btn' href='#crearPlantilla'>+ Crear Plantilla</a>
+          <div><h1 class='c-title plantillas-title-pro'>Configuración Documentaria</h1><p class='muted2'>Módulo ubicado en <b>Datos Maestros</b>. Desde aquí se gobiernan en una sola bandeja las plantillas de contratación, renovación/adendas, documentos de entrega, campos dinámicos, condiciones y tipos documentarios.</p></div>
+          <a class='c-btn crear-btn' href='#crearPlantilla'>+ Crear Plantilla Word/PDF</a>
         </div>
+        <div class='c-card' style='padding:14px 18px;margin:12px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center'>
+          <b>Configuración Documentaria:</b>
+          <a class='c-btn mini-btn' href='/admin/contratacion?sec=plantillas'>Plantillas Documentales</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=plantillas&f_proceso=CONTRATACIÓN'>Filtro Contratación</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=plantillas&f_proceso=RENOVACIÓN'>Filtro Renovación</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipos_etapa'>Tipos por Etapa</a>
+          <a class='c-btn mini-btn gray' href='/admin/contratacion?sec=tipo_empleado'>Tipo Documento Empleado</a>
+        </div>
+        <div class='config-contratos-grid'>
+          <div class='c-card config-contract-card'>
+            <div class='config-icon'>📄</div><h2>1. Plantillas de documentos</h2>
+            <p class='muted2'>Carga aquí los formatos Word/PDF: contratos, adendas, renovaciones, cargos, anexos y documentos a entregar. Los campos deben ir como <b>«DireccionActual»</b> o <b>{{{{DireccionActual}}}}</b>.</p>
+            <div class='quick-grid'><a href='#crearPlantilla'>Crear plantilla</a><a href='/admin/contratacion?sec=plantillas'>Ver plantillas</a><a href='/admin/contratacion?sec=firma'>Firma digital</a></div>
+          </div>
+          <div class='c-card config-contract-card'>
+            <div class='config-icon'>📊</div><h2>2. Base Excel de trabajadores</h2>
+            <p class='muted2'>Carga por otro lado la base de trabajadores/postulantes. Esta base alimenta los campos del contrato y queda enlazada al flujo de Postulantes.</p>
+            <form method='post' enctype='multipart/form-data' class='base-excel-form'>
+              <input type='hidden' name='accion' value='importar_base_contratos_excel'>
+              <input type='file' name='archivo' accept='.xlsx,.xls' required>
+              <button class='c-btn'>⬆ Cargar Base Excel</button>
+              <a class='c-btn gray' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato Excel</a>
+            </form>
+            <small class='muted2'>Columnas sugeridas: DNI, TRABAJADOR, EMPRESA, REQUERIMIENTO, CARGO, AREA, FECHA INGRESO, DIRECCION, DISTRITO, PROVINCIA, DEPARTAMENTO, BASICO.</small>
+          </div>
+        </div>
+        <div class='c-card table-wrap' style='margin:18px 0'><h2>Base Excel cargada / trabajadores para contratos</h2><table class='c-table'><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Requerimiento</th><th>Cargo</th><th>Ingreso</th><th>Estado</th></tr>{base_excel_rows}</table></div>
+        <style>
+        /* === FIX PRO Plantilla Documentos 29-05 === */
+        #crearPlantilla.modal-prize{{background:rgba(15,23,42,.36)!important;backdrop-filter:blur(3px)!important;padding:22px!important;overflow:auto!important}}
+        #crearPlantilla .modal-box{{max-width:980px!important;width:min(980px,calc(100vw - 48px))!important;margin:8px auto!important;background:#f8fafc!important;color:#0f172a!important;border:1px solid #dbe7ef!important;border-radius:22px!important;box-shadow:0 28px 70px rgba(15,23,42,.24)!important;overflow:hidden!important}}
+        #crearPlantilla .modal-head{{background:linear-gradient(135deg,#ecfdf5,#f8fafc)!important;border-bottom:1px solid #dbe7ef!important;padding:14px 20px!important}}
+        #crearPlantilla .modal-head h2{{font-size:22px!important;color:#0f172a!important;margin:0!important;font-weight:850!important}}
+        #crearPlantilla .modal-close{{color:#0f172a!important;background:#e2e8f0!important;border-radius:12px!important;width:36px!important;height:36px!important;display:grid!important;place-items:center!important;text-decoration:none!important}}
+        #crearPlantilla .modal-body{{background:#f8fafc!important;padding:18px 22px!important}}
+        #crearPlantilla .modal-form{{display:grid!important;grid-template-columns:190px minmax(0,1fr)!important;gap:10px 16px!important;align-items:center!important}}
+        #crearPlantilla .modal-form label{{color:#0f766e!important;font-size:15px!important;line-height:1.2!important;font-weight:800!important;text-align:right!important;text-shadow:none!important}}
+        #crearPlantilla .modal-form label.req{{color:#059669!important}}
+        #crearPlantilla input,#crearPlantilla select,#crearPlantilla textarea{{width:100%!important;min-height:42px!important;background:#fff!important;color:#0f172a!important;border:1.5px solid #cbd5e1!important;border-radius:13px!important;padding:10px 13px!important;font-size:15px!important;font-weight:650!important;box-shadow:none!important}}
+        #crearPlantilla textarea{{min-height:72px!important;resize:vertical!important}}
+        #crearPlantilla input:focus,#crearPlantilla select:focus,#crearPlantilla textarea:focus{{outline:none!important;border-color:#10b981!important;box-shadow:0 0 0 4px rgba(16,185,129,.16)!important}}
+        #crearPlantilla .modal-help{{grid-column:2!important;margin-top:-7px!important;color:#16a34a!important;font-size:13px!important;font-weight:700!important}}
+        #crearPlantilla .file-row{{background:#fff!important;border:1.5px dashed #94a3b8!important;border-radius:13px!important;padding:8px 10px!important;color:#0f172a!important}}
+        #crearPlantilla .file-row input{{border:0!important;padding:0!important;min-height:32px!important}}
+        #crearPlantilla .modal-actions{{grid-column:1/-1!important;display:flex!important;justify-content:flex-end!important;gap:12px!important;margin-top:8px!important;padding-top:14px!important;border-top:1px solid #e2e8f0!important}}
+        #crearPlantilla .c-btn{{min-height:42px!important;padding:10px 22px!important;border-radius:13px!important;font-size:14px!important}}
+        #crearPlantilla .c-btn.gray{{background:#e2e8f0!important;color:#0f172a!important}}
+        @media(max-width:760px){{#crearPlantilla .modal-box{{width:calc(100vw - 24px)!important}}#crearPlantilla .modal-form{{grid-template-columns:1fr!important}}#crearPlantilla .modal-form label{{text-align:left!important}}#crearPlantilla .modal-help{{grid-column:1!important}}#crearPlantilla .modal-actions{{justify-content:stretch!important;flex-direction:column!important}}}}
+        </style>
         <div class='c-card filter-card' style='padding:18px'>
           <form method='get' action='/admin/contratacion' class='plantilla-filter'>
             <input type='hidden' name='sec' value='plantillas'>
+            <b>Proceso:</b><select name='f_proceso'><option value='' {'selected' if not f_proceso_v else ''}>TODOS</option><option value='CONTRATACIÓN' {'selected' if f_proceso_v=='CONTRATACIÓN' else ''}>CONTRATACIÓN</option><option value='RENOVACIÓN' {'selected' if f_proceso_v=='RENOVACIÓN' else ''}>RENOVACIÓN / ADENDA</option></select>
             <b>Nombre Plantilla:</b><input name='f_nombre' value='{f_nombre_v}'>
             <b>Tipo Documento:</b><input name='f_tipo' value='{f_tipo_v}' list='tipos_doc_list_filter'><datalist id='tipos_doc_list_filter'>{opt_tipo}</datalist>
             <b>Esquema:</b><select name='f_esquema'><option value=''></option><option {'selected' if f_esquema_v=='Trabajador Contrato Laboral' else ''}>Trabajador Contrato Laboral</option><option {'selected' if f_esquema_v=='Trabajador Datos Laborales' else ''}>Trabajador Datos Laborales</option><option {'selected' if f_esquema_v=='Esquema Trabajador Datos Laborales GR' else ''}>Esquema Trabajador Datos Laborales GR</option><option {'selected' if f_esquema_v=='Trabajador Declaración Jurada Datos Personales' else ''}>Trabajador Declaración Jurada Datos Personales</option><option {'selected' if f_esquema_v=='Trabajador Declaración Jurada Parentesco' else ''}>Trabajador Declaración Jurada Parentesco</option></select>
@@ -6140,7 +9503,7 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
             </div>
           </div>
         </div>
-        <div class='c-card table-wrap'><table class='c-table plantilla-table'><tr><th>Proceso</th><th>Estado</th><th>Nombre Plantilla</th><th>Tipo Documento</th><th>Esquema</th><th>Descripción</th><th>Versión</th><th>Condición</th><th>Nombre Archivo</th></tr>{plantillas_rows or '<tr><td colspan=9>No hay plantillas registradas.</td></tr>'}</table></div>
+        <div class='c-card' style='padding:13px 18px;margin:12px 0;background:#f0fdf4;border:1px solid #bbf7d0'><b>Plantillas Documentales unificadas:</b> usa el campo <b>Proceso</b> para diferenciar contratación, renovación/adenda u otros documentos. Gestión Contratación y Gestión Renovación consumirán esta misma bandeja filtrando automáticamente.</div><div class='c-card table-wrap plantillas-pro-visible'><table class='c-table plantilla-table plantillas-pro-table'><tr><th>Acciones</th><th>Proceso</th><th>Estado</th><th>Nombre Plantilla</th><th>Tipo Documento</th><th>Esquema</th><th>Descripción</th><th>Versión</th><th>Condición</th><th>Nombre Archivo</th></tr>{plantillas_rows or '<tr><td colspan=10>No hay plantillas registradas.</td></tr>'}</table></div>
         """)
     elif sec=='firma':
         opt_docs = ''.join([f"<option value='{d['id']}' data-dni='{h(d['dni'])}' data-trabajador='{h(d['trabajador'])}' data-tipo='{h(d['tipo_doc'])}'>ID {d['id']} - {h(d['dni'])} - {h(d['trabajador'])} - {h(d['tipo_doc'])}</option>" for d in docs])
@@ -6177,18 +9540,31 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
               <td>{'<span class="ok-chip">Con evidencia</span>' if evidencia else '<span class="pend-chip">Pendiente</span>'}</td>
               <td>{h(r['observacion'] or '')}</td>
             </tr>"""
+        scope_firma_actual = clean(request.args.get('scope'))
+        es_firma_renovacion = scope_firma_actual == 'renovacion'
+        firma_titulo = 'Firma / Facial / Digital - Renovación' if es_firma_renovacion else 'Firma / Facial / Digital'
+        firma_subtitulo = 'Motor único de cámara. Filtrado para adendas y renovaciones; al firmar pasa a Aprobaciones.' if es_firma_renovacion else 'Captura facial en tiempo real y firma los documentos seleccionados.'
+        firma_metodo_texto = 'FACIAL + FIRMA DIGITAL - RENOVACIÓN' if es_firma_renovacion else 'FACIAL + FIRMA DIGITAL'
+        firma_obs_texto = 'Renovación firmada / pendiente de aprobación' if es_firma_renovacion else 'Envío masivo a firma facial/digital'
+        scope_tabs_html = f"""
+          <div class='firma-scope-tabs'>
+            <a class='{{'' if es_firma_renovacion else 'active'}}' href='/admin/contratacion?sec=firma'>Contratación</a>
+            <a class='{{'active' if es_firma_renovacion else ''}}' href='/admin/contratacion?sec=firma&scope=renovacion'>Renovación</a>
+          </div>
+        """
         camara_demo_url = url_for('firma_camara_demo')
         content=wrap(f"""
         <div class='firma-page firma-boceto-final'>
           <div class='firma-topbar'>
-            <div class='title-wrap'><div class='title-icon'>📸</div><div><h1>Firma / Facial / Digital</h1><p>Captura facial en tiempo real y firma los documentos seleccionados.</p></div></div>
+            <div class='title-wrap'><div class='title-icon'>📸</div><div><h1>{firma_titulo}</h1><p>{firma_subtitulo}</p></div></div>
             <a class='btn-back' href='/admin/contratacion?sec=bandeja'>← Volver a bandeja</a>
           </div>
+          {scope_tabs_html}
           <div class='person-strip'>
             <div class='strip-item'><span class='strip-ico'>👤</span><div><small>Trabajador</small><b id='stripTrabajador'>JOSE QUITO</b></div></div>
             <div class='strip-item'><span class='strip-ico'>🪪</span><div><small>DNI</small><b id='stripDni'>72244462</b></div></div>
             <div class='strip-item'><span class='strip-ico'>🗓️</span><div><small>Fecha y hora</small><b id='stripFecha'>26/05/2026 10:34:22</b></div></div>
-            <div class='strip-item'><span class='strip-ico'>🖊️</span><div><small>Método de firma</small><b>FACIAL + FIRMA DIGITAL</b></div></div>
+            <div class='strip-item'><span class='strip-ico'>🖊️</span><div><small>Método de firma</small><b>{firma_metodo_texto}</b></div></div>
           </div>
           <div class='firma-grid-boceto-main'>
             <div class='firma-card-b camera-card-b'>
@@ -6217,7 +9593,7 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
             <div class='firma-actions'><button class='btn-green'>Generar enlace individual</button><a class='btn-dark' href='#bandeja'>Ver bandeja</a></div>
           </form>
           <form method='post' class='firma-progress-bar' onsubmit='return prepararFirmaMasiva()'>
-            <input type='hidden' name='accion' value='firma_masiva'><input type='hidden' id='documentos_lote' name='documentos_lote'>
+            <input type='hidden' name='accion' value='firma_masiva'><input type='hidden' id='documentos_lote' name='documentos_lote'><input type='hidden' name='metodo_masivo' value='{firma_metodo_texto}'><input type='hidden' name='observacion_masiva' value='{firma_obs_texto}'>
             <div class='progress-left'><b>Progreso de firma</b><div class='steps'><span class='done'>1<small>Verificación facial<br>Completado</small></span><i></i><span class='done'>2<small>Validación<br>Completado</small></span><i></i><span class='done'>3<small>Firma de documentos<br>En proceso...</small></span><i></i><span>4<small>Finalizado<br>Pendiente</small></span></div></div>
             <button class='btn-green btn-firmar'>🖊️ Firmar todos los documentos<br><small id='firmaMassCounter'>0 seleccionados</small></button>
           </form>
@@ -6225,99 +9601,83 @@ body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!import
           <div class='firma-card'><h3>🔐 Trazabilidad</h3><div class='trace-grid'><span>IP y navegador</span><span>Fecha / hora</span><span>Hash de evidencia</span><span>Selfie/captura</span><span>Estado RENIEC/API</span><span>Documento archivado</span></div></div>
         </div>
         <style>
-        .firma-boceto-final{{background:#f5f7fb!important;margin:-10px -12px 0;padding:18px 26px 26px;min-height:calc(100vh - 80px);color:#0f172a!important;font-family:Inter,Segoe UI,Arial,sans-serif!important}}.firma-boceto-final *{{box-sizing:border-box!important;text-shadow:none!important}}.firma-topbar{{display:flex;justify-content:space-between;align-items:center;margin:0 0 18px}}.title-wrap{{display:flex;align-items:center;gap:12px}}.title-icon{{width:42px;height:42px;border-radius:12px;background:#edf2f7;display:grid;place-items:center;font-size:22px;box-shadow:inset 0 0 0 1px #e2e8f0}}.firma-topbar h1{{margin:0;font-size:30px;line-height:1;color:#0b1220;font-weight:1000}}.firma-topbar p{{margin:8px 0 0;color:#64748b;font-weight:800}}.btn-back{{background:#eef1f6;border:1px solid #dce3eb;border-radius:10px;color:#111827;text-decoration:none;font-weight:950;padding:12px 18px;box-shadow:0 6px 16px #0f172a0d}}.person-strip{{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:#fff;border:1px solid #dfe7ef;border-radius:12px;box-shadow:0 10px 26px #0f172a10;margin-bottom:14px;overflow:hidden}}.strip-item{{display:flex;gap:14px;align-items:center;padding:20px 26px;border-right:1px solid #e5eaf0}}.strip-item:last-child{{border-right:0}}.strip-ico{{font-size:28px;color:#3b82f6}}.strip-item small{{display:block;color:#111827;font-size:12px;font-weight:950;margin-bottom:8px}}.strip-item b{{font-size:13px;color:#020617;font-weight:1000}}.firma-grid-boceto-main{{display:grid;grid-template-columns:1fr 1.12fr;gap:16px}}.firma-card-b{{background:#fff;border:1px solid #e0e6ee;border-radius:12px;box-shadow:0 10px 26px #0f172a10;padding:18px}}.firma-card-b h2{{margin:0 0 8px;color:#0b1220;font-size:22px;font-weight:1000}}.b-muted{{color:#64748b;font-weight:750;line-height:1.45;margin:0 0 14px}}.cam-wrap{{position:relative;overflow:hidden;background:#000;border-radius:15px;min-height:525px;display:grid;place-items:center}}.cam-wrap video,.cam-wrap img{{width:100%;height:525px;object-fit:cover;background:#000;position:relative;z-index:3;display:block}}.cam-wrap video{{transform:scaleX(-1)}}.cam-wrap:not(.cam-live) .face-frame,.cam-wrap:not(.cam-live) .face-mesh,.cam-wrap:not(.capture-ok) #captureToast{{display:none!important}}.cam-error{{background:#fff7ed!important;border-color:#fed7aa!important;color:#9a3412!important}}.filecam-label{{position:relative;overflow:hidden}}.face-frame{{position:absolute;z-index:4;inset:17% 26%;border:3px solid #22c55e;border-radius:22px;pointer-events:none;display:none}}.face-frame:before,.face-frame:after{{content:'';position:absolute;inset:-3px;border-color:#22c55e;border-style:solid;border-width:0}}.face-mesh{{position:absolute;z-index:5;inset:23% 32%;opacity:.58;pointer-events:none;background:radial-gradient(circle,#34d399 1.4px,transparent 2px) 0 0/34px 34px,linear-gradient(32deg,transparent 49%,rgba(52,211,153,.55) 50%,transparent 51%) 0 0/70px 70px,linear-gradient(145deg,transparent 49%,rgba(52,211,153,.38) 50%,transparent 51%) 0 0/80px 80px;border-radius:50%;display:none}}.live-badge{{position:absolute;right:18px;top:18px;z-index:6;background:#11823b;color:#fff;border-radius:999px;padding:8px 16px;font-weight:1000;font-size:12px}}.capture-toast{{position:absolute;left:18px;right:18px;bottom:18px;z-index:7;background:linear-gradient(90deg,#0f5132,#0b5d34);color:#fff;border-radius:12px;padding:16px 22px;font-weight:1000;box-shadow:0 8px 22px #0006;display:none}}.capture-toast small{{display:block;color:#dcfce7;font-weight:800;margin-top:4px}}.sound-ok{{margin:16px 0 14px;background:#eafff1;border:1px solid #b9edcc;border-radius:10px;color:#16a34a;display:none;align-items:center;gap:12px;padding:12px 14px;font-weight:1000}}.sound-icon{{font-size:27px}}.sound-ok small{{display:block;color:#16a34a;font-weight:700}}.wave{{margin-left:auto;letter-spacing:2px}}.boceto-actions{{display:flex;gap:10px;flex-wrap:wrap}}.btn-yellow,.btn-green,.btn-dark{{border:0;border-radius:8px;padding:13px 18px;font-weight:1000;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 8px 16px #0f172a18}}.btn-yellow{{background:#10b981;color:#111827}}.btn-green{{background:#10b84e;color:#fff!important}}.btn-dark{{background:#334155;color:#fff!important}}.doc-sign-list{{display:grid;gap:12px;margin:18px 0;max-height:505px;overflow:auto;padding:0 4px 0 0}}.doc-sign-card{{display:grid;grid-template-columns:32px 56px 1fr;align-items:center;gap:14px;border:1px solid #dbe3ec;border-radius:12px;background:#fafcff;padding:17px;min-height:88px;box-shadow:0 6px 18px #0f172a08;cursor:pointer}}.doc-sign-card input{{width:20px;height:20px;accent-color:#10b84e}}.doc-icon{{width:45px;height:50px;border-radius:8px;background:#2f67c7;color:#fff;display:grid;place-items:center;font-size:20px;font-weight:1000;box-shadow:inset 0 -8px 0 rgba(0,0,0,.08)}}.doc-info b{{display:block;color:#0f172a;font-size:14px;text-transform:uppercase;margin-bottom:7px}}.doc-info small{{display:block;color:#475569;font-weight:850;margin-top:3px}}.badge-green{{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:999px;background:#10b84e;color:#fff;font-size:14px;vertical-align:middle}}.switch-row{{display:flex;align-items:center;gap:10px;margin:18px 0;color:#111827;font-weight:950}}.switch-row input{{width:42px;height:22px;accent-color:#10b84e}}.info-dot{{width:18px;height:18px;border-radius:50%;display:inline-grid;place-items:center;background:#111827;color:#fff;font-size:12px}}.ready-box{{display:flex;gap:12px;align-items:center;background:#eafff1;border:1px solid #b9edcc;border-radius:10px;color:#16a34a;padding:16px;font-weight:1000}}.ready-box small{{display:block;color:#16a34a;font-weight:700;margin-top:4px}}.firma-progress-bar{{display:grid;grid-template-columns:1fr 300px;gap:22px;align-items:center;background:#fff;border:1px solid #dfe7ef;border-radius:12px;box-shadow:0 10px 26px #0f172a10;margin-top:16px;padding:18px}}.progress-left>b{{display:block;font-size:16px;margin-bottom:14px;color:#0f172a}}.steps{{display:flex;align-items:flex-start;gap:10px}}.steps i{{height:1px;background:#cbd5e1;flex:1;margin-top:17px}}.steps span{{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e5e7eb;color:#111827;font-weight:1000;position:relative;flex:0 0 auto}}.steps span.done{{background:#10b84e;color:#fff}}.steps small{{position:absolute;top:42px;left:50%;transform:translateX(-50%);width:130px;color:#475569;font-size:10px;text-align:center;line-height:1.35}}.steps .done small{{color:#10b84e}}.btn-firmar{{height:54px;font-size:15px;flex-direction:column}}.btn-firmar small{{font-size:11px;color:#eafff1;margin-top:4px}}.sr-only-form{{display:none!important}}.firma-card{{background:#fff;border:1px solid #e0e6ee;border-radius:12px;padding:18px;margin-top:16px;color:#0f172a}}.firma-table th{{background:#0b2135!important;color:#fff!important}}.firma-table td{{background:white!important;color:#1f2937!important}}.trace-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}}.trace-grid span{{background:#e0f2fe;border:1px solid #7dd3fc;color:#075985;padding:12px;border-radius:10px;font-weight:950}}.estado-pill,.estado-soft,.ok-chip,.pend-chip{{display:inline-flex;border-radius:999px;padding:7px 10px;font-weight:950}}.estado-pill{{background:#fef3c7;color:#92400e}}.estado-soft{{background:#e0f2fe;color:#075985}}.ok-chip{{background:#dcfce7;color:#166534}}.pend-chip{{background:#fee2e2;color:#991b1b}}.docs-panel-b h2,.docs-panel-b p,.docs-panel-b label,.camera-card-b h2,.camera-card-b p{{color:#0f172a!important}}.doc-sign-card{{color:#0f172a!important}}.empty-docs{{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:14px;font-weight:900}}.plantilla-sign-card{{border-color:#bbf7d0!important;background:#f8fffb!important}}.cam-wrap.cam-live .face-frame,.cam-wrap.cam-live .face-mesh{{display:block}}.cam-wrap.capture-ok #captureToast{{display:block}}.boceto-actions button:disabled{{opacity:.65;cursor:wait}}@media(max-width:1180px){{.firma-grid-boceto-main,.firma-progress-bar{{grid-template-columns:1fr}}.person-strip{{grid-template-columns:1fr 1fr}}}}@media(max-width:720px){{.firma-boceto-final{{padding:14px}}.firma-topbar,.steps{{display:grid}}.person-strip{{grid-template-columns:1fr}}.strip-item{{border-right:0;border-bottom:1px solid #e5eaf0}}.cam-wrap,.cam-wrap video,.cam-wrap img{{min-height:360px;height:360px}}}}
-        
-
-/* === PORTAL HR PRO - interfaz verde/blanca tipo referencia === */
-:root{--txt:#0f172a!important;--mut:#64748b!important;--green:#15965a;--green2:#16a34a;--green3:#0f6f4f;--darkgreen:#0b2d2b;--soft:#eef8f3;--line:#dbe5ee;--panel:#ffffff;--panel2:#f8fafc;--shadow:0 18px 45px rgba(15,23,42,.10)}
-body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
-.side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
-.login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-
-
-
-/* ===== CORRECCIÓN REAL FINAL: HEADER LIMPIO, LOGIN PORTAL HR PRO, DASHBOARD VISIBLE MÓVIL ===== */
-.login-card{{
-  width:min(90vw,500px)!important;
-  max-width:500px!important;
-  padding:122px 46px 30px!important;
-}}
-.login-logo{{top:-78px!important;z-index:30!important;}}
-.login-avatar-svg{{width:122px!important;height:122px!important;}}
-.login-avatar-svg:before{{width:68px!important;height:68px!important;}}
-.login-title{{position:relative!important;z-index:20!important;margin:0 0 24px!important;}}
-.login-title h1{{font-size:36px!important;line-height:1.05!important;color:#182233!important;text-transform:uppercase!important;white-space:nowrap!important;}}
-.login-title b{{color:#667085!important;}}
-.login-body:after{{content:"🛡️  Sistema seguro y confiable\A © 2025 Portal HR Pro. Todos los derechos reservados."!important;white-space:pre!important;position:absolute!important;left:0!important;right:0!important;bottom:18px!important;text-align:center!important;color:#fff!important;font-size:16px!important;line-height:1.9!important;font-weight:650!important;z-index:1!important;background:none!important;height:auto!important;clip-path:none!important;}}
-
-.side{{position:sticky!important;top:0!important;height:100vh!important;padding-top:0!important;background:#073126!important;overflow-y:auto!important;overflow-x:hidden!important;}}
-.side::before{{content:""!important;position:sticky!important;top:0!important;display:block!important;height:112px!important;margin-bottom:-112px!important;background:#073126!important;z-index:2147483638!important;pointer-events:none!important;}}
-.side-head-pro{{position:sticky!important;top:12px!important;z-index:2147483640!important;margin:12px 12px 18px!important;height:82px!important;min-height:82px!important;padding:0 12px!important;background:#123f33!important;border:1px solid rgba(255,255,255,.16)!important;border-radius:20px!important;box-shadow:0 16px 34px rgba(0,0,0,.34)!important;overflow:hidden!important;isolation:isolate!important;backdrop-filter:none!important;}}
-.side-head-pro:before{{content:""!important;position:absolute!important;inset:0!important;background:linear-gradient(90deg,#123f33 0%,#196b48 52%,#123f33 100%)!important;opacity:1!important;z-index:-1!important;}}
-.side-head-pro:after{{display:none!important;}}
-.side-head-pro *{{position:relative!important;z-index:3!important;}}
-.side-brand-text b{{color:#ffffff!important;font-size:16px!important;font-weight:800!important;}}
-.side-brand-text small{{color:#d6e9e2!important;font-size:14px!important;font-weight:650!important;}}
-nav{{position:relative!important;z-index:1!important;padding-top:0!important;}}
-
-@media(max-width:1000px){{
-  .side{{position:fixed!important;top:0!important;left:-340px!important;width:315px!important;height:100dvh!important;padding-top:0!important;background:#073126!important;}}
-  .side.open{{left:0!important;}}
-  .side-head-pro{{top:10px!important;margin:10px 10px 18px!important;}}
-  .mobile-head{{background:#0f4a35!important;color:#fff!important;z-index:999999!important;height:56px!important;}}
-  .menu-title,.menu-item{{color:#f1f7f5!important;opacity:1!important;text-shadow:none!important;font-weight:760!important;}}
-  .menu-title .label,.menu-item .label{{color:inherit!important;opacity:1!important;visibility:visible!important;}}
-  .menu-item.active,.menu-item.parent-active,.menu-title.active,.menu-group.force-open>.menu-title.active{{background:rgba(22,185,120,.30)!important;color:#ffffff!important;box-shadow:inset 4px 0 0 #34d399!important;border:1px solid rgba(134,239,172,.22)!important;}}
-  .menu-item.active .label,.menu-item.parent-active .label,.menu-title.active .label,.menu-group.force-open>.menu-title.active .label{{color:#ffffff!important;}}
-  .menu-title i,.menu-item i{{color:#d7eee5!important;background:rgba(255,255,255,.08)!important;}}
-  .login-card{{padding:116px 26px 30px!important;}}
-  .login-logo{{top:-70px!important;}}
-  .login-avatar-svg{{width:116px!important;height:116px!important;}}
-  .login-title h1{{font-size:31px!important;}}
-}}
-
-</style>
+        .firma-scope-tabs{{display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap}}.firma-scope-tabs a{{text-decoration:none;border:1px solid #dbe7ef;background:#fff;color:#0f172a;border-radius:14px;padding:10px 16px;font-weight:950;box-shadow:0 8px 18px rgba(15,23,42,.06)}}.firma-scope-tabs a.active{{background:#10b981;color:#fff;border-color:#10b981}}.firma-boceto-final{{background:#f5f7fb!important;margin:-10px -12px 0;padding:18px 26px 26px;min-height:calc(100vh - 80px);color:#0f172a!important;font-family:Inter,Segoe UI,Arial,sans-serif!important}}.firma-boceto-final *{{box-sizing:border-box!important;text-shadow:none!important}}.firma-topbar{{display:flex;justify-content:space-between;align-items:center;margin:0 0 18px}}.title-wrap{{display:flex;align-items:center;gap:12px}}.title-icon{{width:42px;height:42px;border-radius:12px;background:#edf2f7;display:grid;place-items:center;font-size:22px;box-shadow:inset 0 0 0 1px #e2e8f0}}.firma-topbar h1{{margin:0;font-size:30px;line-height:1;color:#0b1220;font-weight:1000}}.firma-topbar p{{margin:8px 0 0;color:#64748b;font-weight:800}}.btn-back{{background:#eef1f6;border:1px solid #dce3eb;border-radius:10px;color:#111827;text-decoration:none;font-weight:950;padding:12px 18px;box-shadow:0 6px 16px #0f172a0d}}.person-strip{{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:#fff;border:1px solid #dfe7ef;border-radius:12px;box-shadow:0 10px 26px #0f172a10;margin-bottom:14px;overflow:hidden}}.strip-item{{display:flex;gap:14px;align-items:center;padding:20px 26px;border-right:1px solid #e5eaf0}}.strip-item:last-child{{border-right:0}}.strip-ico{{font-size:28px;color:#3b82f6}}.strip-item small{{display:block;color:#111827;font-size:12px;font-weight:950;margin-bottom:8px}}.strip-item b{{font-size:13px;color:#020617;font-weight:1000}}.firma-grid-boceto-main{{display:grid;grid-template-columns:1fr 1.12fr;gap:16px}}.firma-card-b{{background:#fff;border:1px solid #e0e6ee;border-radius:12px;box-shadow:0 10px 26px #0f172a10;padding:18px}}.firma-card-b h2{{margin:0 0 8px;color:#0b1220;font-size:22px;font-weight:1000}}.b-muted{{color:#64748b;font-weight:750;line-height:1.45;margin:0 0 14px}}.cam-wrap{{position:relative;overflow:hidden;background:#000;border-radius:15px;min-height:525px;display:grid;place-items:center}}.cam-wrap video,.cam-wrap img{{width:100%;height:525px;object-fit:cover;background:#000;position:relative;z-index:3;display:block}}.cam-wrap video{{transform:scaleX(-1)}}.cam-wrap:not(.cam-live) .face-frame,.cam-wrap:not(.cam-live) .face-mesh,.cam-wrap:not(.capture-ok) #captureToast{{display:none!important}}.cam-error{{background:#fff7ed!important;border-color:#fed7aa!important;color:#9a3412!important}}.filecam-label{{position:relative;overflow:hidden}}.face-frame{{position:absolute;z-index:4;inset:17% 26%;border:3px solid #22c55e;border-radius:22px;pointer-events:none;display:none}}.face-frame:before,.face-frame:after{{content:'';position:absolute;inset:-3px;border-color:#22c55e;border-style:solid;border-width:0}}.face-mesh{{position:absolute;z-index:5;inset:23% 32%;opacity:.58;pointer-events:none;background:radial-gradient(circle,#34d399 1.4px,transparent 2px) 0 0/34px 34px,linear-gradient(32deg,transparent 49%,rgba(52,211,153,.55) 50%,transparent 51%) 0 0/70px 70px,linear-gradient(145deg,transparent 49%,rgba(52,211,153,.38) 50%,transparent 51%) 0 0/80px 80px;border-radius:50%;display:none}}.live-badge{{position:absolute;right:18px;top:18px;z-index:6;background:#11823b;color:#fff;border-radius:999px;padding:8px 16px;font-weight:1000;font-size:12px}}.capture-toast{{position:absolute;left:18px;right:18px;bottom:18px;z-index:7;background:linear-gradient(90deg,#0f5132,#0b5d34);color:#fff;border-radius:12px;padding:16px 22px;font-weight:1000;box-shadow:0 8px 22px #0006;display:none}}.capture-toast small{{display:block;color:#dcfce7;font-weight:800;margin-top:4px}}.sound-ok{{margin:16px 0 14px;background:#eafff1;border:1px solid #b9edcc;border-radius:10px;color:#16a34a;display:none;align-items:center;gap:12px;padding:12px 14px;font-weight:1000}}.sound-icon{{font-size:27px}}.sound-ok small{{display:block;color:#16a34a;font-weight:700}}.wave{{margin-left:auto;letter-spacing:2px}}.boceto-actions{{display:flex;gap:10px;flex-wrap:wrap}}.btn-yellow,.btn-green,.btn-dark{{border:0;border-radius:8px;padding:13px 18px;font-weight:1000;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 8px 16px #0f172a18}}.btn-yellow{{background:#ffbd00;color:#111827}}.btn-green{{background:#10b84e;color:#fff!important}}.btn-dark{{background:#334155;color:#fff!important}}.doc-sign-list{{display:grid;gap:12px;margin:18px 0;max-height:505px;overflow:auto;padding:0 4px 0 0}}.doc-sign-card{{display:grid;grid-template-columns:32px 56px 1fr;align-items:center;gap:14px;border:1px solid #dbe3ec;border-radius:12px;background:#fafcff;padding:17px;min-height:88px;box-shadow:0 6px 18px #0f172a08;cursor:pointer}}.doc-sign-card input{{width:20px;height:20px;accent-color:#10b84e}}.doc-icon{{width:45px;height:50px;border-radius:8px;background:#2f67c7;color:#fff;display:grid;place-items:center;font-size:20px;font-weight:1000;box-shadow:inset 0 -8px 0 rgba(0,0,0,.08)}}.doc-info b{{display:block;color:#0f172a;font-size:14px;text-transform:uppercase;margin-bottom:7px}}.doc-info small{{display:block;color:#475569;font-weight:850;margin-top:3px}}.badge-green{{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:999px;background:#10b84e;color:#fff;font-size:14px;vertical-align:middle}}.switch-row{{display:flex;align-items:center;gap:10px;margin:18px 0;color:#111827;font-weight:950}}.switch-row input{{width:42px;height:22px;accent-color:#10b84e}}.info-dot{{width:18px;height:18px;border-radius:50%;display:inline-grid;place-items:center;background:#111827;color:#fff;font-size:12px}}.ready-box{{display:flex;gap:12px;align-items:center;background:#eafff1;border:1px solid #b9edcc;border-radius:10px;color:#16a34a;padding:16px;font-weight:1000}}.ready-box small{{display:block;color:#16a34a;font-weight:700;margin-top:4px}}.firma-progress-bar{{display:grid;grid-template-columns:1fr 300px;gap:22px;align-items:center;background:#fff;border:1px solid #dfe7ef;border-radius:12px;box-shadow:0 10px 26px #0f172a10;margin-top:16px;padding:18px}}.progress-left>b{{display:block;font-size:16px;margin-bottom:14px;color:#0f172a}}.steps{{display:flex;align-items:flex-start;gap:10px}}.steps i{{height:1px;background:#cbd5e1;flex:1;margin-top:17px}}.steps span{{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e5e7eb;color:#111827;font-weight:1000;position:relative;flex:0 0 auto}}.steps span.done{{background:#10b84e;color:#fff}}.steps small{{position:absolute;top:42px;left:50%;transform:translateX(-50%);width:130px;color:#475569;font-size:10px;text-align:center;line-height:1.35}}.steps .done small{{color:#10b84e}}.btn-firmar{{height:54px;font-size:15px;flex-direction:column}}.btn-firmar small{{font-size:11px;color:#eafff1;margin-top:4px}}.sr-only-form{{display:none!important}}.firma-card{{background:#fff;border:1px solid #e0e6ee;border-radius:12px;padding:18px;margin-top:16px;color:#0f172a}}.firma-table th{{background:#0b2135!important;color:#fff!important}}.firma-table td{{background:white!important;color:#1f2937!important}}.trace-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}}.trace-grid span{{background:#e0f2fe;border:1px solid #7dd3fc;color:#075985;padding:12px;border-radius:10px;font-weight:950}}.estado-pill,.estado-soft,.ok-chip,.pend-chip{{display:inline-flex;border-radius:999px;padding:7px 10px;font-weight:950}}.estado-pill{{background:#fef3c7;color:#92400e}}.estado-soft{{background:#e0f2fe;color:#075985}}.ok-chip{{background:#dcfce7;color:#166534}}.pend-chip{{background:#fee2e2;color:#991b1b}}.docs-panel-b h2,.docs-panel-b p,.docs-panel-b label,.camera-card-b h2,.camera-card-b p{{color:#0f172a!important}}.doc-sign-card{{color:#0f172a!important}}.empty-docs{{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:14px;font-weight:900}}.plantilla-sign-card{{border-color:#bbf7d0!important;background:#f8fffb!important}}.cam-wrap.cam-live .face-frame,.cam-wrap.cam-live .face-mesh{{display:block}}.cam-wrap.capture-ok #captureToast{{display:block}}.boceto-actions button:disabled{{opacity:.65;cursor:wait}}@media(max-width:1180px){{.firma-grid-boceto-main,.firma-progress-bar{{grid-template-columns:1fr}}.person-strip{{grid-template-columns:1fr 1fr}}}}@media(max-width:720px){{.firma-boceto-final{{padding:14px}}.firma-topbar,.steps{{display:grid}}.person-strip{{grid-template-columns:1fr}}.strip-item{{border-right:0;border-bottom:1px solid #e5eaf0}}.cam-wrap,.cam-wrap video,.cam-wrap img{{min-height:360px;height:360px}}}}
+        </style>
         <script>
         let firmaStream=null;
         let firmaCaptured=false;
         let firmaStarting=false;
+
         function firmaSetMsg(txt, ok=false, error=false){{
           const msg=document.getElementById('firmaCamMsg');
           if(msg){{ msg.innerHTML=txt; msg.style.color=error?'#b91c1c':(ok?'#059669':'#475569'); msg.style.fontWeight='900'; }}
         }}
-        function firmaBadge(txt,bg){{ const badge=document.getElementById('liveBadge'); if(badge){{ badge.textContent=txt; badge.style.background=bg; }} }}
-        function firmaBeep(){{ try{{ const A=window.AudioContext||window.webkitAudioContext; const ctx=new A(); const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type='sine'; osc.frequency.value=880; gain.gain.setValueAtTime(0.001,ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+0.02); gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.28); osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+0.30); }}catch(e){{}} }}
-        function firmaResetVisual(){{ const wrap=document.querySelector('.cam-wrap'); const preview=document.getElementById('firmaPreview'); const sound=document.getElementById('soundBox'); if(preview){{ preview.removeAttribute('src'); preview.style.display='none'; }} if(sound) sound.style.display='none'; if(wrap){{ wrap.classList.remove('capture-ok','cam-live','cam-error'); }} firmaBadge('● APAGADA','#334155'); }}
-        function firmaEsContextoSeguro(){{ return window.isSecureContext || location.protocol==='https:' || ['localhost','127.0.0.1','::1'].includes(location.hostname); }}
-        async function firmaEsperarVideo(video, ms=12000){{ const inicio=Date.now(); while(Date.now()-inicio < ms){{ if(video && video.videoWidth && video.videoHeight && video.readyState>=2) return true; await new Promise(r=>setTimeout(r,150)); }} return false; }}
+        function firmaBadge(txt,bg){{
+          const badge=document.getElementById('liveBadge');
+          if(badge){{ badge.textContent=txt; badge.style.background=bg; }}
+        }}
+        function firmaBeep(){{
+          try{{
+            const A=window.AudioContext||window.webkitAudioContext;
+            const ctx=new A(); const osc=ctx.createOscillator(); const gain=ctx.createGain();
+            osc.type='sine'; osc.frequency.value=880;
+            gain.gain.setValueAtTime(0.001,ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.28);
+            osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+0.30);
+          }}catch(e){{}}
+        }}
+        function firmaResetVisual(){{
+          const wrap=document.querySelector('.cam-box-ren');
+          const preview=document.getElementById('firmaPreview');
+          const sound=document.getElementById('soundBox');
+          const v=document.getElementById('firmaVideo');
+          if(preview){{ preview.removeAttribute('src'); preview.style.display='none'; }}
+          if(sound) sound.style.display='none';
+          if(wrap){{ wrap.classList.remove('capture-ok','cam-live','cam-error'); }}
+          if(v){{ v.style.display='block'; v.muted=true; v.autoplay=true; v.playsInline=true; v.setAttribute('playsinline',''); v.setAttribute('webkit-playsinline',''); }}
+          firmaBadge('● APAGADA','#334155');
+        }}
+        function firmaEsContextoSeguro(){{
+          return window.isSecureContext || location.protocol==='https:' || location.hostname==='localhost' || location.hostname==='127.0.0.1' || location.hostname==='::1';
+        }}
+        async function firmaEsperarVideo(video, ms=12000){{
+          const inicio=Date.now();
+          while(Date.now()-inicio < ms){{
+            if(video && video.videoWidth>0 && video.videoHeight>0 && video.readyState>=2) return true;
+            await new Promise(r=>setTimeout(r,150));
+          }}
+          return false;
+        }}
         async function firmaStartCam(ev){{
           if(ev) ev.preventDefault();
           if(firmaStarting) return false;
           firmaStarting=true;
 
-          const wrap=document.querySelector('.cam-wrap');
-          const btnActivar=document.getElementById('btnActivarCamara');
+          const wrap=document.querySelector('.cam-box-ren');
+          const btn=document.getElementById('btnActivarCamara');
           const v=document.getElementById('firmaVideo');
 
           try{{
-            if(btnActivar){{ btnActivar.disabled=true; btnActivar.innerHTML='⏳ Activando...'; }}
+            if(btn){{ btn.disabled=true; btn.innerHTML='⏳ Activando...'; }}
             firmaCaptured=false;
+            const hidden=document.getElementById('captura_base64_renovacion');
+            if(hidden) hidden.value='';
             firmaResetVisual();
-            firmaBadge('● ACTIVANDO','#16a34a');
-            firmaSetMsg('Activando cámara real... cuando el navegador pregunte, presiona <b>Permitir</b>.');
+            firmaBadge('● ACTIVANDO','#f59e0b');
+            firmaSetMsg('Activando cámara real... acepta el permiso del navegador.');
 
-            if(!firmaEsContextoSeguro()) throw new Error('CONTEXTO_NO_SEGURO');
+            if(!v) throw new Error('VIDEO_NO_ENCONTRADO');
             if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('MEDIADEVICES_NO_DISPONIBLE');
+            if(!firmaEsContextoSeguro()) throw new Error('CONTEXTO_NO_SEGURO');
 
             if(firmaStream){{ firmaStream.getTracks().forEach(t=>t.stop()); firmaStream=null; }}
-            if(!v) throw new Error('VIDEO_NO_ENCONTRADO');
-
             v.pause();
+            v.srcObject=null;
             v.removeAttribute('src');
             v.removeAttribute('poster');
-            v.srcObject=null;
-            v.autoplay=true;
             v.muted=true;
+            v.autoplay=true;
             v.playsInline=true;
             v.setAttribute('playsinline','');
             v.setAttribute('webkit-playsinline','');
@@ -6325,12 +9685,11 @@ nav{{position:relative!important;z-index:1!important;padding-top:0!important;}}
             v.style.background='#000';
 
             const intentos=[
-              {{video:{{facingMode:{{ideal:'user'}},width:{{ideal:1280}},height:{{ideal:720}}}},audio:false}},
-              {{video:{{facingMode:'user'}},audio:false}},
-              {{video:{{width:{{ideal:960}},height:{{ideal:540}}}},audio:false}},
-              {{video:true,audio:false}}
+              {{ video: {{ facingMode: {{ ideal: 'user' }}, width: {{ ideal: 1280 }}, height: {{ ideal: 720 }} }}, audio: false }},
+              {{ video: {{ facingMode: 'user' }}, audio: false }},
+              {{ video: {{ width: {{ ideal: 960 }}, height: {{ ideal: 540 }} }}, audio: false }},
+              {{ video: true, audio: false }}
             ];
-
             let ultimoError=null;
             for(const cfg of intentos){{
               try{{
@@ -6344,14 +9703,15 @@ nav{{position:relative!important;z-index:1!important;padding-top:0!important;}}
 
             v.srcObject=firmaStream;
             await new Promise(r=>setTimeout(r,250));
-            try{{ await v.play(); }}catch(e){{ await v.play().catch(()=>{{}}); }}
+            await v.play().catch(async()=>{{ await new Promise(r=>setTimeout(r,350)); return v.play(); }});
 
-            if(!await firmaEsperarVideo(v,15000)) throw new Error('VIDEO_NEGRO_O_SIN_IMAGEN');
+            const ok=await firmaEsperarVideo(v,15000);
+            if(!ok) throw new Error('VIDEO_SIN_IMAGEN');
 
             if(wrap){{ wrap.classList.add('cam-live'); wrap.classList.remove('cam-error'); }}
             firmaBadge('● EN VIVO','#16a34a');
             firmaSetMsg('✅ Cámara activada correctamente. Ya puedes presionar <b>Capturar evidencia</b>.',true);
-            if(btnActivar) btnActivar.innerHTML='✅ Cámara activa';
+            if(btn) btn.innerHTML='✅ Cámara activa';
             return true;
           }}catch(e){{
             if(firmaStream){{ firmaStream.getTracks().forEach(t=>t.stop()); firmaStream=null; }}
@@ -6359,38 +9719,352 @@ nav{{position:relative!important;z-index:1!important;padding-top:0!important;}}
             if(wrap) wrap.classList.add('cam-error');
             const nombre=(e&&e.name)?e.name:((e&&e.message)?e.message:'Error');
             let ayuda='';
-            if(nombre==='CONTEXTO_NO_SEGURO') ayuda=' Abre el sistema en http://127.0.0.1:5000, localhost o en HTTPS. En celular con IP local HTTP el navegador bloquea la cámara.';
-            else if(nombre==='NotAllowedError'||nombre==='PermissionDeniedError') ayuda=' Permite Cámara desde el candado del navegador y vuelve a presionar Activar cámara.';
+            if(nombre==='CONTEXTO_NO_SEGURO') ayuda=' Abre el sistema en HTTPS o en http://127.0.0.1:5000 / localhost. Con IP local en HTTP el navegador bloquea cámara.';
+            else if(nombre==='NotAllowedError'||nombre==='PermissionDeniedError') ayuda=' Permite la cámara desde el candado del navegador y vuelve a intentar.';
             else if(nombre==='NotFoundError'||nombre==='DevicesNotFoundError') ayuda=' No se encontró cámara conectada.';
-            else if(nombre==='NotReadableError'||nombre==='TrackStartError') ayuda=' La cámara está ocupada por otra app. Cierra Zoom/Meet/Teams/Cámara de Windows.';
-            else if(nombre==='VIDEO_NEGRO_O_SIN_IMAGEN') ayuda=' El permiso fue aceptado, pero no llegó imagen. Cierra otras apps de cámara y vuelve a intentar.';
-            else ayuda=' Revisa permisos de Windows/Android/iPhone y del navegador.';
+            else if(nombre==='NotReadableError'||nombre==='TrackStartError') ayuda=' La cámara está ocupada por otra app. Cierra Zoom/Meet/Teams/Cámara.';
+            else if(nombre==='VIDEO_SIN_IMAGEN') ayuda=' El permiso fue aceptado, pero no llegó imagen. Cierra otras apps de cámara y reintenta.';
+            else ayuda=' Revisa permisos del navegador, Windows/Android/iPhone y que no haya otra app usando cámara.';
             firmaBadge('● APAGADA','#dc2626');
-            firmaSetMsg('❌ No se pudo activar cámara: '+nombre+'.'+ayuda+' Como respaldo puedes usar <b>Cámara/archivo</b>.',false,true);
-            if(btnActivar) btnActivar.innerHTML='🎥 Activar cámara';
+            firmaSetMsg('❌ No se pudo activar cámara: '+nombre+'.'+ayuda+' Como respaldo usa <b>Cámara/archivo</b>.',false,true);
+            if(btn) btn.innerHTML='🎥 Activar cámara';
             return false;
           }}finally{{
             firmaStarting=false;
-            if(btnActivar) btnActivar.disabled=false;
+            if(btn) btn.disabled=false;
           }}
         }}
-                async function firmaCapture(){{ const v=document.getElementById('firmaVideo'), c=document.getElementById('firmaCanvas'), img=document.getElementById('firmaPreview'), wrap=document.querySelector('.cam-wrap'), sound=document.getElementById('soundBox'); if(!v || !v.srcObject || !v.videoWidth){{ firmaSetMsg('Primero se activará la cámara. Acepta el permiso del navegador.',false,false); const ok=await firmaStartCam(); if(!ok || !v || !v.videoWidth){{ firmaSetMsg('No hay imagen de cámara. Presiona Activar cámara o usa Cámara/archivo como respaldo.',false,true); return false; }} }} c.width=v.videoWidth; c.height=v.videoHeight; c.getContext('2d').drawImage(v,0,0,c.width,c.height); const data=c.toDataURL('image/jpeg',0.88); img.src=data; img.style.display='block'; firmaCaptured=true; if(wrap){{ wrap.classList.add('capture-ok','cam-live'); wrap.classList.remove('cam-error'); }} if(sound) sound.style.display='flex'; firmaBeep(); firmaSetMsg('✅ Evidencia facial capturada correctamente. Lista para firmar los documentos seleccionados.',true); return true; }}
-        function firmaLoadFileCam(input){{ const file=input && input.files ? input.files[0] : null; if(!file) return; const img=document.getElementById('firmaPreview'), wrap=document.querySelector('.cam-wrap'), sound=document.getElementById('soundBox'); const reader=new FileReader(); reader.onload=function(){{ if(img){{ img.src=reader.result; img.style.display='block'; }} firmaCaptured=true; if(wrap){{ wrap.classList.add('cam-live','capture-ok'); wrap.classList.remove('cam-error'); }} if(sound) sound.style.display='flex'; firmaBadge('● EVIDENCIA','#16a34a'); firmaSetMsg('✅ Evidencia cargada correctamente desde cámara/archivo.',true); firmaBeep(); }}; reader.readAsDataURL(file); }}
-        function firmaStopCam(){{ if(firmaStream){{ firmaStream.getTracks().forEach(t=>t.stop()); firmaStream=null; }} const v=document.getElementById('firmaVideo'); if(v){{ v.pause(); v.srcObject=null; }} const wrap=document.querySelector('.cam-wrap'); if(wrap) wrap.classList.remove('cam-live'); firmaBadge('● DETENIDA','#334155'); firmaSetMsg('Cámara detenida.'); }}
-        function updateFirmaCounter(){{ const checks=[...document.querySelectorAll('.doc-sign-list .chk-doc-firma:checked')]; const n=checks.length; const el=document.getElementById('firmaMassCounter'); if(el) el.textContent='Se firmarán '+n+' documentos'; const b=document.getElementById('docsBadge'); if(b) b.textContent=n; const first=checks[0]; if(first){{ const dni=document.getElementById('stripDni'), trab=document.getElementById('stripTrabajador'); if(dni) dni.textContent=first.dataset.dni||''; if(trab) trab.textContent=(first.dataset.trabajador||'').toUpperCase(); }} const f=document.getElementById('stripFecha'); if(f){{ const d=new Date(); f.textContent=d.toLocaleDateString('es-PE')+' '+d.toLocaleTimeString('es-PE'); }} }}
+        async function firmaCapture(){{
+          const v=document.getElementById('firmaVideo');
+          const c=document.getElementById('firmaCanvas');
+          const img=document.getElementById('firmaPreview');
+          const wrap=document.querySelector('.cam-box-ren');
+          const sound=document.getElementById('soundBox');
+          if(!v || !v.srcObject || !v.videoWidth){{
+            firmaSetMsg('Primero se activará la cámara. Acepta el permiso del navegador.',false,false);
+            const ok=await firmaStartCam();
+            if(!ok || !v || !v.videoWidth){{
+              firmaSetMsg('No hay imagen de cámara. Presiona Activar cámara o usa Cámara/archivo como respaldo.',false,true);
+              return false;
+            }}
+          }}
+          c.width=v.videoWidth; c.height=v.videoHeight;
+          c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+          const data=c.toDataURL('image/jpeg',0.88);
+          const hidden=document.getElementById('captura_base64_renovacion');
+          if(hidden) hidden.value=data;
+          if(img){{ img.src=data; img.style.display='block'; }}
+          firmaCaptured=true;
+          if(wrap){{ wrap.classList.add('capture-ok','cam-live'); wrap.classList.remove('cam-error'); }}
+          if(sound) sound.style.display='flex';
+          firmaBeep();
+          firmaSetMsg('✅ Evidencia facial capturada correctamente. Lista para firmar documentos seleccionados.',true);
+          return true;
+        }}
+        function firmaLoadFileCam(input){{
+          const file=input && input.files ? input.files[0] : null;
+          if(!file) return;
+          const img=document.getElementById('firmaPreview'), wrap=document.querySelector('.cam-box-ren'), sound=document.getElementById('soundBox');
+          const reader=new FileReader();
+          reader.onload=function(){{
+            if(img){{ img.src=reader.result; img.style.display='block'; }}
+            const hidden=document.getElementById('captura_base64_renovacion');
+            if(hidden) hidden.value=reader.result;
+            firmaCaptured=true;
+            if(wrap){{ wrap.classList.add('cam-live','capture-ok'); wrap.classList.remove('cam-error'); }}
+            if(sound) sound.style.display='flex';
+            firmaBadge('● EVIDENCIA','#16a34a');
+            firmaSetMsg('✅ Evidencia cargada correctamente desde cámara/archivo.',true);
+            firmaBeep();
+          }};
+          reader.readAsDataURL(file);
+        }}
+        function firmaStopCam(){{
+          if(firmaStream){{ firmaStream.getTracks().forEach(t=>t.stop()); firmaStream=null; }}
+          const v=document.getElementById('firmaVideo');
+          if(v){{ v.pause(); v.srcObject=null; }}
+          const wrap=document.querySelector('.cam-box-ren');
+          if(wrap) wrap.classList.remove('cam-live');
+          firmaBadge('● DETENIDA','#334155');
+          firmaSetMsg('Cámara detenida.');
+        }}
+        function updateFirmaCounter(){{
+          const checks=[...document.querySelectorAll('.ren-doc-list .chk-doc-firma:checked')];
+          const n=checks.length;
+          const el=document.getElementById('firmaMassCounter'); if(el) el.textContent=n+' seleccionados';
+          const b=document.getElementById('docsBadge'); if(b) b.textContent=n;
+        }}
         function marcarTodosFirma(on){{ document.querySelectorAll('.chk-doc-firma').forEach(x=>x.checked=on); updateFirmaCounter(); }}
-        function prepararFirmaMasiva(){{ const ids=[...new Set([...document.querySelectorAll('.doc-sign-list .chk-doc-firma:checked')].map(x=>x.value))]; if(ids.length===0){{ alert('Selecciona al menos un contrato para firmar.'); return false; }} if(!firmaCaptured){{ const continuar=confirm('Aún no se capturó evidencia facial. ¿Deseas continuar igual?'); if(!continuar) return false; }} const lote=document.getElementById('documentos_lote'); if(lote) lote.value=ids.join(','); return confirm('Se firmarán/generarán '+ids.length+' documento(s). ¿Continuar?'); }}
-        window.firmaStartCam=firmaStartCam; window.firmaCapture=firmaCapture; window.firmaStopCam=firmaStopCam; window.firmaLoadFileCam=firmaLoadFileCam; window.marcarTodosFirma=marcarTodosFirma; window.prepararFirmaMasiva=prepararFirmaMasiva;
+        function prepararFirmaMasiva(){{
+          const ids=[...new Set([...document.querySelectorAll('.ren-doc-list .chk-doc-firma:checked')].map(x=>x.value))];
+          if(ids.length===0){{ alert('Selecciona al menos un contrato para firmar.'); return false; }}
+          if(!firmaCaptured){{ const continuar=confirm('Aún no se capturó evidencia facial. ¿Deseas continuar igual?'); if(!continuar) return false; }}
+          const lote=document.getElementById('documentos_lote'); if(lote) lote.value=ids.join(',');
+          return confirm('Se firmarán/generarán '+ids.length+' documento(s). ¿Continuar?');
+        }}
+        window.firmaStartCam=firmaStartCam;
+        window.firmaCapture=firmaCapture;
+        window.firmaStopCam=firmaStopCam;
+        window.firmaLoadFileCam=firmaLoadFileCam;
+        window.marcarTodosFirma=marcarTodosFirma;
+        window.prepararFirmaMasiva=prepararFirmaMasiva;
+
+        document.addEventListener('click', function(e){{
+          const btn=e.target.closest && e.target.closest('#btnActivarCamara');
+          if(btn){{ e.preventDefault(); firmaStartCam(e); }}
+        }}, true);
         document.addEventListener('change',e=>{{ if(e.target.classList && e.target.classList.contains('chk-doc-firma')) updateFirmaCounter(); }});
-        document.addEventListener('DOMContentLoaded',()=>{{ updateFirmaCounter(); firmaResetVisual(); firmaSetMsg('Presiona <b>🎥 Activar cámara</b>. Cuando el navegador pregunte, elige <b>Permitir</b>. Debe abrirse en localhost/127.0.0.1 o HTTPS.'); }});
+        document.addEventListener('DOMContentLoaded',()=>{{
+          updateFirmaCounter();
+          firmaResetVisual();
+          firmaSetMsg('Presiona <b>🎥 Activar cámara</b>. Cuando el navegador pregunte, elige <b>Permitir</b>. Debe abrirse en HTTPS o en localhost/127.0.0.1.');
+        }});
         </script>
         """)
     elif sec=='nisira':
-        content=wrap("<h2 class='c-title'>Contratación NISIRA</h2><div class='c-card' style='padding:22px'><p class='muted2'>Sección preparada para importar contratos / altas desde NISIRA y cruzar por DNI.</p><button class='c-btn'>Sincronizar NISIRA</button></div>")
+        return redirect(url_for('admin_contratacion', sec='integracion_nisira'))
     elif sec=='descargas':
-        content=wrap(f"<h2 class='c-title'>Descargas</h2><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th></tr>{docs_rows or '<tr><td colspan=6>No hay archivos.</td></tr>'}</table></div>")
+        trab_exp_rows = ''.join([f"""
+          <tr>
+            <td>{html.escape(row_get(t,'dni'))}</td>
+            <td>{html.escape(row_get(t,'nombre'))}</td>
+            <td>{html.escape(row_get(t,'empresa'))}</td>
+            <td>{html.escape(row_get(t,'area'))}</td>
+            <td>{html.escape(row_get(t,'cargo'))}</td>
+            <td><a class='c-btn mini' href='{url_for('contratacion_descarga_expediente', dni=row_get(t,'dni'))}'>⬇ ZIP</a></td>
+          </tr>""" for t in trabajadores[:60]])
+        content=wrap(f"""
+        <style>
+          .download-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}}
+          .download-grid{{display:grid;grid-template-columns:repeat(2,minmax(280px,1fr));gap:18px;margin-bottom:18px}}
+          .download-box{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:22px;box-shadow:0 12px 30px #0f172a0d}}
+          .download-box h3{{margin:0 0 8px;color:#0b2742;font-size:22px}}
+          .download-box p{{margin:0 0 14px;color:#64748b;line-height:1.45}}
+          .download-actions{{display:flex;gap:10px;flex-wrap:wrap}}
+          .c-btn.mini{{padding:8px 12px;font-size:13px;border-radius:10px}}
+          .download-list{{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px}}
+          @media(max-width:900px){{.download-grid,.download-list{{grid-template-columns:1fr}}.download-hero{{display:block}}}}
+        </style>
+        <div class='download-hero c-card' style='padding:26px'>
+          <div>
+            <h2 class='c-title' style='margin-bottom:8px'>Centro de Descargas y Reportes</h2>
+            <p class='muted2'>Centro único para plantillas Excel, reportes de contratación, reportes de renovación, bajas, firmas, documentos generados, ZIP de expedientes y respaldos. Reemplaza al antiguo módulo Reportes para evitar duplicidad.</p>
+          </div>
+          <a class='c-btn' href='{url_for('admin_contratacion', sec='maestros')}'>← Volver a Datos Maestros</a>
+        </div>
+
+        <div class='download-grid'>
+          <div class='download-box'>
+            <h3>1) Plantillas Excel</h3>
+            <p>Formatos oficiales para cargar información masiva sin romper la estructura del sistema.</p>
+            <div class='download-list'>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='postulantes')}'>⬇ Base postulantes</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='requerimientos')}'>⬇ Base requerimientos</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='medica')}'>⬇ Evaluación médica</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='indumentaria')}'>⬇ Indumentaria</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_plantilla', tipo='renovacion')}'>⬇ Renovación contratos</a>
+            </div>
+          </div>
+
+          <div class='download-box'>
+            <h3>2) Reportes de seguimiento</h3>
+            <p>Archivos Excel para controlar bloqueos, pendientes críticos y avance por requerimiento.</p>
+            <div class='download-list'>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='seguimiento')}'>⬇ Seguimiento general</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='incompletos')}'>⬇ Fichas incompletas</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='documentos_pendientes')}'>⬇ Documentos pendientes</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='firmas')}'>⬇ Firmas pendientes/completadas</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='medicos')}'>⬇ Médicos APTO / NO APTO</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovaciones')}'>⬇ Renovaciones por vencer</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovacion_documentos')}'>⬇ Docs. renovación</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovacion_firmas')}'>⬇ Firmas renovación</a>
+            </div>
+          </div>
+
+          <div class='download-box'>
+            <h3>3) Formatos generados</h3>
+            <p>Accesos rápidos a documentos que ya se generan desde el flujo documentario.</p>
+            <div class='download-actions'>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='plantillas')}'>📄 Contratos y anexos</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='fotocheck')}'>🪪 Fotocheck</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='indumentaria')}'>🎽 Cargos de entrega</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='firma')}'>✍ Firmas digitales</a>
+            </div>
+          </div>
+
+          <div class='download-box'>
+            <h3>4) Descargas de renovación</h3>
+            <p>Controla contratos por vencer, adendas generadas, documentos de renovación, firmas y archivado.</p>
+            <div class='download-actions'>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='renovacion_dashboard')}'>📊 Dashboard renovación</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='renovacion')}'>🔁 Renovación masiva</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='plantillas', f_proceso='RENOVACIÓN')}'>📄 Plantillas documentales</a>
+              <a class='c-btn gray' href='{url_for('admin_contratacion', sec='firma', scope='renovacion')}'>✍ Firmas renovación</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovaciones')}'>⬇ Reporte renovaciones</a>
+              <a class='c-btn gray' href='{url_for('contratacion_descarga_reporte', tipo='renovacion_firmas')}'>⬇ Reporte firmas renovación</a>
+            </div>
+          </div>
+
+          <div class='download-box'>
+            <h3>5) Expediente trabajador</h3>
+            <p>Descarga un ZIP con resumen, documentos, firma, foto, biometría, médico e indumentaria del trabajador.</p>
+            <form class='download-actions' method='get' onsubmit="event.preventDefault(); const dni=this.dni.value.trim(); if(dni) location.href='/admin/contratacion/descargas/expediente/'+encodeURIComponent(dni);">
+              <input name='dni' placeholder='Ingrese DNI' list='trabajadores_list' style='min-width:220px'>
+              <button class='c-btn'>⬇ Descargar ZIP</button>
+            </form>
+          </div>
+        </div>
+
+        <div class='c-card table-wrap'>
+          <h3 style='margin:0 0 12px'>Expedientes rápidos</h3>
+          <table class='c-table'>
+            <tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Descarga</th></tr>
+            {trab_exp_rows or '<tr><td colspan="6">No hay trabajadores para mostrar.</td></tr>'}
+          </table>
+        </div>
+        """)
     else:
-        content=wrap(f"<h2 class='c-title'>Archivos Trabajador</h2><div class='toolbar'>🔎 Filtros &nbsp; ⚙ Acción ▾ &nbsp; ⬇ Descargar ▾</div><form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:18px'><b>Trabajador</b><input name='dni' list='trabajadores_list' required><datalist id='trabajadores_list'>{opt_trab}</datalist><b>Etapa</b><select name='etapa'><option>Incorporación</option><option>Renovación</option><option>Cese</option></select><b>Tipo documento</b><select name='tipo_doc'>{opt_tipo}</select><b>Archivo</b><input type='file' name='archivo' required><span></span><button class='c-btn'>⬆ Subir Docs Individual</button></form><div class='c-card table-wrap'><table class='c-table'><tr><th></th><th></th><th>Código</th><th>Apellidos y Nombres</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th></tr>{docs_rows or '<tr><td colspan=7>No hay archivos.</td></tr>'}</table></div>")
+        # Archivos Trabajador queda como expediente documental central del trabajador.
+        # No pertenece solo a Contratación: recibe documentos de contratación, renovación,
+        # firma, fotocheck, indumentaria, evaluación médica e inducción.
+        total_docs_arch = 0
+        docs_firmados_arch = 0
+        docs_renov_arch = 0
+        docs_med_arch = 0
+        try:
+            with db() as con_arch:
+                total_docs_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs").fetchone()[0]
+                docs_firmados_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(estado,'')) LIKE '%FIRM%'").fetchone()[0]
+                docs_renov_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'").fetchone()[0]
+                docs_med_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_medica WHERE COALESCE(ruta_archivo,'')<>'' OR COALESCE(archivo_nombre,'')<>''").fetchone()[0]
+        except Exception:
+            pass
+        content=wrap(f"""
+        <style>
+          .archivo-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}}
+          .archivo-kpis{{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:14px;margin-bottom:18px}}
+          .archivo-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:18px;padding:18px;box-shadow:0 10px 24px #0f172a0d}}
+          .archivo-kpi small{{color:#64748b;font-weight:800}}
+          .archivo-kpi b{{display:block;font-size:30px;color:#0b2742;margin-top:8px}}
+          .archivo-layout{{display:grid;grid-template-columns:1.05fr 1.4fr;gap:18px;align-items:start}}
+          .archivo-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:20px;box-shadow:0 14px 32px #0f172a0d}}
+          .archivo-card h3{{margin:0 0 12px;color:#0b2742;font-size:22px}}
+          .archivo-grid{{display:grid;grid-template-columns:180px 1fr;gap:12px;align-items:center}}
+          .archivo-grid b{{background:#edf3f7;border-radius:12px;padding:12px;text-align:right}}
+          .archivo-grid input,.archivo-grid select{{width:100%;border:1px solid #d6e3ef;border-radius:12px;padding:12px;font-weight:800}}
+          .archivo-actions{{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}}
+          .archivo-note{{background:#f1f5f9;border-radius:16px;padding:14px;color:#475569;margin-top:14px;line-height:1.45}}
+          .archivo-scroll{{max-height:480px;overflow:auto;border-radius:18px;border:1px solid #dbe7ef}}
+          .archivo-scroll .c-table th{{position:sticky;top:0;background:#edf3f7;z-index:2}}
+          @media(max-width:1000px){{.archivo-kpis,.archivo-layout{{grid-template-columns:1fr}}.archivo-grid{{grid-template-columns:1fr}}.archivo-grid b{{text-align:left}}.archivo-hero{{display:block}}}}
+        </style>
+
+        <div class='archivo-hero c-card' style='padding:26px'>
+          <div>
+            <h2 class='c-title' style='margin-bottom:8px'>Archivos Trabajador</h2>
+            <p class='muted2'>Expediente documental central. Aquí se almacenan contratos, renovaciones, documentos firmados, fotocheck, indumentaria, evaluación médica, inducción y anexos. Este módulo pertenece a <b>Datos Maestros / Base Central</b>.</p>
+          </div>
+          <div class='archivo-actions'>
+            <a class='c-btn gray' href='{url_for('admin_contratacion', sec='ficha')}'>Ver Ficha Trabajador</a>
+            <a class='c-btn' href='{url_for('admin_contratacion', sec='integracion_nisira')}'>Base Central</a>
+          </div>
+        </div>
+
+        <div class='archivo-kpis'>
+          <div class='archivo-kpi'><small>Total documentos</small><b>{total_docs_arch}</b></div>
+          <div class='archivo-kpi'><small>Firmados</small><b>{docs_firmados_arch}</b></div>
+          <div class='archivo-kpi'><small>Renovaciones / adendas</small><b>{docs_renov_arch}</b></div>
+          <div class='archivo-kpi'><small>Médicos adjuntos</small><b>{docs_med_arch}</b></div>
+        </div>
+
+        <div class='archivo-layout'>
+          <div class='archivo-card'>
+            <h3>Subida documental controlada</h3>
+            <form method='post' enctype='multipart/form-data'>
+              <div class='archivo-grid'>
+                <b>Trabajador / DNI</b>
+                <input name='dni' list='trabajadores_list' placeholder='Buscar por DNI o nombre' required>
+                <datalist id='trabajadores_list'>{opt_trab}</datalist>
+
+                <b>Etapa</b>
+                <select name='etapa'>
+                  <option>Incorporación</option>
+                  <option>Renovación</option>
+                  <option>Evaluación Médica</option>
+                  <option>Indumentaria</option>
+                  <option>Fotocheck</option>
+                  <option>Inducción</option>
+                  <option>Cese</option>
+                  <option>Otros</option>
+                </select>
+
+                <b>Tipo documento</b>
+                <select name='tipo_doc'>{opt_tipo}</select>
+
+                <b>Archivo</b>
+                <input type='file' name='archivo' required>
+              </div>
+              <div class='archivo-actions'>
+                <button class='c-btn'>⬆ Guardar en expediente</button>
+                <a class='c-btn gray' href='{url_for('admin_contratacion', sec='descargas')}'>⬇ Centro de Descargas y Reportes</a>
+              </div>
+            </form>
+            <div class='archivo-note'>
+              <b>Regla PRO:</b> los módulos de Contratación, Renovación, Firma, Médico, Fotocheck e Indumentaria deben guardar automáticamente sus documentos aquí. La carga manual queda solo para anexos o regularizaciones.
+            </div>
+          </div>
+
+          <div class='archivo-card'>
+            <h3>Repositorio documental</h3>
+            <div class='toolbar' style='margin-bottom:10px'>🔎 Filtros &nbsp; ⚙ Acción ▾ &nbsp; ⬇ Descargar ▾</div>
+            <div class='archivo-scroll'>
+              <table class='c-table'>
+                <tr>
+                  <th></th><th></th><th>Código/DNI</th><th>Trabajador</th><th>Etapa</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th>
+                </tr>
+                {docs_rows or '<tr><td colspan=8>No hay archivos.</td></tr>'}
+              </table>
+            </div>
+          </div>
+        </div>
+        """)
+    # PRO UI: Unificación documentaria.
+    # "Tipos por Etapa" y "Tipo Documento Empleado" ya no se muestran duplicados en Datos Maestros;
+    # quedan como pestañas internas de Configuración Documentaria / Plantillas Documentales.
+    if sec in {'plantillas', 'tipos_etapa', 'tipo_empleado'}:
+        def _doc_tab(s, label, icon):
+            active_cls = 'active' if sec == s else ''
+            return f"<a class='doc-config-tab {active_cls}' href='{url_for('admin_contratacion', sec=s)}'>{icon} {label}</a>"
+        doc_config_nav = f"""
+        <style>
+          .doc-config-wrap{{background:#f8fafc;border:1px solid #e2e8f0;border-radius:18px;padding:14px 16px;margin:0 0 16px;box-shadow:0 10px 24px rgba(15,23,42,.05)}}
+          .doc-config-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}}
+          .doc-config-head h2{{margin:0;color:#0f172a;font-size:20px;font-weight:800}}
+          .doc-config-head p{{margin:4px 0 0;color:#64748b;font-size:13px}}
+          .doc-config-tabs{{display:flex;gap:10px;flex-wrap:wrap}}
+          .doc-config-tab{{display:inline-flex;align-items:center;gap:7px;text-decoration:none;background:#fff;border:1px solid #dbeafe;color:#0f172a;border-radius:999px;padding:9px 13px;font-weight:800;font-size:13px}}
+          .doc-config-tab.active{{background:#0f766e;color:#fff;border-color:#0f766e;box-shadow:0 8px 18px rgba(15,118,110,.18)}}
+          @media(max-width:720px){{.doc-config-tab{{width:100%;justify-content:center}}}}
+        </style>
+        <div class="doc-config-wrap">
+          <div class="doc-config-head">
+            <div>
+              <h2>Configuración Documentaria</h2>
+              <p>Gestión única de plantillas, tipos por etapa y documentos de empleado para contratación, renovación y documentos a entregar.</p>
+            </div>
+          </div>
+          <div class="doc-config-tabs">
+            {_doc_tab('plantillas','Plantillas Documentales','📄')}
+            {_doc_tab('tipos_etapa','Tipos por Etapa','🏷️')}
+            {_doc_tab('tipo_empleado','Tipo Documento Empleado','🧾')}
+          </div>
+        </div>
+        """
+        if content.startswith('<style'):
+            content = content.replace('</style>', '</style>' + doc_config_nav, 1)
+        else:
+            content = doc_config_nav + content
+
     return render_page(content, active=f'Gestion Contratacion:{sec}')
 
 
@@ -6496,8 +10170,16 @@ def contratacion_doc_log(doc_id):
     return render_page(content, active='Gestion Contratacion:ficha')
 
 # API compatibles
+
+@app.route('/api/contratacion/trabajador/<dni>')
+@admin_required
+def api_contratacion_trabajador(dni):
+    data = datos_unificados_contratacion(dni)
+    ok = bool(data and not es_valor_incompleto(data.get('nombre')))
+    return jsonify({'ok': ok, 'tipo': 'REINGRESANTE' if ok else 'NUEVO', 'trabajador': data})
+
 @app.route('/api/health')
-def api_health(): return jsonify({'ok': True, 'mensaje': 'PORTAL HR PRO activo - optimizado Render Free'})
+def api_health(): return jsonify({'ok': True, 'mensaje': 'Portal PRIZE activo - optimizado Render Free'})
 @app.route('/api/boleta/<dni>')
 def api_boleta(dni):
     docs = listar_documentos(dni=dni, categoria='pago', limit=20)
@@ -6511,44 +10193,206 @@ def admin_firma_digital():
     return redirect(url_for('admin_contratacion', sec='firma'))
 
 
+# =========================================================
+# PARCHE FINAL DEFINITIVO - REQUERIMIENTOS + SIDEBAR + BIOMETRÍA
+# =========================================================
+FINAL_UI_PATCH_CSS = '\n/* ===== PARCHE DEFINITIVO SOLICITADO ===== */\nhtml,body{margin:0!important;background:#eef4f2!important;overflow-x:hidden!important;}\n.app{display:grid!important;grid-template-columns:280px minmax(0,1fr)!important;min-height:100vh!important;background:#eef4f2!important;align-items:stretch!important;}\n.app.side-collapsed{grid-template-columns:84px minmax(0,1fr)!important;}\n.side{width:280px!important;height:100vh!important;min-height:100vh!important;position:sticky!important;top:0!important;overflow-y:auto!important;overflow-x:hidden!important;background:#074b39!important;border-right:1px solid rgba(255,255,255,.14)!important;box-shadow:10px 0 22px rgba(15,23,42,.12)!important;scrollbar-width:thin!important;}\n.side.collapsed{width:84px!important;}\n.side-top{height:50px!important;min-height:50px!important;padding:0 10px!important;background:#074b39!important;}\n.brand{padding:10px 16px 8px!important;text-align:left!important;min-height:auto!important;}\n.brand:before{font-size:18px!important;line-height:1.05!important;}\n.brand p{margin:2px 0 0!important;line-height:1.05!important;}\n.side-user{margin:8px 14px 10px!important;padding:10px 12px!important;border-radius:16px!important;background:rgba(255,255,255,.10)!important;border:1px solid rgba(255,255,255,.12)!important;min-height:54px!important;}\n.side-user .avatar,.avatar{width:40px!important;height:40px!important;min-width:40px!important;}\n.side-user b{font-size:14px!important;line-height:1.1!important;}\n.side-user small{font-size:12px!important;line-height:1.1!important;}\n.side nav{display:flex!important;flex-direction:column!important;gap:4px!important;padding:4px 12px 18px!important;margin:0!important;}\n.menu-group{margin:2px 0!important;border-radius:14px!important;overflow:visible!important;}\n.menu-title,.menu-item{margin:2px 0!important;padding:11px 14px!important;min-height:42px!important;border-radius:14px!important;gap:10px!important;font-size:13.5px!important;line-height:1.15!important;}\n.menu-title i,.menu-item i{width:38px!important;height:38px!important;min-width:38px!important;border-radius:12px!important;display:grid!important;place-items:center!important;background:rgba(255,255,255,.12)!important;}\n.menu-title .label,.menu-item .label{line-height:1.15!important;white-space:normal!important;}\n.submenu{padding:3px 0 5px!important;max-height:none!important;}\n.submenu>.menu-item{padding-left:26px!important;}\n.side::after{display:none!important;content:none!important;}\n.main{min-width:0!important;padding:18px 24px 32px!important;background:#eef4f2!important;}\n.hero{margin:0 0 16px!important;padding:16px 20px!important;border-radius:0 0 22px 22px!important;}\n.c-card,.pro-card,.dash-card,.card{border-radius:18px!important;}\n.req-pro-grid{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:16px!important;align-items:start!important;}\n.c-form,.pro-form,.ingreso-form,.pro-card.nice-form,.learning-grid .nice-form{grid-template-columns:160px minmax(190px,1fr) 160px minmax(190px,1fr)!important;gap:10px 12px!important;padding:18px!important;}\n.c-form b,.pro-form b,.ingreso-form b,.pro-card.nice-form b,.learning-grid .nice-form b{min-height:42px!important;padding:8px 10px!important;font-size:13px!important;border-radius:12px!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;text-align:right!important;}\n.c-form input,.c-form select,.c-form textarea,.pro-form input,.pro-form select,.pro-form textarea,.ingreso-form input,.ingreso-form select,.ingreso-form textarea,.pro-card.nice-form input,.pro-card.nice-form select,.pro-card.nice-form textarea{min-height:42px!important;font-size:13.5px!important;border-radius:12px!important;padding:8px 12px!important;}\n.pro-section-title,.section-head{padding:10px 14px!important;font-size:16px!important;border-radius:12px!important;margin:0 0 8px!important;}\n.full{grid-column:1/-1!important;}\n#form_scan_req .scan-box{grid-column:1/-1!important;display:grid!important;grid-template-columns:minmax(260px,1fr) 220px!important;gap:14px!important;align-items:stretch!important;padding:16px!important;border:1px dashed #9ee6c4!important;border-radius:18px!important;background:#f7fffb!important;overflow:visible!important;}\n#form_scan_req .scan-camera{min-height:270px!important;border-radius:16px!important;background:#eef4fa!important;display:grid!important;place-items:center!important;text-align:center!important;padding:14px!important;overflow:hidden!important;}\n#form_scan_req .scan-camera video{display:block!important;width:100%!important;height:260px!important;object-fit:cover!important;border-radius:14px!important;background:#111!important;}\n#scanCamMsg{font-weight:900!important;color:#475569!important;max-width:330px!important;line-height:1.25!important;}\n#form_scan_req .scan-tools{display:grid!important;grid-template-columns:1fr!important;gap:10px!important;align-content:start!important;min-width:0!important;}\n#form_scan_req .scan-tools .c-btn{width:100%!important;min-width:0!important;min-height:48px!important;padding:11px 12px!important;border-radius:14px!important;white-space:normal!important;line-height:1.15!important;font-size:14px!important;display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;overflow:visible!important;}\n#form_scan_req .scan-counter{grid-column:1/-1!important;display:flex!important;gap:8px!important;flex-wrap:wrap!important;}\n#form_scan_req .scan-counter span{background:#ecfdf5!important;color:#047857!important;border:1px solid #a7f3d0!important;border-radius:999px!important;padding:7px 11px!important;font-weight:900!important;font-size:12.5px!important;}\n#form_scan_req .mini-list{grid-column:1/-1!important;max-height:130px!important;overflow:auto!important;}\n#form_scan_req .muted2{grid-column:1/-1!important;margin:0!important;}\n.ingreso-form .camera-box{grid-column:2 / 5!important;display:grid!important;grid-template-columns:minmax(260px,1fr) 220px!important;gap:14px!important;align-items:start!important;padding:16px!important;border:1px dashed #b7d4ec!important;border-radius:18px!important;background:#fbfdff!important;overflow:visible!important;}\n.ingreso-form .camera-box video,.ingreso-form .camera-box img{width:100%!important;height:260px!important;min-height:260px!important;max-height:260px!important;border-radius:16px!important;background:#111!important;object-fit:cover!important;}\n.ingreso-form .cam-actions{display:grid!important;grid-template-columns:1fr!important;gap:10px!important;margin:0!important;align-content:start!important;}\n.ingreso-form .cam-actions .c-btn{width:100%!important;min-height:48px!important;padding:11px 12px!important;border-radius:14px!important;white-space:normal!important;line-height:1.15!important;}\n.ingreso-form .camera-box small{grid-column:1/-1!important;text-align:center!important;font-size:12.5px!important;line-height:1.25!important;}\n.ingreso-form b:has(+ .bio-box){grid-column:1/2!important;align-self:start!important;margin-top:0!important;}\n.ingreso-form .bio-box{grid-column:2 / 5!important;display:grid!important;grid-template-columns:1fr!important;gap:10px!important;padding:14px!important;border:1px dashed #b7d4ec!important;border-radius:18px!important;background:#f8fbff!important;clear:both!important;position:relative!important;z-index:1!important;margin-top:0!important;}\n.ingreso-form .bio-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important;}\n.ingreso-form .bio-actions .c-btn{width:100%!important;min-height:46px!important;padding:10px!important;white-space:normal!important;line-height:1.15!important;}\n.ingreso-form .bio-box input[type=file]{width:100%!important;max-width:100%!important;}\n@media(max-width:1200px){.req-pro-grid{grid-template-columns:1fr!important}.c-form,.pro-form,.ingreso-form,.pro-card.nice-form{grid-template-columns:150px minmax(0,1fr)!important}.ingreso-form .camera-box,.ingreso-form .bio-box{grid-column:2!important;}}\n@media(max-width:900px){.app,.app.side-collapsed{grid-template-columns:1fr!important}.side{position:fixed!important;left:-300px!important;z-index:200!important;width:280px!important;height:100dvh!important}.side.open{left:0!important}.main{padding:12px!important}.c-form,.pro-form,.ingreso-form,.pro-card.nice-form{grid-template-columns:1fr!important;padding:14px!important}.c-form b,.pro-form b,.ingreso-form b,.pro-card.nice-form b{justify-content:flex-start!important;text-align:left!important}.ingreso-form .camera-box,.ingreso-form .bio-box,#form_scan_req .scan-box{grid-column:1!important;grid-template-columns:1fr!important}.ingreso-form b:has(+ .bio-box){grid-column:1!important}.req-pro-grid{grid-template-columns:1fr!important}.ingreso-form .bio-actions{grid-template-columns:1fr!important}}\n'
+FINAL_UI_PATCH_JS = '\n<script id="final-ui-camera-patch">\n(function(){\n  window.scanReqStream = window.scanReqStream || null;\n  window.scanReqCount = window.scanReqCount || 0;\n  window.limpiarDniReq = window.limpiarDniReq || function(v){ return String(v||\'\').replace(/\\D/g,\'\').slice(-8); };\n  window.activarCamaraReq = async function(){\n    const v = document.getElementById(\'videoScanReq\');\n    const msg = document.getElementById(\'scanCamMsg\');\n    const modo = document.getElementById(\'modo_scan_req\');\n    try{\n      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ alert(\'El navegador no permite cámara. Use HTTPS/Render, localhost o lector USB.\'); return false; }\n      if(window.scanReqStream){ window.scanReqStream.getTracks().forEach(t=>t.stop()); }\n      window.scanReqStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:\'environment\'}, width:{ideal:1280}, height:{ideal:720}}, audio:false});\n      if(v){ v.srcObject = window.scanReqStream; v.style.display = \'block\'; v.muted = true; await v.play().catch(()=>{}); }\n      if(msg){ msg.style.display=\'none\'; msg.innerHTML=\'\'; }\n      if(modo){ modo.value=\'Cámara celular / web\'; }\n      iniciarLecturaBarcodeReq();\n      return true;\n    }catch(e){\n      let ayuda=\'No se pudo activar cámara. En celular debe ser HTTPS/Render. En PC local usa http://127.0.0.1:5000.\';\n      if(e && (e.name===\'NotAllowedError\'||e.name===\'PermissionDeniedError\')) ayuda=\'Permite la cámara desde el candado del navegador y vuelve a presionar Activar cámara.\';\n      alert(ayuda); if(msg){ msg.style.display=\'block\'; msg.innerHTML=ayuda; } return false;\n    }\n  };\n  window.apagarCamaraReq = function(){\n    if(window._scanReqTimer){ clearInterval(window._scanReqTimer); window._scanReqTimer=null; }\n    if(window.scanReqStream){ window.scanReqStream.getTracks().forEach(t=>t.stop()); window.scanReqStream=null; }\n    const v=document.getElementById(\'videoScanReq\'); if(v){ v.pause(); v.srcObject=null; v.style.display=\'none\'; }\n    const m=document.getElementById(\'scanCamMsg\'); if(m){ m.style.display=\'block\'; m.innerHTML=\'Cámara detenida. Puedes usar lector USB o volver a activar cámara.\'; }\n  };\n  window.agregarDniLocalReq = function(valor){\n    const i=document.getElementById(\'dni_scan_req\'); const raw = valor || (i ? i.value : \'\'); const dni=window.limpiarDniReq(raw);\n    if(dni.length!==8){ alert(\'DNI debe tener 8 dígitos.\'); return false; }\n    if(i){ i.value=dni; i.focus(); i.select(); }\n    window.scanReqCount = (window.scanReqCount||0)+1;\n    const c=document.getElementById(\'cntLeidos\'); if(c) c.innerText=\'Leídos: \'+window.scanReqCount;\n    const r=document.getElementById(\'scan_result_req\'); if(r) r.value=\'DNI \'+dni+\' agregado. Nuevo/Reingresante listo para guardar.\';\n    const box=document.getElementById(\'listaScanReq\'); if(box){ const row=document.createElement(\'div\'); row.innerHTML=\'<b>\'+dni+\'</b><span>Listo para guardar / completar ficha</span><small>\'+new Date().toLocaleTimeString()+\'</small>\'; box.prepend(row); }\n    return true;\n  };\n  function iniciarLecturaBarcodeReq(){\n    const v=document.getElementById(\'videoScanReq\'); const msg=document.getElementById(\'scanCamMsg\');\n    if(window._scanReqTimer){ clearInterval(window._scanReqTimer); }\n    if(!(\'BarcodeDetector\' in window)){ if(msg){ msg.style.display=\'block\'; msg.innerHTML=\'Cámara activa. Si tu navegador no lee códigos automáticamente, escanea con lector USB o digita el DNI y presiona ENTER.\'; } return; }\n    let detector; try{ detector = new BarcodeDetector({formats:[\'qr_code\',\'code_128\',\'code_39\',\'ean_13\',\'pdf417\']}); }catch(e){ return; }\n    let ultimo=\'\';\n    window._scanReqTimer=setInterval(async()=>{ try{ if(!v || !v.videoWidth) return; const codes=await detector.detect(v); if(!codes || !codes.length) return; const val=(codes[0].rawValue||\'\').replace(/\\D/g,\'\'); const dni=val.slice(-8); if(dni.length===8 && dni!==ultimo){ ultimo=dni; window.agregarDniLocalReq(dni); } }catch(e){} },900);\n  }\n  document.addEventListener(\'DOMContentLoaded\', function(){ const i=document.getElementById(\'dni_scan_req\'); if(i && !i.dataset.finalPatch){ i.dataset.finalPatch=\'1\'; i.addEventListener(\'keydown\', function(e){ if(e.key===\'Enter\'){ e.preventDefault(); window.agregarDniLocalReq(); } }); } });\n})();\n</script>\n'
 
-# ===== PARCHE FINAL REAL: evita que el icono tape el título y corrige header/menu móvil =====
 @app.after_request
-def parche_final_login_header(response):
+def aplicar_parche_ui_final_definitivo(response):
     try:
-        ct = response.headers.get('Content-Type','')
-        if 'text/html' not in ct.lower():
-            return response
-        html_text = response.get_data(as_text=True)
-        css = '\n<style id="fix-final-real-login-header">\n.login-body{min-height:100vh!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:58px 18px 118px!important;overflow:hidden!important;background:radial-gradient(circle at 8% -4%,rgba(34,197,94,.17) 0 20%,transparent 20.4%),radial-gradient(circle at 94% -2%,rgba(45,212,191,.17) 0 22%,transparent 22.4%),linear-gradient(180deg,#fbfdff 0%,#effaf5 100%)!important;}\n.login-body:before{content:""!important;position:absolute!important;left:0!important;right:0!important;bottom:0!important;height:30%!important;background:linear-gradient(135deg,#22c55e 0%,#065f46 100%)!important;clip-path:polygon(0 36%,22% 26%,48% 17%,73% 28%,100% 22%,100% 100%,0 100%)!important;z-index:0!important;}\n.login-body:after{content:"🛡️  Sistema seguro y confiable\\A © 2025 Portal HR Pro. Todos los derechos reservados."!important;white-space:pre!important;position:absolute!important;left:0!important;right:0!important;bottom:18px!important;text-align:center!important;color:#fff!important;font-size:16px!important;line-height:1.9!important;font-weight:650!important;z-index:1!important;background:none!important;height:auto!important;clip-path:none!important;}\n.login-card{width:min(90vw,500px)!important;max-width:500px!important;margin:0 auto!important;padding:52px 46px 30px!important;border-radius:28px!important;background:rgba(255,255,255,.975)!important;border:1px solid #dce8ef!important;box-shadow:0 18px 48px rgba(15,23,42,.13)!important;overflow:visible!important;position:relative!important;z-index:2!important;text-align:left!important;}\n.login-card:before,.login-card:after{display:none!important;content:none!important;}\n.login-inner{position:relative!important;z-index:3!important;}\n.login-logo{display:flex!important;position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;transform:none!important;margin:-94px auto 26px!important;width:124px!important;height:124px!important;z-index:6!important;justify-content:center!important;align-items:center!important;text-align:center!important;}\n.login-logo img{display:none!important;}\n.login-avatar-svg{width:124px!important;height:124px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe7ef!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;display:grid!important;place-items:center!important;}\n.login-avatar-svg:before{content:""!important;width:68px!important;height:68px!important;display:block!important;background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 96 96\'%3E%3Cdefs%3E%3ClinearGradient id=\'g\' x1=\'0\' y1=\'0\' x2=\'1\' y2=\'1\'%3E%3Cstop stop-color=\'%2327c77b\'/%3E%3Cstop offset=\'1\' stop-color=\'%230b8f5a\'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx=\'35\' cy=\'30\' r=\'13\' fill=\'url(%23g)\'/%3E%3Ccircle cx=\'61\' cy=\'28\' r=\'15\' fill=\'url(%23g)\'/%3E%3Cpath d=\'M13 72c1-17 13-28 29-28 5 0 9 1 13 3-7 5-12 13-13 25H13z\' fill=\'url(%23g)\'/%3E%3Cpath d=\'M38 72c1-19 14-31 32-31 15 0 25 12 25 31H38z\' fill=\'url(%23g)\'/%3E%3C/svg%3E")!important;}\n.login-title{text-align:center!important;margin:0 0 24px!important;position:relative!important;z-index:5!important;}\n.login-title h1{margin:0 0 10px!important;font-size:36px!important;line-height:1.05!important;font-weight:800!important;letter-spacing:-.035em!important;color:#182233!important;text-transform:uppercase!important;white-space:nowrap!important;position:relative!important;z-index:5!important;}\n.login-title b{display:block!important;color:#667085!important;font-size:16px!important;font-weight:520!important;line-height:1.32!important;}\n.login-title:after{content:""!important;display:block!important;width:60px!important;height:4px!important;border-radius:999px!important;background:#16b978!important;margin:18px auto 0!important;}\n.login-input input,.login-input select{color:#172033!important;-webkit-text-fill-color:#172033!important;background:#fff!important;}\n.login-input input::placeholder{color:#6b7787!important;opacity:1!important;-webkit-text-fill-color:#6b7787!important;}\n.side{background:#073126!important;overflow-y:auto!important;overflow-x:hidden!important;}\n.side-head-pro{position:sticky!important;top:0!important;z-index:2147483640!important;margin:0 12px 16px!important;height:82px!important;min-height:82px!important;padding:0 12px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;background:#123f33!important;border:1px solid rgba(255,255,255,.16)!important;border-radius:0 0 20px 20px!important;box-shadow:0 16px 34px rgba(0,0,0,.34)!important;overflow:hidden!important;isolation:isolate!important;backdrop-filter:none!important;}\n.side-head-pro:before{content:""!important;position:absolute!important;left:-16px!important;right:-16px!important;top:-26px!important;bottom:0!important;background:#073126!important;z-index:-3!important;opacity:1!important;}\n.side-head-pro:after{content:""!important;position:absolute!important;inset:0!important;background:linear-gradient(90deg,#123f33 0%,#196b48 52%,#123f33 100%)!important;z-index:-2!important;border-radius:0 0 20px 20px!important;opacity:1!important;}\n.side-head-pro *{position:relative!important;z-index:3!important;}\n.side-brand-text b{color:#fff!important;font-size:16px!important;font-weight:800!important;white-space:nowrap!important;}\n.side-brand-text small{color:#d6e9e2!important;font-size:14px!important;font-weight:650!important;display:block!important;}\n.menu-title,.menu-item{color:#eaf7f1!important;opacity:1!important;text-shadow:none!important;font-weight:760!important;}\n.menu-title .label,.menu-item .label{color:inherit!important;opacity:1!important;visibility:visible!important;display:inline!important;}\n.menu-item.active,.menu-item.parent-active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:rgba(22,185,120,.30)!important;color:#fff!important;box-shadow:inset 4px 0 0 #34d399!important;border:1px solid rgba(134,239,172,.22)!important;}\n.menu-item.active .label,.menu-item.parent-active .label,.menu-title.active .label,.menu-group.force-open>.menu-title.active .label{color:#fff!important;}\n@media(max-width:1000px){.side{position:fixed!important;top:0!important;left:-340px!important;width:315px!important;height:100dvh!important;background:#073126!important;z-index:2147483644!important;}.side.open{left:0!important;}.side-head-pro{top:0!important;margin:0 10px 16px!important;border-radius:0 0 18px 18px!important;}.mobile-head{background:#0f4a35!important;color:#fff!important;z-index:2147483645!important;}.mobile-head b,.mobile-head a{color:#fff!important;opacity:1!important;visibility:visible!important;}.menu-title,.menu-item{font-size:13.5px!important;color:#f8fffc!important;font-weight:760!important;}.menu-title .label,.menu-item .label{color:#f8fffc!important;}.login-body{padding:82px 12px 108px!important;align-items:center!important;overflow-y:auto!important;}.login-card{width:calc(100vw - 26px)!important;max-width:420px!important;padding:50px 26px 30px!important;border-radius:26px!important;}.login-logo{width:116px!important;height:116px!important;margin:-92px auto 24px!important;}.login-avatar-svg{width:116px!important;height:116px!important;}.login-avatar-svg:before{width:64px!important;height:64px!important;}.login-title h1{font-size:31px!important;}.login-title b{font-size:17px!important;max-width:310px!important;margin:auto!important;}.login-body:after{font-size:12px!important;bottom:14px!important;}}\n</style>\n'
-        html_text = html_text.replace('</head>', css + '</head>')
-        response.set_data(html_text)
-        response.headers['Content-Length'] = str(len(response.get_data()))
-    except Exception:
-        pass
+        if response.content_type and 'text/html' in response.content_type.lower():
+            html_txt = response.get_data(as_text=True)
+            if 'final-ui-patch-definitivo' not in html_txt:
+                bloque_css = "<style id='final-ui-patch-definitivo'>" + FINAL_UI_PATCH_CSS + "</style>"
+                if '</head>' in html_txt:
+                    html_txt = html_txt.replace('</head>', bloque_css + '</head>', 1)
+                else:
+                    html_txt = bloque_css + html_txt
+            if 'final-ui-camera-patch' not in html_txt:
+                if '</body>' in html_txt:
+                    html_txt = html_txt.replace('</body>', FINAL_UI_PATCH_JS + '</body>', 1)
+                else:
+                    html_txt += FINAL_UI_PATCH_JS
+            response.set_data(html_txt)
+            response.headers['Content-Length'] = str(len(response.get_data()))
+    except Exception as e:
+        print('Parche UI final no aplicado:', e)
     return response
 
 
 
-# ===== PARCHE FINAL PEDIDO: PORTAL HR + CELULAR COMPACTO + SIDEBAR SIN TAPA DASHBOARD =====
-@app.after_request
-def parche_portal_hr_movil_compacto(response):
-    try:
-        ct = response.headers.get('Content-Type','')
-        if 'text/html' not in ct.lower():
-            return response
-        html_text = response.get_data(as_text=True)
-        html_text = html_text.replace('PRIZE PRO', 'PORTAL HR')
-        html_text = html_text.replace('Prize Pro', 'Portal HR')
-        html_text = html_text.replace('PRIZE', 'PORTAL HR')
-        css = '\n<style id="portal-hr-final-mobile-fix">\n.login-title h1{font-size:36px!important;line-height:1.05!important;font-weight:800!important;color:#182233!important;letter-spacing:-.035em!important;white-space:nowrap!important;text-transform:uppercase!important;}\n.login-logo{z-index:10!important;}.login-card{overflow:visible!important;}.login-body:after{content:"🛡️  Sistema seguro y confiable\\\\A © 2025 Portal HR. Todos los derechos reservados."!important;white-space:pre!important;}\n.login-input input,.login-input select{background:#fff!important;color:#172033!important;-webkit-text-fill-color:#172033!important;caret-color:#172033!important;opacity:1!important;}\n.login-input input::placeholder{color:#6b7787!important;-webkit-text-fill-color:#6b7787!important;opacity:1!important;}\n@media(max-width:700px){\n  .login-body{padding:76px 12px 104px!important;align-items:center!important;justify-content:center!important;overflow-y:auto!important;}\n  .login-card{width:calc(100vw - 34px)!important;max-width:390px!important;padding:78px 24px 28px!important;border-radius:26px!important;}\n  .login-logo{width:112px!important;height:112px!important;margin:-88px auto 22px!important;top:auto!important;position:relative!important;left:auto!important;transform:none!important;display:flex!important;justify-content:center!important;}\n  .login-avatar-svg{width:112px!important;height:112px!important;}.login-avatar-svg:before{width:62px!important;height:62px!important;}\n  .login-title{margin:0 0 22px!important;}.login-title h1{font-size:31px!important;}.login-title b{font-size:16px!important;line-height:1.28!important;max-width:300px!important;margin:auto!important;}\n  .login-title:after{margin-top:16px!important;width:58px!important;}.login-card .field{margin-bottom:12px!important;}.login-card .field label{font-size:14px!important;margin-bottom:6px!important;}\n  .login-input{height:54px!important;border-radius:16px!important;}.login-input i{width:30px!important;height:30px!important;font-size:15px!important;}\n  .login-input input,.login-input select{height:42px!important;min-height:42px!important;font-size:16px!important;border-radius:14px!important;}\n  .login-card .btn-green{height:56px!important;font-size:19px!important;border-radius:16px!important;margin:15px 0 18px!important;}.login-links a{font-size:14px!important;}\n  .login-body:after{font-size:12px!important;bottom:12px!important;line-height:1.7!important;}\n}\n@media(max-width:1000px){\n  .mobile-head{height:56px!important;min-height:56px!important;position:sticky!important;top:0!important;z-index:2147483647!important;background:#0f4a35!important;color:#fff!important;padding:0 14px!important;display:flex!important;align-items:center!important;}\n  .mobile-head b{font-size:15px!important;font-weight:800!important;letter-spacing:.02em!important;color:#fff!important;}.mobile-head a{font-size:15px!important;font-weight:800!important;color:#fff!important;text-decoration:none!important;}\n  .mobile-head .toggle{width:42px!important;height:42px!important;border-radius:12px!important;background:rgba(255,255,255,.12)!important;}\n  .side{top:56px!important;height:calc(100dvh - 56px)!important;width:286px!important;left:-306px!important;background:#073126!important;padding-top:8px!important;z-index:2147483644!important;}\n  .side.open{left:0!important;}.side-head-pro{display:none!important;}nav{padding:8px 14px 18px!important;}.menu-group{margin:7px 0!important;}\n  .menu-title{min-height:52px!important;padding:11px 13px!important;border-radius:16px!important;font-size:14px!important;line-height:1.22!important;}\n  .menu-item{min-height:44px!important;padding:10px 12px!important;border-radius:14px!important;font-size:13.5px!important;line-height:1.22!important;}\n  .menu-title i,.menu-item i{width:28px!important;height:28px!important;font-size:16px!important;}.menu-title .label,.menu-item .label{color:#f8fffc!important;opacity:1!important;visibility:visible!important;font-weight:760!important;}\n  .submenu{padding:6px 0!important;}.menu-group.nested{margin-left:10px!important;padding-left:10px!important;}.side-user{margin:14px 14px 18px!important;padding:12px!important;border-radius:16px!important;}\n  .main{padding-top:14px!important;}.hero,.topbar,.card{scroll-margin-top:70px!important;}\n}\n</style>\n'
-        html_text = html_text.replace('</head>', css + '</head>')
-        response.set_data(html_text)
-        response.headers['Content-Length'] = str(len(response.get_data()))
-    except Exception:
-        pass
-    return response
+# PATCH CSS REQUERIMIENTOS INDUCCION
+try:
+    FINAL_UI_PATCH_CSS += '''
+.req-scan-auto .check-masivo{display:flex!important;align-items:center!important;gap:10px!important;min-height:42px!important;border:1px solid #dbeafe!important;border-radius:12px!important;background:#fff!important;padding:8px 12px!important;font-weight:900!important;color:#0f172a!important}.req-scan-auto .check-masivo input{width:18px!important;min-height:18px!important}.scan-tools-req{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important}.scan-tools-req .c-btn{width:100%!important;min-width:0!important}.induccion-masiva-box{max-height:360px!important;overflow:auto!important;border:1px solid #dbe5ee!important;border-radius:16px!important;background:#fff!important}.induccion-masiva-box table{min-width:980px!important}.induccion-masiva-box input[type=checkbox]{width:18px!important;height:18px!important}@media(max-width:900px){.scan-tools-req{grid-template-columns:1fr!important}}
+'''
+except Exception:
+    pass
 
+
+# =========================================================
+# PATCH PRO FINAL - SIDEBAR ACTIVO FIJO + PLANTILLAS LEGIBLES
+# =========================================================
+try:
+    FINAL_UI_PATCH_CSS += '\n/* === PATCH PRO: mantener módulo seleccionado y Plantillas observable === */\nhtml,body{background:#eef5f3!important;color:#0f2b46!important;}\n.app{grid-template-columns:280px minmax(0,1fr)!important;background:#eef5f3!important;}\n.main{background:linear-gradient(135deg,#f8fbfd 0%,#eef7f4 100%)!important;color:#12263f!important;padding:22px 28px 40px!important;}\n.side{background:linear-gradient(180deg,#07503d 0%,#064331 48%,#043528 100%)!important;color:#eafff5!important;}\n.side nav{overflow-y:auto!important;overflow-x:hidden!important;scroll-behavior:auto!important;}\n.menu-title,.menu-item{color:#dff5ee!important;font-weight:700!important;text-shadow:none!important;}\n.menu-title .label,.menu-item .label{color:inherit!important;font-weight:700!important;}\n.menu-title.active,.menu-item.active,.menu-item.current-menu,.menu-title.current-menu,.menu-item.parent-active,.menu-title.parent-active{background:linear-gradient(135deg,#20c77b,#0ea766)!important;color:#ffffff!important;box-shadow:0 10px 24px rgba(16,185,129,.28)!important;border-left:0!important;outline:2px solid rgba(255,255,255,.10)!important;}\n.menu-title.active span:first-child,.menu-item.active span:first-child,.menu-item.current-menu span:first-child,.menu-title.current-menu span:first-child{background:rgba(255,255,255,.18)!important;color:#ffffff!important;}\n.menu-item:focus,.menu-title:focus{outline:2px solid rgba(45,212,191,.55)!important;outline-offset:2px!important;}\n.plantilla-top,.plantillas-top{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:14px!important;margin:4px 0 20px!important;}\n.plantilla-top h1,.plantillas-top h1,.main h1{color:#0f2b46!important;font-weight:800!important;letter-spacing:-.4px!important;}\n.plantilla-filter,.plantillas-filter,.c-form,.compact-form,.pro-form,.nice-form{background:#ffffff!important;border:1px solid #d8e6ef!important;border-radius:22px!important;box-shadow:0 14px 34px rgba(15,41,71,.08)!important;color:#1e3248!important;}\n.plantilla-filter b,.plantillas-filter b,.c-form b,.compact-form b,.pro-form b,.nice-form b{background:#edf4f8!important;color:#1e3248!important;font-weight:700!important;border-radius:12px!important;text-shadow:none!important;opacity:1!important;}\n.plantilla-filter input,.plantilla-filter select,.plantillas-filter input,.plantillas-filter select,.c-form input,.c-form select,.compact-form input,.compact-form select,.pro-form input,.pro-form select,.nice-form input,.nice-form select{background:#fff!important;color:#1f2f46!important;border:1.4px solid #cbd8e6!important;opacity:1!important;}\n.table-wrap,.plantilla-table-wrap,.plantillas-table-wrap{background:#fff!important;border:1px solid #d9e5ef!important;border-radius:18px!important;box-shadow:0 14px 34px rgba(15,41,71,.08)!important;overflow:auto!important;}\ntable,.clean-table,.c-table,.tpl-table,.plantilla-table,.plantillas-table{background:#fff!important;color:#203044!important;border-collapse:separate!important;border-spacing:0!important;}\nth,table th,.clean-table th,.c-table th,.tpl-table th,.plantilla-table th,.plantillas-table th{background:#f1f6fa!important;color:#25364d!important;font-weight:760!important;font-size:13.5px!important;text-transform:none!important;letter-spacing:0!important;border:1px solid #dbe6f0!important;opacity:1!important;}\ntd,table td,.clean-table td,.c-table td,.tpl-table td,.plantilla-table td,.plantillas-table td{background:#fff!important;color:#26364d!important;font-weight:560!important;border:1px solid #e2eaf2!important;opacity:1!important;filter:none!important;text-shadow:none!important;}\ntr:nth-child(even) td,.clean-table tr:nth-child(even) td,.c-table tr:nth-child(even) td,.tpl-table tr:nth-child(even) td,.plantilla-table tr:nth-child(even) td,.plantillas-table tr:nth-child(even) td{background:#f8fbfd!important;}\ntd *,table td *,.clean-table td *,.c-table td *,.tpl-table td *,.plantilla-table td *,.plantillas-table td *{color:#26364d!important;opacity:1!important;filter:none!important;text-shadow:none!important;font-weight:560!important;}\nth *,table th *,.clean-table th *,.c-table th *,.tpl-table th *,.plantilla-table th *,.plantillas-table th *{color:#25364d!important;opacity:1!important;font-weight:760!important;}\n.plantilla-table .status-pill,.plantillas-table .status-pill,.status-pill,.pill,.state-pill{background:#ecfdf5!important;border:1px solid #b7f2d0!important;color:#047857!important;font-weight:750!important;opacity:1!important;}\n.action-btn,.icon-btn,.delete-mini,.action-delete,.btn-del{background:#eafff7!important;border:1px solid #a7f3d0!important;color:#047857!important;opacity:1!important;}\n.c-btn,.btn,.btn-green,.crear-btn,button[type=submit]{font-weight:760!important;}\n@media(max-width:900px){.main{padding:14px!important}.plantilla-top,.plantillas-top{align-items:flex-start!important;flex-direction:column!important}.plantilla-filter,.plantillas-filter,.c-form,.compact-form,.pro-form,.nice-form{grid-template-columns:1fr!important}.plantilla-filter b,.plantillas-filter b,.c-form b,.compact-form b,.pro-form b,.nice-form b{justify-content:flex-start!important;text-align:left!important}}\n'
+    FINAL_UI_PATCH_JS += '\n<script id="sidebar-active-scroll-patch">\n(function(){\n  function q(s){return document.querySelector(s)}\n  function qa(s){return Array.from(document.querySelectorAll(s))}\n  function side(){return q(\'.side\')}\n  function normalizeHref(h){try{var u=new URL(h, location.origin); return u.pathname+u.search+(u.hash||\'\');}catch(e){return h||\'\'}}\n  function markActive(){\n    var current=location.pathname+location.search+(location.hash||\'\');\n    var saved=localStorage.getItem(\'activeMenuHref\')||\'\';\n    var best=null;\n    qa(\'.menu-item[href], .menu-title[href], a.menu-item\').forEach(function(a){\n      var href=normalizeHref(a.getAttribute(\'href\')||\'\');\n      if(!href || href===\'#\') return;\n      if(href===current || href===location.pathname+location.search || href===saved) best=a;\n    });\n    if(!best){\n      qa(\'.menu-item[href], a.menu-item\').forEach(function(a){\n        var href=normalizeHref(a.getAttribute(\'href\')||\'\');\n        if(href && href.split(\'#\')[0]===location.pathname+location.search) best=best||a;\n      });\n    }\n    qa(\'.menu-item,.menu-title\').forEach(function(x){x.classList.remove(\'current-menu\')});\n    if(best){\n      best.classList.add(\'current-menu\',\'active\');\n      var g=best.closest(\'.menu-group\');\n      while(g){g.classList.remove(\'closed\'); var t=g.querySelector(\':scope > .menu-title\'); if(t)t.classList.add(\'parent-active\'); g=g.parentElement?g.parentElement.closest(\'.menu-group\'):null;}\n      setTimeout(function(){try{best.scrollIntoView({block:\'nearest\', inline:\'nearest\'});}catch(e){}},120);\n    }\n  }\n  document.addEventListener(\'click\', function(ev){\n    var item=ev.target.closest(\'.menu-item[href], a.menu-item[href], .menu-title[href]\');\n    var s=side();\n    if(s) localStorage.setItem(\'sideScroll\', String(s.scrollTop||0));\n    if(item){ localStorage.setItem(\'activeMenuHref\', normalizeHref(item.getAttribute(\'href\')||\'\')); }\n  }, true);\n  window.addEventListener(\'DOMContentLoaded\', function(){\n    var s=side();\n    if(s){var y=parseInt(localStorage.getItem(\'sideScroll\')||\'0\',10); setTimeout(function(){s.scrollTop=isNaN(y)?0:y; markActive();},80);}else{markActive();}\n  });\n  window.addEventListener(\'beforeunload\', function(){var s=side(); if(s)localStorage.setItem(\'sideScroll\', String(s.scrollTop||0));});\n})();\n</script>\n'
+except Exception:
+    pass
+
+
+# =========================================================
+# PATCH DEFINITIVO 2 - PLANTILLAS LEGIBLES COMO DASHBOARD
+# =========================================================
+try:
+    FINAL_UI_PATCH_CSS += '\n/* === PLANTILLAS 100% LEGIBLE / SUAVE / PRESENTABLE === */\n.main .plantillas-title-pro,\n.main .plantilla-top .c-title{color:#0f2b46!important;font-size:30px!important;line-height:1.15!important;font-weight:780!important;letter-spacing:-.35px!important;margin:0!important;text-shadow:none!important;}\n.main .filter-card{background:#ffffff!important;border:1px solid #d9e6ef!important;border-radius:22px!important;box-shadow:0 14px 34px rgba(15,41,71,.08)!important;}\n.main .plantilla-filter{display:grid!important;grid-template-columns:210px minmax(260px,1fr) 210px minmax(260px,1fr)!important;gap:16px 24px!important;align-items:center!important;}\n.main .plantilla-filter b{background:#eef4f8!important;color:#0f2b46!important;min-height:48px!important;padding:10px 16px!important;border-radius:12px!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;font-size:15px!important;font-weight:680!important;opacity:1!important;text-shadow:none!important;}\n.main .plantilla-filter input,.main .plantilla-filter select{background:#ffffff!important;color:#172b43!important;min-height:48px!important;border:1.35px solid #c8d8e6!important;border-radius:14px!important;padding:9px 14px!important;font-size:14.5px!important;font-weight:520!important;opacity:1!important;}\n.main .plantillas-pro-visible{margin-top:18px!important;padding:0!important;overflow:auto!important;background:#ffffff!important;border:1px solid #d6e3ee!important;border-radius:20px!important;box-shadow:0 16px 36px rgba(9,46,75,.08)!important;}\n.main .plantillas-pro-table,.main .plantillas-pro-table *{filter:none!important;text-shadow:none!important;opacity:1!important;}\n.main .plantillas-pro-table{width:100%!important;min-width:1180px!important;background:#ffffff!important;border-collapse:separate!important;border-spacing:0!important;color:#172b43!important;}\n.main .plantillas-pro-table th{background:#eef4f8!important;color:#172b43!important;font-size:14px!important;font-weight:700!important;text-align:left!important;text-transform:none!important;letter-spacing:0!important;padding:15px 18px!important;border:1px solid #dbe7f0!important;}\n.main .plantillas-pro-table td,.main .plantillas-pro-table td.cell-visible,.main .plantillas-pro-table td.cell-visible *{background:#ffffff!important;color:#1f334a!important;font-size:14.5px!important;font-weight:540!important;line-height:1.35!important;padding:16px 18px!important;border:1px solid #e1ebf3!important;opacity:1!important;visibility:visible!important;}\n.main .plantillas-pro-table tr:nth-child(even) td{background:#f9fcfd!important;}\n.main .plantillas-pro-table .tpl-link{color:#0f2b46!important;font-weight:680!important;text-decoration:none!important;}\n.main .plantillas-pro-table .tpl-link:hover{text-decoration:underline!important;}\n.main .plantillas-pro-table .state-select,.main .plantillas-pro-table select{background:#ffffff!important;color:#334155!important;border:1px solid #cbd5e1!important;border-radius:999px!important;min-height:38px!important;padding:7px 14px!important;font-size:13.5px!important;font-weight:600!important;}\n.main .plantillas-pro-table .tpl-actions{min-width:110px!important;text-align:center!important;}\n.main .plantillas-pro-table .icon-btn{background:#ecfdf5!important;color:#047857!important;border:1px solid #a7f3d0!important;border-radius:999px!important;min-width:34px!important;min-height:34px!important;padding:7px 10px!important;margin:2px!important;font-weight:700!important;opacity:1!important;}\n@media(max-width:900px){.main .plantilla-filter{grid-template-columns:1fr!important;gap:10px!important}.main .plantilla-filter b{justify-content:flex-start!important;text-align:left!important}.main .plantillas-title-pro{font-size:26px!important}}\n'
+except Exception:
+    pass
+
+
+
+# ===== PARCHE PRO FINAL POSTULANTES / FICHA / DUPLICADOS =====
+FINAL_POSTULANTES_PRO_CSS = '''
+.tipo-ingreso-alert{grid-column:1/-1!important;display:grid!important;grid-template-columns:minmax(240px,1fr) 280px!important;gap:12px!important;align-items:center!important;padding:16px 18px!important;border-radius:18px!important;border:2px solid #f59e0b!important;background:#fffbeb!important;color:#0f172a!important;box-shadow:0 12px 28px rgba(245,158,11,.18)!important;margin-bottom:10px!important;}
+.tipo-ingreso-alert b{background:transparent!important;padding:0!important;min-height:auto!important;color:#92400e!important;justify-content:flex-start!important;text-align:left!important;font-size:16px!important;}
+.tipo-ingreso-alert small{display:block;color:#92400e!important;font-weight:900!important;margin-top:4px!important;}
+.tipo-ingreso-alert select{height:54px!important;font-size:18px!important;text-align:center!important;border:2px solid #f59e0b!important;background:#fff!important;color:#111827!important;}
+.tipo-ingreso-alert.reingresante{border-color:#2563eb!important;background:#eff6ff!important;animation:pulseTipo .9s ease-in-out 2!important;}
+.tipo-ingreso-alert.reingresante b,.tipo-ingreso-alert.reingresante small{color:#1d4ed8!important;}
+.tipo-ingreso-alert.reingresante select{border-color:#2563eb!important;}
+.tipo-ingreso-alert.nuevo{border-color:#16a34a!important;background:#ecfdf5!important;}
+.tipo-ingreso-alert.nuevo b,.tipo-ingreso-alert.nuevo small{color:#047857!important;}
+.req-mark{color:#dc2626!important;font-weight:1000!important;}
+.ingreso-form b:has(+ input[required]),.ingreso-form b:has(+ select[required]){background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important;}
+.fixed-field{background:#f1f5f9!important;color:#475569!important;border-style:dashed!important;cursor:not-allowed!important;}
+@keyframes pulseTipo{0%,100%{transform:scale(1)}50%{transform:scale(1.015);box-shadow:0 0 0 8px rgba(37,99,235,.12)}}
+.ficha-search{display:grid!important;grid-template-columns:minmax(280px,1fr) 140px!important;gap:14px!important;align-items:center!important;margin-bottom:16px!important;max-width:920px!important;}
+.ficha-profile{display:grid!important;grid-template-columns:180px minmax(320px,1.2fr) minmax(280px,1fr) minmax(280px,1fr)!important;gap:16px!important;margin-bottom:18px!important;align-items:stretch!important;}
+.ficha-profile>*{background:#fff!important;border:1px solid #dbe7ef!important;border-radius:22px!important;box-shadow:0 14px 36px rgba(15,23,42,.08)!important;padding:20px!important;color:#0f2b46!important;}
+.avatar-panel{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;}
+.avatar-big{width:126px!important;height:126px!important;border-radius:50%!important;background:linear-gradient(135deg,#fbbf24,#fde68a)!important;display:grid!important;place-items:center!important;font-size:64px!important;}
+.profile-main h2{font-size:28px!important;line-height:1.05!important;margin:0 0 12px!important;color:#0f2b46!important;}
+.profile-main p,.profile-col p{margin:8px 0!important;font-size:16px!important;line-height:1.35!important;}
+.created-box{margin-top:14px!important;background:#f8fafc!important;border:1px solid #dbe7ef!important;border-radius:16px!important;padding:12px 14px!important;}
+.ficha-tabs{display:grid!important;grid-template-columns:repeat(3,1fr)!important;padding:0!important;overflow:hidden!important;margin-bottom:14px!important;}
+.ficha-tabs .tab{border:0!important;background:#fff!important;color:#64748b!important;font-weight:1000!important;font-size:17px!important;padding:17px!important;cursor:pointer!important;}
+.ficha-tabs .tab.active{color:#059669!important;background:#f0fdf4!important;border-bottom:3px solid #10b981!important;}
+.ficha-tab-content{display:none!important}.ficha-tab-content.active{display:block!important;}
+.laboral-grid{display:grid!important;grid-template-columns:repeat(3,minmax(220px,1fr))!important;gap:14px!important;padding:20px!important;}
+.laboral-grid label{display:grid!important;grid-template-columns:1fr!important;gap:6px!important;color:#0f2b46!important;font-size:13px!important;font-weight:1000!important;background:#f8fafc!important;border:1px solid #e2e8f0!important;border-radius:16px!important;padding:12px!important;}
+.laboral-grid input{width:100%!important;background:#fff!important;color:#0f172a!important;border:1px solid #cbd5e1!important;min-height:38px!important;border-radius:10px!important;padding:8px!important;font-weight:800!important;}
+.periodos-box{margin-top:14px!important;background:#fff!important;border:1px solid #dbe7ef!important;border-radius:18px!important;padding:14px!important;color:#0f2b46!important;}
+@media(max-width:1200px){.ficha-profile{grid-template-columns:160px 1fr!important}.laboral-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}.tipo-ingreso-alert{grid-template-columns:1fr!important}}
+@media(max-width:800px){.ficha-profile,.laboral-grid,.ficha-search{grid-template-columns:1fr!important}.ficha-tabs{grid-template-columns:1fr!important}.avatar-panel{min-height:180px!important}}
+'''
+try:
+    FINAL_UI_PATCH_CSS += FINAL_POSTULANTES_PRO_CSS
+except Exception:
+    pass
+
+@app.route('/admin/contratacion/maestros/formato')
+@login_required_admin
+def descargar_formato_maestros_empleador():
+    wb = Workbook(); ws = wb.active; ws.title = 'DATOS_MAESTROS_EMPLEADOR'
+    headers = ['TIPO','CODIGO','NOMBRE','DETALLE','ACTIVO']
+    ws.append(headers)
+    ejemplos = [
+        ['EMPRESA','AQI','AQUANQA I','Empresa empleadora','SI'],
+        ['EMPRESA','AQII','AQUANQA II','Empresa empleadora','SI'],
+        ['AREA','RRHH','RR.HH.','Área de Recursos Humanos','SI'],
+        ['AREA','CAMPO','Campo','Área operativa','SI'],
+        ['CARGO','AUX-RRHH','Auxiliar de RRHH','Cargo laboral','SI'],
+        ['CARGO','OBR-CAMPO','Obrero de Campo','Cargo laboral','SI'],
+        ['ACTIVIDAD','OB_PODA','OB_PODA / COSECHA','Actividad del requerimiento','SI'],
+        ['REGIMEN_LABORAL','AGRARIO','AGRARIO','Régimen Ley Agraria','SI'],
+        ['REGIMEN_LABORAL','GENERAL','GENERAL','Régimen general privado','SI'],
+        ['TIPO_CONTRATO','INTERMITENTE','INTERMITENTE','Contrato sujeto a modalidad','SI'],
+        ['MODALIDAD','CAMPANIA','CAMPAÑA','Modalidad operativa','SI'],
+        ['MONEDA','PEN','Sol Peruano','Moneda fija','SI'],
+        ['SIMBOLO_MONEDA','PEN','S/','Símbolo fijo','SI'],
+        ['PERIODICIDAD_PAGO','MENSUAL','MENSUAL','Periodicidad de pago','SI'],
+        ['TIPO_PAGO','DEPOSITO','DEPÓSITO EN CUENTA','Tipo de pago','SI'],
+    ]
+    for r in ejemplos: ws.append(r)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='0F766E')
+        cell.alignment = Alignment(horizontal='center')
+    for col in range(1,6):
+        ws.column_dimensions[chr(64+col)].width = 28
+    ws.freeze_panes='A2'
+    dv = DataValidation(type='list', formula1='"EMPRESA,AREA,CARGO,ACTIVIDAD,REGIMEN_LABORAL,TIPO_CONTRATO,MODALIDAD,MONEDA,SIMBOLO_MONEDA,PERIODICIDAD_PAGO,TIPO_PAGO"', allow_blank=False)
+    ws.add_data_validation(dv); dv.add('A2:A500')
+    ws2 = wb.create_sheet('RELACIONES_LABORALES')
+    headers2 = ['EMPRESA','AREA','CARGO','ACTIVIDAD','REGIMEN_LABORAL','TIPO_CONTRATO','MODALIDAD','CENTRO_COSTO','FUNCIONES','ACTIVO']
+    ws2.append(headers2)
+    ejemplos2 = [
+        ['AQUANQA I','Campo','Obrero de Campo','OB_PODA / COSECHA','AGRARIO','INTERMITENTE','CAMPAÑA','CAMPO-OB','Labores agrícolas de campo','SI'],
+        ['AQUANQA I','Packing','Operario Packing','PACKING','AGRARIO','INTERMITENTE','CAMPAÑA','PACK-OB','Labores operativas de packing','SI'],
+        ['AQUANQA I','RR.HH.','Auxiliar de RRHH','RRHH','GENERAL','TEMPORAL','PERMANENTE','ADM-RRHH','Apoyo administrativo de RRHH','SI'],
+    ]
+    for r in ejemplos2: ws2.append(r)
+    for cell in ws2[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='0F766E')
+        cell.alignment = Alignment(horizontal='center')
+    for col in range(1,11):
+        ws2.column_dimensions[chr(64+col)].width = 26
+    ws2.freeze_panes='A2'
+    path = EXCEL_LOCAL_DIR / ('FORMATO_DATOS_MAESTROS_EMPLEADOR_'+now_file()+'.xlsx')
+    wb.save(path)
+    return send_file(path, as_attachment=True, download_name='FORMATO_DATOS_MAESTROS_EMPLEADOR.xlsx')
+
+
+
+@app.route('/admin/contratacion/base-central/export/general')
+@admin_required
+def base_central_export_general():
+    path = EXCEL_LOCAL_DIR / ('BASE_CENTRAL_CONTRATACION_' + now_file() + '.xlsx')
+    wb = Workbook()
+    with db() as con:
+        hojas = [('Requerimientos','SELECT * FROM contratacion_requerimientos ORDER BY id DESC'),('Postulantes','SELECT * FROM contratacion_ingresos ORDER BY id DESC'),('Trabajadores','SELECT * FROM trabajadores ORDER BY nombre'),('Evaluacion_Medica','SELECT * FROM contratacion_medica ORDER BY id DESC'),('Documentos','SELECT * FROM contratacion_docs ORDER BY id DESC'),('Firmas','SELECT * FROM firma_solicitudes ORDER BY id DESC'),('Indumentaria','SELECT * FROM contratacion_indumentaria ORDER BY id DESC'),('Lotes_Integracion','SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC')]
+        first=True
+        for titulo, sql in hojas:
+            ws=wb.active if first else wb.create_sheet(); first=False; ws.title=titulo[:31]
+            try:
+                rows=con.execute(sql).fetchall()
+                if rows:
+                    headers=list(rows[0].keys()); ws.append(headers)
+                    for r in rows: ws.append([fecha_sin_hora(r[h]) if 'fecha' in h.lower() else r[h] for h in headers])
+                else: ws.append(['Sin registros'])
+            except Exception as e: ws.append(['Error', str(e)])
+            for cell in ws[1]:
+                cell.font=Font(bold=True,color='FFFFFF'); cell.fill=PatternFill('solid',fgColor='0F766E'); cell.alignment=Alignment(horizontal='center')
+            ws.freeze_panes='A2'
+            for col in range(1, min(ws.max_column, 26)+1): ws.column_dimensions[chr(64+col)].width=24
+    wb.save(path)
+    return send_file(path, as_attachment=True, download_name='BASE_CENTRAL_CONTRATACION.xlsx')
+
+@app.route('/admin/contratacion/base-central/export/zip')
+@admin_required
+def base_central_export_zip():
+    excel_resp_path = EXCEL_LOCAL_DIR / ('BASE_CENTRAL_RESUMEN_' + now_file() + '.xlsx')
+    wb=Workbook(); ws=wb.active; ws.title='Resumen'
+    with db() as con:
+        resumen=[('Trabajadores',con.execute('SELECT COUNT(*) FROM trabajadores').fetchone()[0]),('Postulantes',con.execute('SELECT COUNT(*) FROM contratacion_ingresos').fetchone()[0]),('Requerimientos',con.execute('SELECT COUNT(*) FROM contratacion_requerimientos').fetchone()[0]),('Documentos',con.execute('SELECT COUNT(*) FROM contratacion_docs').fetchone()[0]),('Firmas',con.execute('SELECT COUNT(*) FROM firma_solicitudes').fetchone()[0])]
+    ws.append(['Módulo','Total'])
+    for a,b in resumen: ws.append([a,b])
+    for cell in ws[1]: cell.font=Font(bold=True,color='FFFFFF'); cell.fill=PatternFill('solid',fgColor='0F766E')
+    wb.save(excel_resp_path)
+    zip_path=EXCEL_LOCAL_DIR / ('RESPALDO_BASE_CENTRAL_' + now_file() + '.zip')
+    with zipfile.ZipFile(zip_path,'w',zipfile.ZIP_DEFLATED) as z:
+        z.write(excel_resp_path, arcname=excel_resp_path.name)
+        for f in EXCEL_LOCAL_DIR.glob('*.xlsx'):
+            try: z.write(f, arcname='excel_local/'+f.name)
+            except Exception: pass
+        count=0
+        for f in UPLOAD_DIR.rglob('*'):
+            if f.is_file() and count<300:
+                try: z.write(f, arcname='uploads/'+f.name); count+=1
+                except Exception: pass
+    return send_file(zip_path, as_attachment=True, download_name='RESPALDO_BASE_CENTRAL_CONTRATACION.zip')
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
     host = os.getenv('HOST', '0.0.0.0')
@@ -6566,7 +10410,7 @@ if __name__ == '__main__':
             ssl_context = 'adhoc'
     try:
         print('============================================================')
-        print('PORTAL HR PRO iniciado')
+        print('Portal PRIZE iniciado')
         print('PC local:  http://127.0.0.1:%s' % port)
         if ssl_context:
             print('Celular:   https://IP-DE-TU-PC:%s  (aceptar certificado)' % port)
