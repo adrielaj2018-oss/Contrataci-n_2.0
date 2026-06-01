@@ -311,6 +311,11 @@ def clean(v):
     return str(v or "").strip()
 
 
+def h(v):
+    """Escape HTML seguro para plantillas render_template_string."""
+    return html.escape(str(v or ""))
+
+
 
 def fecha_sin_hora(v):
     """Muestra fechas sin 00:00:00, aceptando Excel datetime, ISO y texto dd/mm/aaaa."""
@@ -4350,13 +4355,21 @@ except Exception:
     pass
 # ======================= FIN PATCH UI FINAL 2026-05-28 =======================
 
+def safe_ia_widget_hr(active):
+    try:
+        return ia_widget_hr(active) if 'ia_widget_hr' in globals() else ''
+    except Exception as e:
+        print('IA widget deshabilitado temporalmente:', e)
+        return ''
+
+
 def render_page(content, title="Portal de Documentos PRIZE", active="Inicio"):
     user_label = session.get('admin_nombre') or session.get('nombre') or 'Usuario PRIZE'
     primer_nombre = user_label.split()[0] if user_label else 'Usuario'
     body = f'''
     <div class="mobile-head"><button class="toggle" onclick="toggleSide()">☰</button><b>PRIZE Documentos</b><a href="/logout">Salir</a></div>
     <div class="app"><aside class="side"><div class="side-top"><button class="toggle" title="Expandir / contraer panel" onclick="toggleSide()">☰</button><b class="label">PRIZE RRHH</b><button class="toggle" title="Expandir / contraer panel" onclick="toggleSide()">☰</button></div>
-      <div class="brand"><img src="{logo_url()}" alt="PRIZE"><p>Documentos PRIZE</p></div>{sidebar(active)}<div class="side-user"><div class="avatar">👤</div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}</main>{ia_widget_hr(active) if 'ia_widget_hr' in globals() else ''}
+      <div class="brand"><img src="{logo_url()}" alt="PRIZE"><p>Documentos PRIZE</p></div>{sidebar(active)}<div class="side-user"><div class="avatar">👤</div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}</main>{safe_ia_widget_hr(active)}
 <style id="iahr-inline-assets">
 .iahr-fab{{position:fixed;right:22px;bottom:22px;z-index:9998;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border-radius:999px;padding:13px 17px;box-shadow:0 18px 40px rgba(0,0,0,.28);display:flex;align-items:center;gap:8px;font-weight:900;cursor:pointer;border:1px solid rgba(255,255,255,.22)}}
 .iahr-fab i{{font-size:18px}}.iahr-panel{{position:fixed;right:22px;bottom:82px;width:min(430px,calc(100vw - 28px));max-height:70vh;z-index:9999;background:#fff;border:1px solid #d7e3ef;border-radius:20px;box-shadow:0 25px 70px rgba(15,23,42,.25);display:none;overflow:hidden}}.iahr-panel.open{{display:block}}.iahr-head{{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;background:linear-gradient(135deg,#064e3b,#111827);border-bottom:1px solid rgba(255,255,255,.08)}}.iahr-head b{{display:block;color:#fff}}.iahr-head small{{display:block;color:#bbf7d0;font-size:11px;margin-top:3px}}.iahr-head button{{background:rgba(255,255,255,.16);color:#fff;border:0;border-radius:10px;width:32px;height:32px;font-size:20px;cursor:pointer}}.iahr-body{{padding:14px;background:#fff}}.iahr-ex{{font-size:12px;color:#475569;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px;margin-bottom:10px}}.iahr-body textarea{{width:100%;height:92px;border-radius:14px;border:1px solid #cbd5e1;background:#fff;color:#0f172a;padding:12px;font-weight:700;resize:vertical}}.iahr-send{{width:100%;margin-top:10px;justify-content:center}}.iahr-respuesta{{margin-top:12px;max-height:310px;overflow:auto;background:#fff}}.ia-result{{border-radius:14px;padding:13px;border:1px solid #dbe7ef;background:#f8fafc;color:#0f172a}}.ia-result h3{{margin:0 0 8px;color:#0f172a}}.ia-result h4{{margin:10px 0 6px}}.ia-result p{{margin:7px 0;line-height:1.45}}.ia-result ul{{margin:8px 0 0 18px;padding:0}}.ia-result.ok{{border-color:#86efac;background:#f0fdf4}}.ia-result.warn{{border-color:#fde68a;background:#fffbeb}}.ia-result.bad{{border-color:#fecdd3;background:#fff1f2}}.ia-result.legal{{border-color:#93c5fd;background:#eff6ff}}.ia-result a{{color:#047857;font-weight:900}}.ia-result small,.ia-result .muted{{color:#64748b}}.ia-admin-form{{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}}.ia-admin-form textarea{{grid-column:1/-1;min-height:110px}}.ia-admin-form .full{{grid-column:1/-1}}.ia-table td{{vertical-align:top}}@media(max-width:700px){{.iahr-fab{{right:14px;bottom:14px}}.iahr-panel{{right:14px;bottom:72px}}}}
