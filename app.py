@@ -58,10 +58,10 @@ app = Flask(__name__)
 # Módulo de contratación deshabilitado por solicitud: se oculta del menú y se bloquea el acceso directo.
 @app.before_request
 def bloquear_modulo_contratacion_portal_hr():
-    # CORRECCIÓN: el módulo de contratación debe permanecer habilitado.
-    # Antes este bloque redirigía cualquier ruta que contenga "contratacion" hacia /admin,
-    # por eso la pantalla inicial aparecía y luego "desaparecía" al cambiar de pestaña.
-    return None
+    ruta = request.path.lower()
+    if ruta.startswith('/admin/contratacion') or ruta.startswith('/contratacion/') or ruta.startswith('/admin/firma') or ruta.startswith('/firma/') or 'contratacion' in ruta:
+        flash('El módulo de contratación fue retirado de PORTAL HR PRO.', 'ok')
+        return redirect(url_for('admin') if session.get('admin_id') else url_for('panel'))
 
 
 @app.after_request
@@ -3372,112 +3372,6 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
 .iahr-fab{position:fixed;right:22px;bottom:22px;z-index:9998;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border-radius:999px;padding:13px 17px;box-shadow:0 18px 40px rgba(0,0,0,.35);display:flex;align-items:center;gap:8px;font-weight:900;cursor:pointer;border:1px solid rgba(255,255,255,.22)}
 .iahr-fab i{font-size:18px}.iahr-panel{position:fixed;right:22px;bottom:82px;width:min(430px,calc(100vw - 28px));max-height:70vh;z-index:9999;background:#111827;border:1px solid rgba(148,163,184,.35);border-radius:20px;box-shadow:0 25px 70px rgba(0,0,0,.48);display:none;overflow:hidden}.iahr-panel.open{display:block}.iahr-head{display:flex;justify-content:space-between;align-items:center;padding:15px 16px;background:linear-gradient(135deg,#064e3b,#111827);border-bottom:1px solid rgba(255,255,255,.08)}.iahr-head b{display:block;color:#fff}.iahr-head small{display:block;color:#bbf7d0;font-size:11px;margin-top:3px}.iahr-head button{background:rgba(255,255,255,.12);color:#fff;border:0;border-radius:10px;width:32px;height:32px;font-size:20px;cursor:pointer}.iahr-body{padding:14px}.iahr-ex{font-size:12px;color:#cbd5e1;background:#0f172a;border:1px solid rgba(148,163,184,.25);border-radius:12px;padding:10px;margin-bottom:10px}.iahr-body textarea{width:100%;height:92px;border-radius:14px;border:1px solid #334155;background:#f8fafc;color:#0f172a;padding:12px;font-weight:700;resize:vertical}.iahr-send{width:100%;margin-top:10px;justify-content:center}.iahr-respuesta{margin-top:12px;max-height:310px;overflow:auto}.ia-result{border-radius:14px;padding:13px;border:1px solid rgba(148,163,184,.25);background:#0f172a;color:#e5e7eb}.ia-result h3{margin:0 0 8px;color:#fff}.ia-result h4{margin:10px 0 6px}.ia-result p{margin:7px 0;line-height:1.45}.ia-result ul{margin:8px 0 0 18px;padding:0}.ia-result.ok{border-color:rgba(34,197,94,.45);background:linear-gradient(135deg,rgba(6,78,59,.75),#0f172a)}.ia-result.warn{border-color:rgba(245,158,11,.5);background:linear-gradient(135deg,rgba(120,53,15,.58),#0f172a)}.ia-result.bad{border-color:rgba(239,68,68,.55);background:linear-gradient(135deg,rgba(127,29,29,.62),#0f172a)}.ia-result.legal{border-color:rgba(59,130,246,.55);background:linear-gradient(135deg,rgba(30,64,175,.58),#0f172a)}.ia-result a{color:#86efac;font-weight:900}.ia-result small,.ia-result .muted{color:#cbd5e1}.ia-admin-form{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}.ia-admin-form textarea{grid-column:1/-1;min-height:110px}.ia-admin-form .full{grid-column:1/-1}.ia-table td{vertical-align:top}@media(max-width:700px){.iahr-fab{right:14px;bottom:14px}.iahr-panel{right:14px;bottom:72px}}
 
-
-/* === CORRECCIÓN PRO: INICIO CONTRATACIÓN FIJO + DASHBOARD CLARO/COMPACTO ===
-   Evita que el panel inicial se vea como pantalla temporal.
-   Quita tarjetas negras grandes y deja métricas compactas, blancas y alineadas. */
-.admin-shell{max-width:1480px!important;margin:0 auto!important}
-.admin-header{margin-bottom:14px!important}
-.admin-title h1{font-size:28px!important;color:#08263d!important}
-.admin-title .role{color:#0ea35d!important;margin-bottom:16px!important}
-.admin-title p{color:#24364d!important;font-size:16px!important}
-.gestion-cards{
-  background:transparent!important;
-  border:0!important;
-  padding:0!important;
-  margin:10px 0 18px!important;
-  display:grid!important;
-  grid-template-columns:minmax(320px,680px)!important;
-  gap:14px!important;
-}
-.gestion-card{
-  min-height:118px!important;
-  padding:20px 22px!important;
-  border-radius:20px!important;
-  background:#ffffff!important;
-  border:1px solid #bdebdc!important;
-  box-shadow:0 14px 34px rgba(15,23,42,.08)!important;
-  display:flex!important;
-  align-items:center!important;
-  gap:18px!important;
-}
-.gestion-card h2{font-size:20px!important;margin:0 0 8px!important;color:#08263d!important}
-.gestion-card p{min-height:0!important;margin:0 0 12px!important;color:#607086!important;line-height:1.35!important}
-.gestion-icon{width:52px!important;height:52px!important;border-radius:14px!important;font-size:25px!important;box-shadow:0 12px 24px rgba(16,185,129,.16)!important}
-.gestion-card .btn-warn,.gestion-card .btn-green,.gestion-card .btn-blue{
-  padding:10px 18px!important;
-  min-width:160px!important;
-  height:42px!important;
-  border-radius:12px!important;
-  margin-top:0!important;
-}
-.dashboards-admin{
-  display:grid!important;
-  grid-template-columns:1fr!important;
-  gap:14px!important;
-  margin-top:14px!important;
-}
-.dashboard-panel{
-  padding:22px 24px!important;
-  border-radius:22px!important;
-  background:#ffffff!important;
-  border:1px solid #d9e6f0!important;
-  box-shadow:0 14px 34px rgba(15,23,42,.08)!important;
-}
-.dashboard-panel h2{
-  color:#08263d!important;
-  font-size:17px!important;
-  margin:0 0 14px!important;
-}
-.dashboard-panel .mini-grid{
-  display:grid!important;
-  grid-template-columns:repeat(3,minmax(180px,1fr))!important;
-  gap:12px!important;
-}
-.dash-metric{
-  min-height:64px!important;
-  padding:13px 14px!important;
-  background:#f8fbfd!important;
-  border:1px solid #dbe7f1!important;
-  border-radius:16px!important;
-  box-shadow:none!important;
-  color:#08263d!important;
-  display:block!important;
-  position:relative!important;
-}
-.dash-metric span{
-  display:block!important;
-  color:#607086!important;
-  font-size:12px!important;
-  margin-bottom:8px!important;
-  font-weight:900!important;
-}
-.dash-metric b{
-  color:#0b2f4a!important;
-  font-size:21px!important;
-  line-height:1!important;
-}
-.dash-metric .mi{
-  position:absolute!important;
-  right:14px!important;
-  top:50%!important;
-  bottom:auto!important;
-  transform:translateY(-50%)!important;
-  width:38px!important;
-  height:38px!important;
-  border-radius:12px!important;
-  background:linear-gradient(135deg,#16c172,#0ea35d)!important;
-  color:#06251a!important;
-  display:grid!important;
-  place-items:center!important;
-  font-size:17px!important;
-}
-.full-link{height:42px!important;margin-top:14px!important}
-@media(max-width:900px){
-  .gestion-cards,.dashboards-admin{grid-template-columns:1fr!important}
-  .dashboard-panel .mini-grid{grid-template-columns:1fr!important}
-  .gestion-card{align-items:flex-start!important}
-}
 </style>
 <script>
 function side(){return document.querySelector('.side')}
@@ -6356,16 +6250,6 @@ def admin_contratacion():
 body{background:#eef2f5!important;color:#0f172a!important;font-weight:700!important}.main{background:#eef2f5!important;color:#0f172a!important;padding:28px 30px!important}.card,.mini,.metric,.stat,.module-tile,.hero,.login-card{background:#fff!important;border:1px solid #dbe5ee!important;color:#0f172a!important;box-shadow:0 14px 36px rgba(15,23,42,.10)!important;border-radius:24px!important}.hero{padding:24px!important}.hero h1,.topbar h1,.card h2,.module-tile h2{color:#0f172a!important;font-weight:1000!important}.muted,.subtitle,.muted2{color:#5f6b7a!important}.btn-green,.btn-blue,.btn{background:linear-gradient(135deg,#19aa63,#0f8f55)!important;color:#fff!important;border:0!important;border-radius:14px!important;font-weight:1000!important;box-shadow:0 12px 24px rgba(22,163,74,.20)!important}.btn-red{border:0!important;border-radius:14px!important}.input,select,textarea,input[type=file]{background:#fff!important;color:#111827!important;border:1px solid #d5e1ec!important;border-radius:14px!important}.input:focus,select:focus,textarea:focus{border-color:#19aa63!important;box-shadow:0 0 0 4px rgba(22,163,74,.14)!important}table{color:#243042!important}th{background:#f3f7fb!important;color:#334155!important}td{border-bottom:1px solid #e5edf4!important}.table-wrap{background:#fff!important;border-radius:18px!important;border:1px solid #e3ebf2!important}.flash{background:#dff7e9!important;color:#064e3b!important;border-color:#9adbb8!important}.flash.err{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}
 .side{background:linear-gradient(180deg,#124f34,#0e322d 42%,#091827)!important;border-right:1px solid rgba(255,255,255,.10)!important;box-shadow:16px 0 36px rgba(15,23,42,.22)!important}.side-top{height:86px!important;background:#124f34!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.side-top b{color:#fff!important;font-size:18px!important}.brand{padding:22px 18px 18px!important;text-align:left!important}.brand img{display:none!important}.brand:before{content:'PORTAL HR PRO';display:block;color:#fff;font-size:22px;font-weight:1000;letter-spacing:.3px}.brand p{margin:4px 0 0!important;color:#d1fae5!important;font-size:13px!important;font-weight:900}.menu-title,.menu-item{background:transparent!important;border:0!important;color:#d7e1ea!important;box-shadow:none!important;border-radius:16px!important;margin:5px 8px!important;padding:15px 18px!important;font-weight:1000!important}.menu-title:hover,.menu-item:hover{background:rgba(255,255,255,.09)!important;color:#fff!important}.menu-item.active,.menu-title.active,.menu-group.force-open>.menu-title.active{background:linear-gradient(135deg,#17aa55,#158a48)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,0,0,.20)!important}.submenu{padding:4px 0 8px!important}.side-user{background:rgba(255,255,255,.10)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important}.side-user small{color:#b7f7d1!important}.mobile-head{background:#124f34!important;color:#fff!important}.app{background:#eef2f5!important}.app.side-collapsed{grid-template-columns:92px 1fr!important}.side.collapsed .brand:before{content:'HR';text-align:center;font-size:22px}.side.collapsed .brand{padding:18px 8px!important;text-align:center!important}
 .login-body{background:radial-gradient(circle at 9% 5%,rgba(34,197,94,.18) 0 19%,transparent 19.4%),radial-gradient(circle at 94% 0%,rgba(20,184,166,.18) 0 20%,transparent 20.4%),linear-gradient(180deg,#f8fafc 0%,#ecfdf5 100%)!important}.login-body:after{content:'';position:absolute;left:-4%;right:-4%;bottom:-6%;height:31%;background:linear-gradient(135deg,#22c55e,#064e3b);clip-path:polygon(0 38%,25% 22%,50% 15%,75% 25%,100% 35%,100% 100%,0 100%);z-index:0}.login-card{width:min(92vw,560px)!important;padding:88px 56px 34px!important;overflow:visible!important;text-align:left!important;background:rgba(255,255,255,.96)!important;position:relative!important;z-index:2!important}.login-card:before{content:'👥'!important;position:absolute!important;left:50%!important;top:-68px!important;transform:translateX(-50%)!important;width:136px!important;height:136px!important;border-radius:50%!important;background:#fff!important;border:1px solid #dbe5ee!important;color:#149459!important;display:grid!important;place-items:center!important;font-size:52px!important;box-shadow:0 22px 55px rgba(15,23,42,.13)!important}.login-card:after{display:none!important}.login-logo{display:none!important}.login-title h1{color:#1f2937!important;font-size:42px!important;letter-spacing:1px!important}.login-title b{color:#64748b!important;font-size:17px!important}.login-title:after{content:'';display:block;margin:20px auto 0;width:62px;height:4px;border-radius:999px;background:#10b981}.login-input{background:#eaf2ff!important;border:1px solid #cfe0f2!important;border-radius:16px!important;padding:0 14px!important;margin-bottom:20px!important;color:#149459!important}.login-input input,.login-input select{background:transparent!important;color:#0f172a!important;border:0!important}.login-input input::placeholder{color:#64748b!important}.login-card .field label{display:block!important;color:#111827!important;margin:10px 0 8px;font-weight:1000}.login-card .btn-green{width:100%!important;margin:0 0 28px!important;font-size:20px!important;border-radius:16px!important;padding:17px!important}.login-links{margin-top:0!important;padding-bottom:0!important}.login-links a{color:#64748b!important}.contract-detail-wrap,.contract-detail-wrap *{color:#0f172a!important}
-/* Contratación: métricas/tarjetas claras y compactas */
-.c-card,.filter-card,.table-wrap{background:#fff!important;color:#0f172a!important;border:1px solid #dbe5ee!important;box-shadow:0 12px 30px rgba(15,23,42,.08)!important}
-.c-title,h1,h2,h3{color:#0f172a!important}
-.c-table th{background:#f3f7fb!important;color:#334155!important}
-.c-table td{background:#fff!important;color:#243042!important}
-.c-table tr:nth-child(even) td{background:#f8fafc!important}
-.tile-grid{gap:16px!important;margin:18px 0!important;max-width:100%!important}
-.c-tile{min-height:120px!important;padding:18px!important;border-radius:18px!important;background:#fff!important}
-.tile-icon{width:54px!important;height:54px!important;font-size:26px!important}
-.metric,.stat,.dash-metric{background:#f8fbfd!important;color:#0f172a!important;border:1px solid #dbe5ee!important;min-height:64px!important}
 
 </style>"""
     def wrap(inner):
