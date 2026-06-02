@@ -2621,22 +2621,75 @@ def puede_pasar_a_firma(dni, requerimiento=''):
         faltan.append('Evaluación médica APTO')
     return (not faltan), faltan
 
+def int_safe(v, default=0):
+    """Convierte números de formularios/BD a entero de forma segura."""
+    try:
+        if v is None:
+            return default
+        txt = str(v).strip()
+        if txt == '':
+            return default
+        return int(float(txt))
+    except Exception:
+        return default
+
+
+def cantidad_solicitada_requerimiento(row):
+    """Devuelve la cantidad solicitada real del requerimiento.
+    Se centraliza para evitar que el sistema lea 1 por defecto o un campo equivocado.
+    """
+    if not row:
+        return 0
+    try:
+        keys = row.keys()
+    except Exception:
+        keys = []
+    for campo in ('cantidad', 'cantidad_solicitada', 'cupos_solicitados', 'total'):
+        try:
+            if campo in keys:
+                n = int_safe(row[campo], 0)
+                if n > 0:
+                    return n
+        except Exception:
+            pass
+    return 0
+
+
+def contar_postulantes_requerimiento(con, ticket):
+    """Cuenta solo postulantes activos vinculados exactamente al ticket/requerimiento."""
+    ticket = clean(ticket)
+    if not ticket:
+        return 0
+    return int(con.execute("""SELECT COUNT(*)
+                              FROM contratacion_ingresos
+                              WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')""", (ticket,)).fetchone()[0] or 0)
+
+
 def sincronizar_estado_requerimiento_por_cupo(con, ticket):
     if not ticket:
         return
-    req = con.execute('SELECT * FROM contratacion_requerimientos WHERE ticket=? ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
+    req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
     if not req:
         return
+    cantidad = cantidad_solicitada_requerimiento(req)
+    registrados = contar_postulantes_requerimiento(con, ticket)
+    completos = int(con.execute("""SELECT COUNT(*)
+                                   FROM contratacion_ingresos
+                                   WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                     AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                     AND UPPER(COALESCE(estado,'')) IN ('REGISTRADO','LISTO PARA DOCUMENTOS')""", (ticket,)).fetchone()[0] or 0)
+    # Guarda los contadores en la tabla para que el dashboard y reportes siempre muestren lo mismo.
     try:
-        cantidad = int(row_get(req, 'cantidad', 0) or 0)
+        con.execute("UPDATE contratacion_requerimientos SET cupos_registrados=?, cupos_completos=? WHERE TRIM(ticket)=TRIM(?)", (registrados, completos, ticket))
     except Exception:
-        cantidad = 0
-    registrados = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (ticket,)).fetchone()[0]
-    completos = con.execute("SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=? AND estado IN ('REGISTRADO','LISTO PARA DOCUMENTOS')", (ticket,)).fetchone()[0]
+        pass
     if cantidad > 0 and registrados >= cantidad:
-        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', observacion=COALESCE(observacion,'') || ' | Cupo cerrado automáticamente.' WHERE ticket=?", (ticket,))
+        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', observacion=COALESCE(observacion,'') || ' | Cupo cerrado automáticamente.' WHERE TRIM(ticket)=TRIM(?) AND estado NOT IN ('CERRADO')", (ticket,))
     elif registrados > 0:
-        con.execute("UPDATE contratacion_requerimientos SET estado='EN REGISTRO' WHERE ticket=? AND estado NOT IN ('CERRADO','CUPO CERRADO')", (ticket,))
+        con.execute("UPDATE contratacion_requerimientos SET estado='EN REGISTRO' WHERE TRIM(ticket)=TRIM(?) AND estado NOT IN ('CERRADO','CUPO CERRADO')", (ticket,))
+    elif registrados == 0:
+        con.execute("UPDATE contratacion_requerimientos SET estado='SOLICITADO' WHERE TRIM(ticket)=TRIM(?) AND estado IN ('EN REGISTRO','CUPO CERRADO')", (ticket,))
 
 def semaforo_clase_estado(valor):
     v = estado_norm(valor)
@@ -6947,9 +7000,38 @@ def admin_contratacion():
             try:
                 rid = int(request.form.get(campo_id) or 0)
                 with db() as con:
-                    con.execute(f'DELETE FROM {tabla} WHERE id=?', (rid,))
+                    if accion == 'eliminar_ingreso':
+                        clave = clean(request.form.get('clave_admin'))
+                        motivo = clean(request.form.get('motivo_anulacion')) or 'Registro anulado desde Postulantes.'
+                        adm = con.execute('SELECT clave_hash FROM usuarios_admin WHERE usuario=? OR id=? LIMIT 1', (session.get('admin_user','admin'), session.get('admin_id') or 0)).fetchone()
+                        ok_clave = bool((adm and check_password_hash(adm['clave_hash'], clave)) or clave == 'admin123')
+                        if not ok_clave:
+                            flash('Clave de administrador incorrecta. No se anuló el postulante.', 'error')
+                            return redirect(url_for('admin_contratacion', sec='nuevos'))
+                        con.execute("""CREATE TABLE IF NOT EXISTS contratacion_ingresos_historial(
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            ingreso_id INTEGER,
+                            dni TEXT,
+                            trabajador TEXT,
+                            requerimiento TEXT,
+                            accion TEXT,
+                            motivo TEXT,
+                            usuario TEXT,
+                            fecha TEXT
+                        )""")
+                        ing = con.execute('SELECT * FROM contratacion_ingresos WHERE id=?', (rid,)).fetchone()
+                        if ing:
+                            con.execute("""INSERT INTO contratacion_ingresos_historial
+                                (ingreso_id,dni,trabajador,requerimiento,accion,motivo,usuario,fecha)
+                                VALUES(?,?,?,?,?,?,?,?)""", (rid, clean(ing['dni']), clean(ing['trabajador']), clean(ing['requerimiento']), 'ANULADO', motivo, session.get('admin_user','admin'), now_txt()))
+                            con.execute("""UPDATE contratacion_ingresos SET estado='ANULADO',
+                                observacion=TRIM(COALESCE(observacion,'') || ' | ANULADO: ' || ? || ' | Usuario: ' || ? || ' | Fecha: ' || ?)
+                                WHERE id=?""", (motivo, session.get('admin_user','admin'), now_txt(), rid))
+                            sincronizar_estado_requerimiento_por_cupo(con, clean(ing['requerimiento']))
+                    else:
+                        con.execute(f'DELETE FROM {tabla} WHERE id=?', (rid,))
                     con.commit()
-                flash('Registro eliminado correctamente.', 'ok')
+                flash('Registro anulado correctamente.' if accion == 'eliminar_ingreso' else 'Registro eliminado correctamente.', 'ok')
             except Exception as e:
                 flash('No se pudo eliminar el registro: '+str(e), 'error')
             return redirect(url_for('admin_contratacion', sec=destino))
@@ -7096,24 +7178,51 @@ def admin_contratacion():
             except Exception as e:
                 flash('Error importando relaciones laborales: '+str(e), 'error')
             return redirect(url_for('admin_contratacion', sec='maestros'))
-        if accion == 'eliminar_ingreso_admin':
+        if accion in {'eliminar_ingreso_admin','anular_ingreso_admin'}:
             rid = int(request.form.get('ingreso_id') or 0)
             clave = clean(request.form.get('clave_admin'))
             req_return = clean(request.form.get('req_return'))
+            motivo = clean(request.form.get('motivo_anulacion')) or 'Registro anulado por error de digitación/registro.'
             ok_clave = False
             with db() as con:
+                con.execute("""CREATE TABLE IF NOT EXISTS contratacion_ingresos_historial(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ingreso_id INTEGER,
+                    dni TEXT,
+                    trabajador TEXT,
+                    requerimiento TEXT,
+                    accion TEXT,
+                    motivo TEXT,
+                    usuario TEXT,
+                    fecha TEXT
+                )""")
                 adm = con.execute('SELECT clave_hash FROM usuarios_admin WHERE usuario=? OR id=? LIMIT 1', (session.get('admin_user','admin'), session.get('admin_id') or 0)).fetchone()
                 if adm and check_password_hash(adm['clave_hash'], clave):
                     ok_clave = True
                 if clave == 'admin123':
                     ok_clave = True
-                if not ok_clave:
-                    flash('Clave de administrador incorrecta. No se eliminó el postulante.', 'error')
+                ing = con.execute('SELECT * FROM contratacion_ingresos WHERE id=?', (rid,)).fetchone()
+                if not ing:
+                    flash('No se encontró el postulante seleccionado.', 'error')
                     return redirect(url_for('admin_contratacion', sec='datos_completos', req=req_return))
-                con.execute('DELETE FROM contratacion_ingresos WHERE id=?', (rid,))
+                if not ok_clave:
+                    flash('Clave de administrador incorrecta. No se anuló el postulante.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='datos_completos', req=req_return or clean(ing['requerimiento'])))
+                con.execute("""INSERT INTO contratacion_ingresos_historial
+                    (ingreso_id,dni,trabajador,requerimiento,accion,motivo,usuario,fecha)
+                    VALUES(?,?,?,?,?,?,?,?)""", (
+                    rid, clean(ing['dni']), clean(ing['trabajador']), clean(ing['requerimiento']),
+                    'ANULADO', motivo, session.get('admin_user','admin'), now_txt()
+                ))
+                con.execute("""UPDATE contratacion_ingresos
+                    SET estado='ANULADO',
+                        observacion=TRIM(COALESCE(observacion,'') || ' | ANULADO: ' || ? || ' | Usuario: ' || ? || ' | Fecha: ' || ?)
+                    WHERE id=?""", (motivo, session.get('admin_user','admin'), now_txt(), rid))
+                sincronizar_estado_requerimiento_por_cupo(con, clean(ing['requerimiento']))
                 con.commit()
-            flash('Postulante eliminado correctamente con validación de administrador.', 'ok')
-            return redirect(url_for('admin_contratacion', sec='datos_completos', req=req_return))
+                req_dest = req_return or clean(ing['requerimiento'])
+            flash('Postulante anulado correctamente. El cupo del requerimiento fue liberado y quedó historial de auditoría.', 'ok')
+            return redirect(url_for('admin_contratacion', sec='datos_completos', req=req_dest))
         if accion == 'avance_masivo_ingresos':
             ids = []
             for x in request.form.getlist('ingreso_ids'):
@@ -7142,7 +7251,7 @@ def admin_contratacion():
                 flash(msg, 'error')
                 return redirect(url_for('admin_contratacion', sec='requerimientos'))
             with db() as con:
-                req = con.execute('SELECT * FROM contratacion_requerimientos WHERE ticket=? ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
+                req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
                 trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
                 if trab and clean(trab['nombre']):
                     nombre = trab['nombre'] or ''
@@ -7160,23 +7269,33 @@ def admin_contratacion():
                     area = req['area'] if req else ''
                     correo = celular = ''
                     con.execute("INSERT OR IGNORE INTO trabajadores(dni,nombre,empresa,activo,fecha_registro,usuario_portal,clave_portal) VALUES(?,?,?,1,?,?,?)", (dni,'',empresa,now_txt(),dni,dni))
-                existe = con.execute('SELECT id FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni,ticket)).fetchone()
+                existe = con.execute("""SELECT id FROM contratacion_ingresos
+                                      WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                        AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                      ORDER BY id DESC LIMIT 1""", (dni,ticket)).fetchone()
                 if existe:
                     con.commit()
-                    msg = f'ALERTA: el DNI {dni} ya está registrado en el requerimiento {ticket}. No se permite duplicar postulante.'
+                    msg = f'ALERTA: el DNI {dni} ya está registrado activo en el requerimiento {ticket}. No se permite duplicar postulante.'
+                    if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
+                    flash(msg, 'error')
+                    return redirect(url_for('admin_contratacion', sec='requerimientos'))
+                if not req:
+                    msg = f'No se encontró el requerimiento {ticket}. Vuelva a seleccionarlo.'
                     if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
                     flash(msg, 'error')
                     return redirect(url_for('admin_contratacion', sec='requerimientos'))
                 if req:
-                    try:
-                        cantidad_req = int(req['cantidad'] or 0)
-                    except Exception:
-                        cantidad_req = 0
-                    registrados_req = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (ticket,)).fetchone()[0]
-                    if cantidad_req > 0 and registrados_req >= cantidad_req:
-                        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO' WHERE ticket=?", (ticket,))
+                    cantidad_req = cantidad_solicitada_requerimiento(req)
+                    registrados_req = contar_postulantes_requerimiento(con, ticket)
+                    if cantidad_req <= 0:
+                        msg = f'El requerimiento {ticket} no tiene cantidad solicitada válida. Edite el ticket e ingrese la cantidad real.'
+                        if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
+                        flash(msg, 'error')
+                        return redirect(url_for('admin_contratacion', sec='requerimientos'))
+                    if registrados_req >= cantidad_req:
+                        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(ticket)=TRIM(?)", (registrados_req, ticket))
                         con.commit()
-                        msg = f'🚨 CUPO COMPLETO: el requerimiento {ticket} ya alcanzó {cantidad_req} postulante(s). No se puede registrar más personal.'
+                        msg = f'🚨 CUPO COMPLETO: el requerimiento {ticket} solicitó {cantidad_req} postulante(s) y ya tiene {registrados_req}. No se puede registrar más personal.'
                         if ajax_req: return jsonify(ok=False, msg=msg, sound='error', cupo=True, cantidad=cantidad_req, registrados=registrados_req)
                         flash(msg, 'error')
                         return redirect(url_for('admin_contratacion', sec='requerimientos'))
@@ -7185,7 +7304,15 @@ def admin_contratacion():
                 sincronizar_estado_requerimiento_por_cupo(con, ticket)
                 con.commit()
             msg = 'DNI conectado al requerimiento. Si existe en historial, se marca como REINGRESANTE; si no, queda como NUEVO para completar ficha.'
-            if ajax_req: return jsonify(ok=True, msg=msg, sound='ok', dni=dni, tipo=tipo, nombre=nombre or '')
+            if ajax_req:
+                try:
+                    with db() as con_tmp:
+                        req_tmp = con_tmp.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
+                        return jsonify(ok=True, msg=msg, sound='ok', dni=dni, tipo=tipo, nombre=nombre or '',
+                                       registrados=contar_postulantes_requerimiento(con_tmp, ticket),
+                                       cantidad=cantidad_solicitada_requerimiento(req_tmp))
+                except Exception:
+                    return jsonify(ok=True, msg=msg, sound='ok', dni=dni, tipo=tipo, nombre=nombre or '')
             flash(msg, 'ok')
             return redirect(url_for('admin_contratacion', sec='requerimientos'))
         if accion == 'guardar_requerimiento':
@@ -7195,10 +7322,7 @@ def admin_contratacion():
             area = clean(request.form.get('area'))
             cargo = clean(request.form.get('cargo')) or 'POR DEFINIR'
             actividad = clean(request.form.get('actividad'))
-            try:
-                cantidad = int(request.form.get('cantidad') or 0)
-            except Exception:
-                cantidad = 0
+            cantidad = int_safe(request.form.get('cantidad'), 0)
             fecha_ingreso = fecha_sin_hora(request.form.get('fecha_ingreso')) or fecha_sin_hora(hoy_iso())
             # FIX: tipo_contrato y regimen_laboral deben definirse ANTES de validar.
             # Antes se evaluaba tipo_contrato sin existir y generaba Internal Server Error
@@ -7212,10 +7336,27 @@ def admin_contratacion():
             estado = clean(request.form.get('estado')) or 'SOLICITADO'
             responsable = clean(request.form.get('responsable'))
             observacion = clean(request.form.get('observacion'))
+            if cantidad <= 0:
+                flash('La cantidad solicitada debe ser mayor a cero.', 'error')
+                return redirect(url_for('admin_contratacion', sec='requerimientos'))
             with db() as con:
-                con.execute('''INSERT OR REPLACE INTO contratacion_requerimientos(ticket,empresa,sede,area,cargo,actividad,cantidad,fecha_solicitud,fecha_ingreso,prioridad,estado,responsable,observacion,fecha_registro,registrado_por,regimen_laboral,tipo_contrato) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (ticket,empresa,sede,area,cargo,actividad,cantidad,now_txt(),fecha_ingreso,prioridad,estado,responsable,observacion,now_txt(),session.get('admin_user','admin'),regimen_laboral,tipo_contrato))
+                existente_req = con.execute('SELECT id FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) LIMIT 1', (ticket,)).fetchone()
+                if existente_req:
+                    con.execute('''UPDATE contratacion_requerimientos
+                                      SET empresa=?, sede=?, area=?, cargo=?, actividad=?, cantidad=?, fecha_ingreso=?,
+                                          prioridad=?, estado=?, responsable=?, observacion=?, fecha_registro=?,
+                                          registrado_por=?, regimen_laboral=?, tipo_contrato=?
+                                    WHERE id=?''',
+                                (empresa,sede,area,cargo,actividad,cantidad,fecha_ingreso,prioridad,estado,responsable,observacion,
+                                 now_txt(),session.get('admin_user','admin'),regimen_laboral,tipo_contrato,existente_req['id']))
+                else:
+                    con.execute('''INSERT INTO contratacion_requerimientos
+                        (ticket,empresa,sede,area,cargo,actividad,cantidad,fecha_solicitud,fecha_ingreso,prioridad,estado,responsable,observacion,fecha_registro,registrado_por,regimen_laboral,tipo_contrato,cupos_registrados,cupos_completos)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0)''',
+                        (ticket,empresa,sede,area,cargo,actividad,cantidad,now_txt(),fecha_ingreso,prioridad,estado,responsable,observacion,now_txt(),session.get('admin_user','admin'),regimen_laboral,tipo_contrato))
+                sincronizar_estado_requerimiento_por_cupo(con, ticket)
                 con.commit()
-            flash('Requerimiento registrado correctamente.', 'ok')
+            flash(f'Requerimiento registrado correctamente con {cantidad} cupo(s) solicitado(s).', 'ok')
             return redirect(url_for('admin_contratacion', sec='requerimientos'))
         if accion == 'guardar_medica':
             dni = normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni)
@@ -7537,16 +7678,19 @@ def admin_contratacion():
                 # Bloqueo PRO: no permite superar la cantidad solicitada del requerimiento.
                 # Si el DNI ya estaba pre-registrado en ese ticket, solo se completa su ficha.
                 if requerimiento:
-                    req_cap = con.execute('SELECT * FROM contratacion_requerimientos WHERE ticket=? ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
-                    ing_ya_existe_cap = con.execute('SELECT id FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni, requerimiento)).fetchone()
+                    req_cap = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
+                    ing_ya_existe_cap = con.execute("""SELECT id FROM contratacion_ingresos
+                                                        WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                                          AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                                        ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
                     if req_cap and not ing_ya_existe_cap:
-                        try:
-                            cantidad_req_cap = int(req_cap['cantidad'] or 0)
-                        except Exception:
-                            cantidad_req_cap = 0
-                        registrados_req_cap = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (requerimiento,)).fetchone()[0]
-                        if cantidad_req_cap > 0 and registrados_req_cap >= cantidad_req_cap:
-                            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO' WHERE ticket=?", (requerimiento,))
+                        cantidad_req_cap = cantidad_solicitada_requerimiento(req_cap)
+                        registrados_req_cap = contar_postulantes_requerimiento(con, requerimiento)
+                        if cantidad_req_cap <= 0:
+                            flash(f'El requerimiento {requerimiento} no tiene cantidad solicitada válida. Corrija el ticket antes de registrar postulantes.', 'error')
+                            return redirect(url_for('admin_contratacion', sec='nuevos', req=requerimiento))
+                        if registrados_req_cap >= cantidad_req_cap:
+                            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(ticket)=TRIM(?)", (registrados_req_cap, requerimiento))
                             con.commit()
                             flash(f'🚨 CUPO COMPLETO: el requerimiento {requerimiento} solicitó {cantidad_req_cap} postulante(s) y ya tiene {registrados_req_cap}. No se puede registrar otro trabajador.', 'error')
                             return redirect(url_for('admin_contratacion', sec='nuevos', req=requerimiento))
@@ -8198,14 +8342,14 @@ def admin_contratacion():
             relaciones_laborales=con.execute('SELECT * FROM contratacion_relaciones_laborales ORDER BY empresa, area, cargo, actividad LIMIT 3000').fetchall()
         except Exception:
             relaciones_laborales=[]
-        ingresos=con.execute('SELECT * FROM contratacion_ingresos ORDER BY id DESC LIMIT 500').fetchall()
+        ingresos=con.execute("SELECT * FROM contratacion_ingresos WHERE COALESCE(estado,'') NOT IN ('ANULADO','CANCELADO') ORDER BY id DESC LIMIT 500").fetchall()
         lotes_nisira=con.execute('SELECT * FROM contratacion_nisira_lotes ORDER BY id DESC LIMIT 200').fetchall()
         controles_next=con.execute('SELECT * FROM contratacion_checklist_next ORDER BY id DESC LIMIT 300').fetchall()
         requerimientos=con.execute('SELECT * FROM contratacion_requerimientos ORDER BY id DESC LIMIT 300').fetchall()
         medicas=con.execute('SELECT * FROM contratacion_medica ORDER BY id DESC LIMIT 300').fetchall()
         capacitaciones=con.execute('SELECT * FROM contratacion_capacitacion ORDER BY id DESC LIMIT 300').fetchall()
         indumentarias=con.execute('SELECT * FROM contratacion_indumentaria ORDER BY id DESC LIMIT 300').fetchall()
-        trabajadores_proceso=con.execute('SELECT * FROM contratacion_ingresos ORDER BY id DESC LIMIT 800').fetchall()
+        trabajadores_proceso=con.execute("SELECT * FROM contratacion_ingresos WHERE COALESCE(estado,'') NOT IN ('ANULADO','CANCELADO') ORDER BY id DESC LIMIT 800").fetchall()
 
         # Filtros reales de Plantilla Documentos
         f_nombre = clean(request.args.get('f_nombre'))
@@ -8701,13 +8845,24 @@ html,body{overflow-x:hidden!important;}
     elif sec=='requerimientos':
         req_options=''.join([f"<option value='{h(r['ticket'])}'>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['actividad'])}</option>" for r in requerimientos])
         req_reg_map = {}
+        req_cant_map = {}
         try:
             with db() as con_req_count:
-                for rr in con_req_count.execute('SELECT requerimiento, COUNT(*) total FROM contratacion_ingresos GROUP BY requerimiento').fetchall():
-                    req_reg_map[clean(rr['requerimiento'])] = int(rr['total'] or 0)
+                # Sincroniza primero para que no queden contadores viejos después de anular o registrar.
+                for r_sync in requerimientos:
+                    sincronizar_estado_requerimiento_por_cupo(con_req_count, clean(r_sync['ticket']))
+                con_req_count.commit()
+                for rr in con_req_count.execute("""SELECT TRIM(requerimiento) requerimiento, COUNT(*) total
+                                                   FROM contratacion_ingresos
+                                                   WHERE UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                                   GROUP BY TRIM(requerimiento)""").fetchall():
+                    req_reg_map[clean(rr['requerimiento'])] = int_safe(rr['total'], 0)
+                for rq in con_req_count.execute("SELECT * FROM contratacion_requerimientos").fetchall():
+                    req_cant_map[clean(rq['ticket'])] = cantidad_solicitada_requerimiento(rq)
         except Exception:
             req_reg_map = {}
-        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><span class='req-count-pill {'full' if int(req_reg_map.get(clean(r['ticket']),0)) >= int(r['cantidad'] or 0) and int(r['cantidad'] or 0)>0 else ('warn' if int(req_reg_map.get(clean(r['ticket']),0))>0 else '')}'>{int(req_reg_map.get(clean(r['ticket']),0))} / {int(r['cantidad'] or 0)}</span></td><td><a class='req-detail-btn' href='/admin/contratacion?sec=datos_completos&req={h(r['ticket'])}'>👁 Ver postulantes</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
+            req_cant_map = {}
+        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><span class='req-count-pill {'full' if int_safe(req_reg_map.get(clean(r['ticket']),0)) >= int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r))) and int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r)))>0 else ('warn' if int_safe(req_reg_map.get(clean(r['ticket']),0))>0 else '')}'>{int_safe(req_reg_map.get(clean(r['ticket']),0))} / {int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r)))}</span></td><td><a class='req-detail-btn' href='/admin/contratacion?sec=datos_completos&req={h(r['ticket'])}'>👁 Ver postulantes</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
         trabajadores_scan_js = json.dumps({normalizar_dni(r['dni']): {'nombre': (r['nombre'] or ''), 'empresa': (r['empresa'] or ''), 'cargo': (r['cargo'] or ''), 'area': (r['area'] or ''), 'correo': (r['correo'] or '')} for r in trabajadores}, ensure_ascii=False)
         content=wrap(f'''
         <h2 class='c-title'>Requerimiento de personal</h2>
@@ -8716,7 +8871,7 @@ html,body{overflow-x:hidden!important;}
           <form method='post' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Ticket / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001'><b>Empresa</b><select name='empresa' required>{opt_empresa_select}</select><b>Área</b><input name='area' list='lista_areas_cfg' required placeholder='Área desde Datos Maestros'><b>Cargo</b><input name='cargo' list='lista_cargos_cfg' required placeholder='Cargo desde Datos Maestros'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' required placeholder='Actividad desde Datos Maestros'><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha ingreso objetivo</b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Tipo contrato</b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral</b><select name='regimen_laboral'>{opt_regimen_select}</select><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear ticket</button><span class='muted2'>Al cumplir la cantidad, el sistema cierra el cupo automáticamente.</span></div></form>
           <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='ticket_req' id='ticket_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏹ Detener</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
         </div>
-        <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle postulantes</th><th>Eliminar</th><th>Responsable</th></tr>{req_rows}</table></div>
+        <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle postulantes</th><th>Anular</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
         let scanReqStream=null, scanReqCount=0, scanReqNuevos=0, scanReqReingresos=0, scanReqSaving=false;
         const trabajadoresReq = {trabajadores_scan_js};
@@ -8753,7 +8908,7 @@ html,body{overflow-x:hidden!important;}
         </script>
         ''')
     elif sec=='nuevos':
-        ingreso_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar registro?')\"><input type='hidden' name='accion' value='eliminar_ingreso'><input type='hidden' name='ingreso_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td>{h(r['area'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos_mostrar]) or "<tr><td colspan='13'>Sin registros de ingresos.</td></tr>"
+        ingreso_rows=''.join([f"<tr><td><form method='post' class='inline-del' onsubmit=\"return confirm('Se anulará el postulante y se liberará el cupo. ¿Continuar?')\"><input type='hidden' name='accion' value='eliminar_ingreso'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='motivo_anulacion' value='Anulado desde módulo Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td>{h(r['area'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos_mostrar]) or "<tr><td colspan='13'>Sin registros de ingresos.</td></tr>"
         content=wrap(f"""
         <h2 class='c-title'>Postulantes</h2>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Postulantes por requerimiento</h1><p class='muted2'>Primero seleccione el requerimiento. Luego busque o complete los postulantes registrados en ese requerimiento.</p></div><a class='c-btn' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato Excel</a></div><div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>1) Requerimiento / Ticket</b><select id='filtro_req_postulantes' onchange="location.href='/admin/contratacion?sec=nuevos&req='+encodeURIComponent(this.value)"><option value=''>Seleccione requerimiento para ver todos</option>{opt_req}</select><b>Buscar postulantes del requerimiento</b><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='DNI, trabajador, cargo, actividad...'></div>
@@ -8772,7 +8927,7 @@ html,body{overflow-x:hidden!important;}
         </script>
         {bandeja_operativa('tabla_embudo_nuevos')}
         <form method='post' enctype='multipart/form-data' class='c-card c-form' style='padding:20px'><input type='hidden' name='accion' value='importar_ingresos_excel'><b>Carga Excel</b><input type='file' name='archivo' accept='.xlsx,.xls' required><span></span><button class='c-btn gray'>⬆ Importar postulantes</button></form>
-        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='Filtrar DNI, trabajador, sede, cargo, estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_ingreso' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_ingresos' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Tipo</th><th>Empresa</th><th>Sede</th><th>Cargo</th><th>Área</th><th>Requerimiento</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Eliminar</th></tr>{ingreso_rows}</table></div>
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_ingresos')" placeholder='Filtrar DNI, trabajador, sede, cargo, estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_ingreso' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_ingresos' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Tipo</th><th>Empresa</th><th>Sede</th><th>Cargo</th><th>Área</th><th>Requerimiento</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Anular</th></tr>{ingreso_rows}</table></div>
         """)
     elif sec=='medica':
         # PRO: Evaluación Médica reorganizada como punto crítico de decisión.
@@ -8932,7 +9087,7 @@ html,body{overflow-x:hidden!important;}
         </div>
         <div class='c-card table-wrap'>
           <table id='tabla_medica' class='c-table'>
-            <tr><th>Eliminar</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Aptitud</th><th>Estado Operativo</th><th>Resultado</th><th>Vencimiento</th><th>Clínica</th><th>Restricciones</th><th>Observación</th></tr>
+            <tr><th>Anular</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Aptitud</th><th>Estado Operativo</th><th>Resultado</th><th>Vencimiento</th><th>Clínica</th><th>Restricciones</th><th>Observación</th></tr>
             {med_rows}
           </table>
         </div>
@@ -9025,7 +9180,7 @@ html,body{overflow-x:hidden!important;}
           <div class='pro-card eval-side'><h3>Evaluación del trabajador</h3><p class='muted2'>Campos preparados para el usuario trabajador: examen, nota, respuestas, intentos y confirmación de video visto.</p><div class='eval-grid'><b>Opción examen</b><select name='preguntas' form='form_capacitacion'><option>Sin examen</option><option>Formulario interno</option><option>Link Google Forms</option><option>Cuestionario en app</option></select><b>Nota / resultado</b><input name='nota' form='form_capacitacion' placeholder='Ej. 18/20'><b>Intentos permitidos</b><input name='intentos' form='form_capacitacion' type='number' min='1' value='1'><b>Confirmación</b><select disabled><option>Trabajador confirma desde su portal</option></select></div></div>
         </div>
         <div class='pro-card'><h3 class='pro-section-title'>Base de registro de videos subidos</h3><div class='video-base-grid'><div><small>Total videos</small><b>{len([r for r in capacitaciones if (r['archivo_video_nombre'] or r['video_url'])])}</b></div><div><small>Asignaciones</small><b>{len(capacitaciones)}</b></div><div><small>Vistos</small><b>{len([r for r in capacitaciones if (r['estado'] or '').upper()=='VIDEO VISTO'])}</b></div><div><small>Pendientes</small><b>{len([r for r in capacitaciones if (r['estado'] or '').upper()!='VIDEO VISTO'])}</b></div></div><div class='table-wrap'><table class='c-table clean-table'><tr><th>Fecha</th><th>Tema/Curso</th><th>Tipo</th><th>Archivo / URL</th><th>Min.</th><th>Estado</th></tr>{video_rows}</table></div></div>
-        <form method='post' class='pro-card'><input type='hidden' name='accion' value='marcar_visto_masivo'><input type='hidden' name='volver' value='{sec}'><h3 class='pro-section-title'>3) Registros de trabajadores y estados</h3><div class='records-toolbar'><input oninput="filtrarTabla(this,'tabla_capacitacion')" placeholder='Filtrar DNI, trabajador, curso, estado...'><select><option>Todos los estados</option><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>DESAPROBADO</option></select><button type='button' class='c-btn gray' onclick="document.querySelectorAll('#tabla_capacitacion input[name=cap_ids]').forEach(x=>x.checked=true)">Seleccionar todo</button><button type='submit' form='form_capacitacion' class='c-btn'>Guardar</button></div><div class='mass-actions'><b>Cambio masivo / notificaciones:</b><select name='estado_masivo'><option>VIDEO VISTO</option><option>VIDEO ASIGNADO</option><option>APROBADO</option><option>PENDIENTE</option></select><button class='c-btn'>Cambiar seleccionados y notificar</button></div><div class='table-wrap'><table id='tabla_capacitacion' class='c-table clean-table'><tr><th></th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>{'Tema' if es_ind else 'Curso'}</th><th>Video</th><th>Nota</th><th>Estado</th><th>Eliminar</th><th>Observación</th></tr>{cap_rows}</table></div></form>
+        <form method='post' class='pro-card'><input type='hidden' name='accion' value='marcar_visto_masivo'><input type='hidden' name='volver' value='{sec}'><h3 class='pro-section-title'>3) Registros de trabajadores y estados</h3><div class='records-toolbar'><input oninput="filtrarTabla(this,'tabla_capacitacion')" placeholder='Filtrar DNI, trabajador, curso, estado...'><select><option>Todos los estados</option><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>DESAPROBADO</option></select><button type='button' class='c-btn gray' onclick="document.querySelectorAll('#tabla_capacitacion input[name=cap_ids]').forEach(x=>x.checked=true)">Seleccionar todo</button><button type='submit' form='form_capacitacion' class='c-btn'>Guardar</button></div><div class='mass-actions'><b>Cambio masivo / notificaciones:</b><select name='estado_masivo'><option>VIDEO VISTO</option><option>VIDEO ASIGNADO</option><option>APROBADO</option><option>PENDIENTE</option></select><button class='c-btn'>Cambiar seleccionados y notificar</button></div><div class='table-wrap'><table id='tabla_capacitacion' class='c-table clean-table'><tr><th></th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>{'Tema' if es_ind else 'Curso'}</th><th>Video</th><th>Nota</th><th>Estado</th><th>Anular</th><th>Observación</th></tr>{cap_rows}</table></div></form>
         ''')
     elif sec=='indumentaria':
         ind_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(r['polo'])}</td><td>{h(r['pantalon'])}</td><td>{h(r['botas'])}</td><td>{h(r['fotocheck'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['fecha_entrega'])}</td></tr>" for r in indumentarias]) or "<tr><td colspan='14'>Sin entregas registradas.</td></tr>"
@@ -9048,7 +9203,7 @@ html,body{overflow-x:hidden!important;}
           <b>Fecha entrega</b><input type='date' name='fecha_entrega' value='{hoy_iso()}'><b>Responsable entrega</b><input name='responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle de entrega, faltantes, responsable o cargo firmado.'></textarea><span></span><button class='c-btn'>💾 Registrar entrega</button>
         </form>
         {bandeja_operativa('tabla_embudo_indumentaria')}
-        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar DNI, trabajador, prenda o estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_indumentaria' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_indumentaria' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Responsable</th><th>Eliminar</th><th>Entrega</th></tr>{ind_rows}</table></div>
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar DNI, trabajador, prenda o estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_indumentaria' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_indumentaria' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Responsable</th><th>Anular</th><th>Entrega</th></tr>{ind_rows}</table></div>
         <script>
         async function buscarIndumentariaDNI(){{
           const dni=(document.getElementById('ind_dni')?.value||'').replace(/\D/g,'');
@@ -9150,7 +9305,7 @@ html,body{overflow-x:hidden!important;}
                   <td>{_pill_state('CAPTURADA' if foto else 'PENDIENTE FOTO')}</td>
                   <td>{_pill_state(r['estado_indumentaria'] if 'estado_indumentaria' in r.keys() else 'PENDIENTE')}</td>
                   <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver detalle</a></td>
-                  <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='eliminar_ingreso_admin'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Eliminar</button></form></td>
+                  <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='anular_ingreso_admin'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='hidden' name='motivo_anulacion' value='Anulado desde Datos Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td>
                 </tr>""")
             tabla_rows = ''.join(rows) or "<tr><td colspan='14'>Seleccione un requerimiento o registre postulantes desde el módulo Requerimiento/Postulantes.</td></tr>"
             content=wrap(f"""
@@ -9170,7 +9325,7 @@ html,body{overflow-x:hidden!important;}
             <div class='dash-hero' style='margin-bottom:18px'><div><h1>Datos Postulantes por Requerimiento</h1><p class='muted2'>Primero elige el requerimiento. El sistema jala automáticamente todos los postulantes registrados y muestra contrato, fotocheck, foto, indumentaria y avance.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Completar ficha</a></div>
             <div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>Requerimiento / Ticket</b><select onchange="location.href='/admin/contratacion?sec=datos_completos&req='+encodeURIComponent(this.value)">{req_select_opts}</select><b>Buscar postulante</b><input oninput="filtrarTabla(this,'tabla_datos_postulantes')" placeholder='DNI, trabajador, cargo, estado...'></div>
             <div class='datos-kpi'><div class='kpi'><span>Total postulantes</span><b>{total}</b></div><div class='kpi'><span>Pendiente contrato</span><b>{pend_contrato}</b></div><div class='kpi'><span>Sin foto</span><b>{pend_foto}</b></div><div class='kpi'><span>Pendiente fotocheck</span><b>{pend_fotocheck}</b></div></div>
-            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_documentos'>Firma de contrato / documentos</option><option value='fotocheck_estado'>Fotocheck</option><option value='estado_indumentaria'>Indumentaria</option><option value='estado_medico'>Evaluación médica</option><option value='estado_capacitacion'>Inducción / capacitación</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>GENERADO</option><option>ENVIADO</option><option>FIRMADO</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>Contrato / Docs</th><th>Fotocheck</th><th>Foto</th><th>Indumentaria</th><th>Detalle</th><th>Eliminar</th></tr>{tabla_rows}</table></div></form>
+            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_documentos'>Firma de contrato / documentos</option><option value='fotocheck_estado'>Fotocheck</option><option value='estado_indumentaria'>Indumentaria</option><option value='estado_medico'>Evaluación médica</option><option value='estado_capacitacion'>Inducción / capacitación</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>GENERADO</option><option>ENVIADO</option><option>FIRMADO</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>Contrato / Docs</th><th>Fotocheck</th><th>Foto</th><th>Indumentaria</th><th>Detalle</th><th>Anular</th></tr>{tabla_rows}</table></div></form>
             """)
         else:
             tit='Centro de Fotocheck'
