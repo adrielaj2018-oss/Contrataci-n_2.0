@@ -4890,102 +4890,11 @@ def admin_login():
 @app.route('/admin')
 @admin_required
 def admin():
-    sincronizar_documentos_carpeta()
-    desde = clean(request.args.get('desde'))
-    hasta = clean(request.args.get('hasta'))
-    with db() as con:
-        trabajadores = con.execute("SELECT COUNT(*) FROM trabajadores").fetchone()[0]
-        docs = con.execute("SELECT COUNT(*) FROM documentos").fetchone()[0]
-        emp = con.execute("SELECT COUNT(*) FROM documentos WHERE categoria='empresa'").fetchone()[0]
-        leidos = con.execute("SELECT COUNT(*) FROM documentos WHERE fecha_lectura IS NOT NULL AND fecha_lectura<>''").fetchone()[0]
-        aprobados = con.execute("SELECT COUNT(*) FROM documentos WHERE estado='Aprobado'").fetchone()[0]
-        rechazados = con.execute("SELECT COUNT(*) FROM documentos WHERE estado='Rechazado'").fetchone()[0]
-        ult = con.execute("SELECT * FROM documentos ORDER BY id DESC LIMIT 12").fetchall()
-    alerts = alertas_admin(8)
-    with db() as con:
-        chart_rows = con.execute("SELECT tipo, COUNT(*) c FROM documentos GROUP BY tipo ORDER BY c DESC LIMIT 8").fetchall()
-        fechas_docs = con.execute("SELECT fecha_subida FROM documentos").fetchall()
-    hoy_dt = datetime.now(APP_TZ).date()
-    doc_dia = doc_semana = doc_mes = doc_rango = 0
-    desde_dt = parse_fecha_any(desde) if desde else None
-    hasta_dt = parse_fecha_any(hasta) if hasta else None
-    for rr in fechas_docs:
-        try:
-            dd = datetime.strptime((rr['fecha_subida'] or '')[:10], '%d/%m/%Y').date()
-            if dd == hoy_dt: doc_dia += 1
-            if (hoy_dt - dd).days <= 7: doc_semana += 1
-            if dd.year == hoy_dt.year and dd.month == hoy_dt.month: doc_mes += 1
-            if (not desde_dt or dd >= desde_dt) and (not hasta_dt or dd <= hasta_dt): doc_rango += 1
-        except Exception:
-            pass
-    maxc = max([x['c'] for x in chart_rows] or [1])
-    chart_html = ''.join([f"<div class='bar-row'><b>{x['tipo']}</b><span><i style='width:{max(6, int(x['c']*100/maxc))}%'></i></span><em>{x['c']}</em></div>" for x in chart_rows]) or "<p class='muted'>Sin información para graficar.</p>"
-    alert_items = ''.join([f"<div class='alert-item'><div class='bell'>🔔</div><div><b>{(a['trabajador'] or a['dni'] or 'Documento empresa')}</b><br><span>{a['tipo']} · {a['periodo'] or 'Sin periodo'} · {a['fecha_subida']} · Cargado por: {a['uploaded_by'] or 'sistema'}</span></div><a class='btn-blue mini-btn' target='_blank' href='{url_for('ver_doc', doc_id=a['id'])}'>Ver</a></div>" for a in alerts]) or "<div class='empty-note'>Aún no hay documentos cargados.</div>"
-    with db() as con:
-        ind_rows = con.execute("""
-            SELECT tipo,
-                   COUNT(*) total,
-                   SUM(CASE WHEN estado='Aprobado' THEN 1 ELSE 0 END) aprobados,
-                   SUM(CASE WHEN estado='Rechazado' THEN 1 ELSE 0 END) rechazados,
-                   SUM(CASE WHEN fecha_lectura IS NOT NULL AND fecha_lectura<>'' THEN 1 ELSE 0 END) leidos
-            FROM documentos
-            GROUP BY tipo
-            ORDER BY tipo
-        """).fetchall()
-    ind_html = ''.join([f"<tr><td>{r['tipo']}</td><td>{r['total']}</td><td><span class='status-pill st-aprobado'>{r['aprobados']}</span></td><td><span class='status-pill st-rechazado'>{r['rechazados']}</span></td><td><span class='status-pill'>{r['leidos']}</span></td></tr>" for r in ind_rows]) or "<tr><td colspan='5'>Sin documentos.</td></tr>"
-    modo_txt = 'ACTIVO' if modo_prueba_activo() else 'INACTIVO'
-    with db() as con:
-        vac_saldos = con.execute("SELECT COUNT(*) FROM vacaciones_saldos").fetchone()[0]
-        vac_solicitudes = con.execute("SELECT COUNT(*) FROM vacaciones_solicitudes").fetchone()[0]
-        vac_pendientes = con.execute("SELECT COUNT(*) FROM vacaciones_solicitudes WHERE estado LIKE 'Pendiente%'").fetchone()[0]
-        vac_aprobadas = con.execute("SELECT COUNT(*) FROM vacaciones_solicitudes WHERE estado LIKE 'Aprobado%'").fetchone()[0]
-        con_docs = con.execute("SELECT COUNT(*) FROM contratacion_docs").fetchone()[0]
-        con_tipos = con.execute("SELECT COUNT(*) FROM contratacion_tipos").fetchone()[0]
-    content = f"""
-    <div class='admin-shell'>
-      <div class='admin-header'>
-        <div class='admin-title-row'>
-          <button class='hambox' onclick='toggleSide()'>☰</button>
-          <div class='admin-title'>
-            <h1>Centro de Control</h1>
-            <div class='role'>Administrador</div>
-            <p>Bienvenido al panel de administración. Seleccione una gestión para comenzar.</p>
-          </div>
-        </div>
-        <div class='top-actions'>
-          <div class='top-icon'>🔔<i>0</i></div>
-          <div class='top-icon'>☰<i>0</i></div>
-          <div class='admin-chip'><span class='a'>A</span><span>Administrador⌄</span></div>
-        </div>
-      </div>
-
-      <div class='gestion-cards single-gestion'>
-        <div class='card gestion-card purple gestion-contratacion-only'>
-          <div class='gestion-icon'>🧾</div>
-          <div><h2>Gestión Contratación</h2><p class='muted'>Centro único para requerimientos, altas, control médico, capacitación, indumentaria, fotocheck, firma y conexión NISIRA.</p><a class='btn-blue' href='/admin/contratacion'>Ir al Dashboard <span>→</span></a></div>
-        </div>
-      </div>
-
-      <div class='dashboards-admin contratacion-only-dashboard'>
-        <div class='card dashboard-panel purple'>
-          <h2>🧾 Dashboard - Gestión Contratación</h2>
-          <div class='mini-grid'>
-            <div class='dash-metric'><span>Tickets / procesos</span><b>{con_tipos}</b><em class='mi'>🎫</em></div>
-            <div class='dash-metric'><span>Trabajadores registrados</span><b>{trabajadores}</b><em class='mi'>👥</em></div>
-            <div class='dash-metric'><span>Documentos / contratos</span><b>{con_docs}</b><em class='mi'>📄</em></div>
-            <div class='dash-metric'><span>Control médico</span><b>{vac_saldos}</b><em class='mi'>🩺</em></div>
-            <div class='dash-metric'><span>Capacitaciones</span><b>{vac_solicitudes}</b><em class='mi'>🎥</em></div>
-            <div class='dash-metric'><span>Pendientes</span><b>{vac_pendientes}</b><em class='mi'>⏱️</em></div>
-          </div>
-          <a class='btn-blue full-link' href='/admin/contratacion'>Ver Dashboard Completo <span>→</span></a>
-        </div>
-      </div>
-
-      <div class='admin-footer'><span>© 2026 PRIZE - Superfruits</span><span>Versión 1.0.0</span></div>
-    </div>
+    """Entrada administrativa directa.
+    Se elimina completamente la pantalla intermedia 'Centro de Control'
+    para que, al iniciar sesión, el administrador vaya directo al módulo real.
     """
-    return render_page(content, active='Admin')
-
+    return redirect(url_for('admin_contratacion'))
 
 def normalizar_header_excel(valor):
     """Normaliza encabezados de Excel para que el usuario pueda cargar plantillas amplias sin errores."""
