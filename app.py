@@ -2691,6 +2691,89 @@ def sincronizar_estado_requerimiento_por_cupo(con, ticket):
     elif registrados == 0:
         con.execute("UPDATE contratacion_requerimientos SET estado='SOLICITADO' WHERE TRIM(ticket)=TRIM(?) AND estado IN ('EN REGISTRO','CUPO CERRADO')", (ticket,))
 
+
+def registrar_dni_en_requerimiento_backend(ticket, dni, usuario='admin'):
+    """Registro único y real de DNI al requerimiento.
+    Usado por digitación manual, lector USB/código de barras y cámara.
+    """
+    ticket = clean(ticket)
+    dni = normalizar_dni(dni)
+    if not ticket or not dni or len(dni) != 8:
+        return {'ok': False, 'msg': 'Seleccione requerimiento y registre un DNI válido de 8 dígitos.', 'sound': 'error'}
+
+    with db() as con:
+        req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
+        if not req:
+            return {'ok': False, 'msg': f'No se encontró el requerimiento {ticket}. Vuelva a seleccionarlo.', 'sound': 'error'}
+
+        cantidad_req = cantidad_solicitada_requerimiento(req)
+        if cantidad_req <= 0:
+            return {'ok': False, 'msg': f'El requerimiento {ticket} no tiene cantidad solicitada válida. Edite el ticket e ingrese la cantidad real.', 'sound': 'error'}
+
+        existe = con.execute("""SELECT id FROM contratacion_ingresos
+                              WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                              ORDER BY id DESC LIMIT 1""", (dni, ticket)).fetchone()
+        if existe:
+            registrados_req = contar_postulantes_requerimiento(con, ticket)
+            return {'ok': False, 'msg': f'ALERTA: el DNI {dni} ya está registrado activo en el requerimiento {ticket}. No se permite duplicar postulante.',
+                    'sound': 'error', 'registrados': registrados_req, 'cantidad': cantidad_req}
+
+        registrados_req = contar_postulantes_requerimiento(con, ticket)
+        if registrados_req >= cantidad_req:
+            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(ticket)=TRIM(?)", (registrados_req, ticket))
+            con.commit()
+            return {'ok': False, 'msg': f'CUPO COMPLETO: el requerimiento {ticket} solicitó {cantidad_req} postulante(s) y ya tiene {registrados_req}. No se puede registrar más personal.',
+                    'sound': 'error', 'cupo': True, 'registrados': registrados_req, 'cantidad': cantidad_req}
+
+        trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
+        if trab and clean(trab['nombre']):
+            nombre = trab['nombre'] or ''
+            tipo = 'REINGRESANTE'
+            empresa = trab['empresa'] or req['empresa'] or 'AQUANQA'
+            cargo = trab['cargo'] or req['cargo'] or ''
+            area = trab['area'] or req['area'] or ''
+            correo = trab['correo'] or ''
+            celular = trab['celular'] or ''
+        else:
+            nombre = ''
+            tipo = 'NUEVO'
+            empresa = req['empresa'] or 'AQUANQA'
+            cargo = req['cargo'] or ''
+            area = req['area'] or ''
+            correo = ''
+            celular = ''
+            con.execute("""INSERT OR IGNORE INTO trabajadores
+                           (dni,nombre,empresa,activo,fecha_registro,usuario_portal,clave_portal)
+                           VALUES(?,?,?,1,?,?,?)""", (dni, '', empresa, now_txt(), dni, dni))
+
+        vals = (
+            dni, nombre, empresa, req['sede'] or '', ticket, req['actividad'] or '', tipo,
+            'PRE REGISTRADO', req['fecha_ingreso'] or fecha_sin_hora(hoy_iso()),
+            cargo, area, correo, celular,
+            'Registrado automáticamente desde digitación/lector/cámara en requerimiento',
+            now_txt(), usuario or 'admin'
+        )
+        con.execute("""INSERT INTO contratacion_ingresos
+            (dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", vals)
+        sincronizar_estado_requerimiento_por_cupo(con, ticket)
+        registrados_final = contar_postulantes_requerimiento(con, ticket)
+        con.commit()
+
+    return {
+        'ok': True,
+        'msg': f'POSTULANTE REGISTRADO: DNI {dni} vinculado al requerimiento {ticket}.',
+        'sound': 'ok',
+        'dni': dni,
+        'tipo': tipo,
+        'nombre': nombre or '',
+        'ticket': ticket,
+        'registrados': registrados_final,
+        'cantidad': cantidad_req
+    }
+
+
 def semaforo_clase_estado(valor):
     v = estado_norm(valor)
     if any(x in v for x in ['APTO','LISTO','FIRMADO','COMPLETO','APROBADO','ENTREGADO']):
@@ -7245,75 +7328,10 @@ def admin_contratacion():
             ticket = clean(request.form.get('ticket_req'))
             dni = normalizar_dni(request.form.get('dni_scan'))
             ajax_req = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-            if not ticket or not dni:
-                msg = 'Seleccione requerimiento y escanee/digite DNI obligatorio.'
-                if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
-                flash(msg, 'error')
-                return redirect(url_for('admin_contratacion', sec='requerimientos'))
-            with db() as con:
-                req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
-                trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
-                if trab and clean(trab['nombre']):
-                    nombre = trab['nombre'] or ''
-                    tipo = 'REINGRESANTE'
-                    empresa = trab['empresa'] or (req['empresa'] if req else 'AQUANQA')
-                    cargo = trab['cargo'] or ''
-                    area = trab['area'] or (req['area'] if req else '')
-                    correo = trab['correo'] or ''
-                    celular = trab['celular'] or ''
-                else:
-                    nombre = ''
-                    tipo = 'NUEVO'
-                    empresa = req['empresa'] if req else 'AQUANQA'
-                    cargo = ''
-                    area = req['area'] if req else ''
-                    correo = celular = ''
-                    con.execute("INSERT OR IGNORE INTO trabajadores(dni,nombre,empresa,activo,fecha_registro,usuario_portal,clave_portal) VALUES(?,?,?,1,?,?,?)", (dni,'',empresa,now_txt(),dni,dni))
-                existe = con.execute("""SELECT id FROM contratacion_ingresos
-                                      WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                        AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
-                                      ORDER BY id DESC LIMIT 1""", (dni,ticket)).fetchone()
-                if existe:
-                    con.commit()
-                    msg = f'ALERTA: el DNI {dni} ya está registrado activo en el requerimiento {ticket}. No se permite duplicar postulante.'
-                    if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
-                    flash(msg, 'error')
-                    return redirect(url_for('admin_contratacion', sec='requerimientos'))
-                if not req:
-                    msg = f'No se encontró el requerimiento {ticket}. Vuelva a seleccionarlo.'
-                    if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
-                    flash(msg, 'error')
-                    return redirect(url_for('admin_contratacion', sec='requerimientos'))
-                if req:
-                    cantidad_req = cantidad_solicitada_requerimiento(req)
-                    registrados_req = contar_postulantes_requerimiento(con, ticket)
-                    if cantidad_req <= 0:
-                        msg = f'El requerimiento {ticket} no tiene cantidad solicitada válida. Edite el ticket e ingrese la cantidad real.'
-                        if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
-                        flash(msg, 'error')
-                        return redirect(url_for('admin_contratacion', sec='requerimientos'))
-                    if registrados_req >= cantidad_req:
-                        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(ticket)=TRIM(?)", (registrados_req, ticket))
-                        con.commit()
-                        msg = f'🚨 CUPO COMPLETO: el requerimiento {ticket} solicitó {cantidad_req} postulante(s) y ya tiene {registrados_req}. No se puede registrar más personal.'
-                        if ajax_req: return jsonify(ok=False, msg=msg, sound='error', cupo=True, cantidad=cantidad_req, registrados=registrados_req)
-                        flash(msg, 'error')
-                        return redirect(url_for('admin_contratacion', sec='requerimientos'))
-                vals = (dni,nombre,empresa,req['sede'] if req else '',ticket,req['actividad'] if req else '',tipo,'PRE REGISTRADO',req['fecha_ingreso'] if req else fecha_sin_hora(hoy_iso()),cargo or (req['cargo'] if req else ''),area,correo,celular,'Registrado desde escaneo DNI/código de barras en requerimiento',now_txt(),session.get('admin_user','admin'))
-                con.execute("INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", vals)
-                sincronizar_estado_requerimiento_por_cupo(con, ticket)
-                con.commit()
-            msg = 'DNI conectado al requerimiento. Si existe en historial, se marca como REINGRESANTE; si no, queda como NUEVO para completar ficha.'
+            data = registrar_dni_en_requerimiento_backend(ticket, dni, session.get('admin_user','admin'))
             if ajax_req:
-                try:
-                    with db() as con_tmp:
-                        req_tmp = con_tmp.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
-                        return jsonify(ok=True, msg=msg, sound='ok', dni=dni, tipo=tipo, nombre=nombre or '',
-                                       registrados=contar_postulantes_requerimiento(con_tmp, ticket),
-                                       cantidad=cantidad_solicitada_requerimiento(req_tmp))
-                except Exception:
-                    return jsonify(ok=True, msg=msg, sound='ok', dni=dni, tipo=tipo, nombre=nombre or '')
-            flash(msg, 'ok')
+                return jsonify(data)
+            flash(data.get('msg') or ('Registrado correctamente.' if data.get('ok') else 'No se pudo registrar.'), 'ok' if data.get('ok') else 'error')
             return redirect(url_for('admin_contratacion', sec='requerimientos'))
         if accion == 'guardar_requerimiento':
             ticket = clean(request.form.get('ticket')) or ('REQ-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
@@ -8869,46 +8887,84 @@ html,body{overflow-x:hidden!important;}
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Requerimiento de contratación</h1><p class='muted2'>Primero crea el requerimiento por empresa, área y actividad. Luego escanea DNI o código de barras en este mismo módulo para armar la base del requerimiento.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Completar ficha trabajador</a></div>
         <div class='req-pro-grid'>
           <form method='post' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Ticket / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001'><b>Empresa</b><select name='empresa' required>{opt_empresa_select}</select><b>Área</b><input name='area' list='lista_areas_cfg' required placeholder='Área desde Datos Maestros'><b>Cargo</b><input name='cargo' list='lista_cargos_cfg' required placeholder='Cargo desde Datos Maestros'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' required placeholder='Actividad desde Datos Maestros'><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha ingreso objetivo</b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Tipo contrato</b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral</b><select name='regimen_laboral'>{opt_regimen_select}</select><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear ticket</button><span class='muted2'>Al cumplir la cantidad, el sistema cierra el cupo automáticamente.</span></div></form>
-          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='ticket_req' id='ticket_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏹ Detener</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
+          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='ticket_req' id='ticket_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
         </div>
         <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle postulantes</th><th>Anular</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
-        let scanReqStream=null, scanReqCount=0, scanReqNuevos=0, scanReqReingresos=0, scanReqSaving=false;
+        let scanReqStream=null, scanReqCount=0, scanReqNuevos=0, scanReqReingresos=0, scanReqSaving=false, scanReqLast='', scanReqLastAt=0, scanReqPoll=null, scanReqDetector=null, scanReqDetecting=false;
         const trabajadoresReq = {trabajadores_scan_js};
         function limpiarDniReq(v){{return (v||'').replace(/\D/g,'').slice(-8);}}
-        function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const freqs=(tipo==='error'?[620,420,620]:[tipo==='reingreso'?880:520]); let t=ctx.currentTime; freqs.forEach(f=>{{const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type=tipo==='error'?'square':'sine'; osc.frequency.value=f; gain.gain.value=tipo==='error'?0.09:0.06; osc.connect(gain); gain.connect(ctx.destination); osc.start(t); osc.stop(t+0.18); t+=0.22;}}); setTimeout(()=>ctx.close(),900);}}catch(e){{}}}}
-        function mostrarAlarmaReq(msg){{beepReq('error'); try{{if(navigator.vibrate) navigator.vibrate([180,80,180]);}}catch(e){{}} const old=document.querySelector('.req-cap-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-cap-alert'; a.innerHTML='🚨 '+(msg||'No se pudo registrar.')+'<small>Revise la cantidad solicitada del requerimiento o el DNI duplicado.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},6500);}}
-        function mostrarRegistradoReq(msg){{try{{if(navigator.vibrate) navigator.vibrate([80]);}}catch(e){{}} const old=document.querySelector('.req-ok-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-ok-alert'; a.innerHTML='✅ '+(msg||'POSTULANTE REGISTRADO')+'<small>Guardado automáticamente y vinculado al requerimiento.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},4200);}}
-        function actualizarContadorTablaReq(ticket, registrados, cantidad){{try{{document.querySelectorAll('#tabla_req tr').forEach(tr=>{{const c=tr.children&&tr.children[0]; if(!c) return; if((c.innerText||'').trim()===String(ticket).trim()){{const pill=tr.querySelector('.req-count-pill'); if(pill){{pill.textContent=String(registrados)+' / '+String(cantidad); pill.classList.remove('warn','full'); if(Number(registrados)>=Number(cantidad)&&Number(cantidad)>0) pill.classList.add('full'); else if(Number(registrados)>0) pill.classList.add('warn');}}}});}}catch(e){{}}}}
-        document.addEventListener('DOMContentLoaded',()=>{{const i=document.getElementById('dni_scan_req'); if(i){{i.addEventListener('keydown',function(e){{if(e.key==='Enter'){{e.preventDefault(); agregarDniLocalReq();}}}}); i.addEventListener('input',function(){{const dni=limpiarDniReq(i.value); if(document.getElementById('scan_masivo_req')?.checked && dni.length===8){{setTimeout(()=>agregarDniLocalReq(),80);}}}});}}}});
+        function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const freqs=(tipo==='error'?[620,420,620]:[tipo==='reingreso'?[880,1040]:[520,760]][0]); let t=ctx.currentTime; (Array.isArray(freqs)?freqs:[freqs]).forEach(f=>{{const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type=tipo==='error'?'square':'sine'; osc.frequency.value=f; gain.gain.value=tipo==='error'?0.10:0.07; osc.connect(gain); gain.connect(ctx.destination); osc.start(t); osc.stop(t+0.20); t+=0.23;}}); setTimeout(()=>ctx.close(),1000);}}catch(e){{}}}}
+        function mostrarAlarmaReq(msg){{beepReq('error'); try{{if(navigator.vibrate) navigator.vibrate([180,80,180]);}}catch(e){{}} const old=document.querySelector('.req-cap-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-cap-alert'; a.innerHTML='🚨 '+(msg||'No se pudo registrar.')+'<small>Revise cupo, requerimiento activo o DNI duplicado.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},7000);}}
+        function mostrarRegistradoReq(msg){{try{{if(navigator.vibrate) navigator.vibrate([80]);}}catch(e){{}} const old=document.querySelector('.req-ok-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-ok-alert'; a.innerHTML='✅ '+(msg||'POSTULANTE REGISTRADO')+'<small>Guardado automáticamente y vinculado al requerimiento.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},4500);}}
+        function actualizarContadorTablaReq(ticket, registrados, cantidad){{try{{document.querySelectorAll('#tabla_req tr').forEach(tr=>{{const c=tr.children&&tr.children[0]; if(!c) return; if((c.innerText||'').trim()===String(ticket).trim()){{const pill=tr.querySelector('.req-count-pill'); if(pill){{pill.textContent=String(registrados)+' / '+String(cantidad); pill.classList.remove('warn','full'); if(Number(registrados)>=Number(cantidad)&&Number(cantidad)>0) pill.classList.add('full'); else if(Number(registrados)>0) pill.classList.add('warn');}}}}}});}}catch(e){{}}}}
+        function iniciarAutoDetectorReq(){{
+          const i=document.getElementById('dni_scan_req'); if(!i) return;
+          const handler=function(e){{ if(e && e.key==='Enter'){{e.preventDefault(); agregarDniLocalReq(); return;}} const dni=limpiarDniReq(i.value); if(document.getElementById('scan_masivo_req')?.checked && dni.length===8){{setTimeout(()=>agregarDniLocalReq(),120);}} }};
+          ['input','keyup','change','paste'].forEach(ev=>i.addEventListener(ev, handler));
+          if(scanReqPoll) clearInterval(scanReqPoll);
+          scanReqPoll=setInterval(()=>{{const dni=limpiarDniReq(i.value); if(document.activeElement===i && document.getElementById('scan_masivo_req')?.checked && dni.length===8){{agregarDniLocalReq();}}}},350);
+        }}
+        document.addEventListener('DOMContentLoaded',()=>{{iniciarAutoDetectorReq(); const i=document.getElementById('dni_scan_req'); if(i) i.focus();}});
         async function agregarDniLocalReq(){{
           if(scanReqSaving) return;
           const i=document.getElementById('dni_scan_req'); const ticket=document.getElementById('ticket_req_auto')?.value||''; const dni=limpiarDniReq(i.value);
-          if(!ticket){{alert('Seleccione requerimiento activo.');return;}}
-          if(dni.length!==8){{alert('DNI debe tener 8 dígitos.');return;}}
+          if(!ticket){{mostrarAlarmaReq('Seleccione requerimiento activo.'); return;}}
+          if(dni.length!==8){{return;}}
+          const now=Date.now(); if(scanReqLast===dni && (now-scanReqLastAt)<1800){{return;}} scanReqLast=dni; scanReqLastAt=now;
           scanReqSaving=true; i.value=dni;
-          const trab=trabajadoresReq[dni]; const esRe=!!trab; const nombre=esRe?(trab.nombre||'REINGRESANTE'):'NUEVO - solo DNI';
           try{{
-            const fd=new FormData(); fd.append('accion','registrar_dni_requerimiento'); fd.append('ticket_req',ticket); fd.append('dni_scan',dni);
-            const resp = await fetch(window.location.href, {{method:'POST', body:fd, credentials:'same-origin', headers:{{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}}}});
+            const fd=new FormData(); fd.append('ticket_req',ticket); fd.append('dni_scan',dni);
+            const resp = await fetch('/api/contratacion/registrar_dni_requerimiento', {{method:'POST', body:fd, credentials:'same-origin', headers:{{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}}}});
             let data={{ok:false,msg:'No se pudo registrar.'}}; try{{data=await resp.json();}}catch(e){{}}
             if(!data.ok){{document.getElementById('scan_result_req').value=data.msg||'Registro bloqueado'; mostrarAlarmaReq(data.msg); i.select(); scanReqSaving=false; return;}}
+            const esRe=(data.tipo||'').toUpperCase()==='REINGRESANTE'; const nombre=data.nombre||'';
             scanReqCount++; if(esRe) scanReqReingresos++; else scanReqNuevos++;
             document.getElementById('cntLeidos').innerText='Leídos: '+scanReqCount;
             document.getElementById('cntNuevos').innerText='Nuevos: '+scanReqNuevos;
             document.getElementById('cntReingresos').innerText='Reingresos: '+scanReqReingresos;
-            document.getElementById('scan_result_req').value = esRe ? ('REINGRESANTE REGISTRADO: '+nombre) : ('NUEVO REGISTRADO: '+dni);
+            document.getElementById('scan_result_req').value = esRe ? ('REINGRESANTE REGISTRADO: '+(nombre||dni)) : ('NUEVO REGISTRADO: '+dni);
             if(data.registrados!==undefined && data.cantidad!==undefined) actualizarContadorTablaReq(ticket, data.registrados, data.cantidad);
             mostrarRegistradoReq((esRe?'REINGRESANTE':'NUEVO')+' '+dni+' registrado ('+(data.registrados||'?')+' / '+(data.cantidad||'?')+')');
             beepReq(esRe?'reingreso':'nuevo');
-            const box=document.getElementById('listaScanReq'); const row=document.createElement('div');
-            row.innerHTML='<b>'+dni+'</b><span>'+(esRe?('Reingresante: '+nombre):'Nuevo: DNI guardado')+'</span><small>'+new Date().toLocaleTimeString()+'</small>'; box.prepend(row);
+            const box=document.getElementById('listaScanReq'); if(box){{const row=document.createElement('div'); row.innerHTML='<b>'+dni+'</b><span>'+(esRe?('Reingresante: '+(nombre||'sin nombre')):'Nuevo: DNI guardado')+'</span><small>'+new Date().toLocaleTimeString()+'</small>'; box.prepend(row);}}
             i.value=''; i.focus();
-          }}catch(e){{alert('No se pudo guardar automático. Revise conexión.');}}
+          }}catch(e){{mostrarAlarmaReq('No se pudo guardar automático. Revise conexión o sesión.');}}
           scanReqSaving=false;
         }}
-        async function activarCamaraReq(){{try{{scanReqStream=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'environment'}},audio:false}}); const v=document.getElementById('videoScanReq'); v.srcObject=scanReqStream; v.style.display='block'; document.getElementById('scanCamMsg').style.display='none';}}catch(e){{alert('No se pudo activar cámara. Use HTTPS/Render o lector USB.')}}}}
-        function apagarCamaraReq(){{if(scanReqStream){{scanReqStream.getTracks().forEach(t=>t.stop());}} const v=document.getElementById('videoScanReq'); if(v){{v.style.display='none';v.srcObject=null;}} const m=document.getElementById('scanCamMsg'); if(m)m.style.display='block';}}
+        async function activarCamaraReq(){{
+          try{{
+            scanReqStream=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'environment'}},audio:false}});
+            const v=document.getElementById('videoScanReq'); v.srcObject=scanReqStream; v.style.display='block';
+            document.getElementById('scanCamMsg').style.display='none';
+            if('BarcodeDetector' in window){{
+              try{{scanReqDetector=new BarcodeDetector({{formats:['qr_code','code_128','code_39','ean_13','ean_8','itf','codabar','upc_a','upc_e']}}); scanReqDetecting=true; detectarCodigoCamaraReq();}}catch(e){{scanReqDetector=null;}}
+            }}else{{
+              mostrarRegistradoReq('Cámara encendida. Para lectura automática use Chrome/Edge compatible o lector USB.');
+            }}
+          }}catch(e){{mostrarAlarmaReq('No se pudo activar cámara. Use HTTPS/Render o lector USB.')}}
+        }}
+        async function detectarCodigoCamaraReq(){{
+          const v=document.getElementById('videoScanReq');
+          if(!scanReqDetecting || !scanReqDetector || !v || v.readyState<2){{ if(scanReqDetecting) requestAnimationFrame(detectarCodigoCamaraReq); return; }}
+          try{{
+            const codes=await scanReqDetector.detect(v);
+            if(codes && codes.length){{
+              const raw=(codes[0].rawValue||'').toString();
+              const dni=limpiarDniReq(raw);
+              if(dni.length===8){{
+                const i=document.getElementById('dni_scan_req'); i.value=dni; await agregarDniLocalReq();
+              }}
+            }}
+          }}catch(e){{}}
+          if(scanReqDetecting) setTimeout(()=>requestAnimationFrame(detectarCodigoCamaraReq),250);
+        }}
+        function apagarCamaraReq(){{
+          scanReqDetecting=false;
+          if(scanReqStream){{scanReqStream.getTracks().forEach(t=>t.stop()); scanReqStream=null;}}
+          const v=document.getElementById('videoScanReq'); if(v){{v.style.display='none';v.srcObject=null;}}
+          const m=document.getElementById('scanCamMsg'); if(m)m.style.display='block';
+        }}
         </script>
         ''')
     elif sec=='nuevos':
@@ -11071,6 +11127,21 @@ def contratacion_doc_log(doc_id):
     return render_page(content, active='Gestion Contratacion:ficha')
 
 # API compatibles
+
+
+@app.route('/api/contratacion/registrar_dni_requerimiento', methods=['POST'])
+@admin_required
+def api_contratacion_registrar_dni_requerimiento():
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        ticket = payload.get('ticket_req')
+        dni = payload.get('dni_scan')
+    else:
+        ticket = request.form.get('ticket_req')
+        dni = request.form.get('dni_scan')
+    data = registrar_dni_en_requerimiento_backend(ticket, dni, session.get('admin_user','admin'))
+    return jsonify(data)
+
 
 @app.route('/api/contratacion/trabajador/<dni>')
 @admin_required
