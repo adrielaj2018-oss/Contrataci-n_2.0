@@ -4424,6 +4424,12 @@ def render_page(content, title="Portal de Documentos PRIZE", active="Inicio"):
       <div class="brand"><img src="{logo_url()}" alt="PRIZE"><p>Documentos PRIZE</p></div>{sidebar(active)}<div class="side-user"><div class="avatar">👤</div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}</main>{safe_ia_widget_hr(active)}
 <style id="iahr-inline-assets">
 
+
+/* ALARMA VISUAL PRO PARA BLOQUEOS DE CUPO / VALIDACIONES */
+.flash.alarm-flash{{position:sticky!important;top:10px!important;z-index:9997!important;background:#fee2e2!important;color:#7f1d1d!important;border:2px solid #ef4444!important;border-left:10px solid #dc2626!important;border-radius:18px!important;padding:18px 20px!important;font-size:16px!important;font-weight:900!important;box-shadow:0 18px 45px rgba(220,38,38,.25)!important;animation:alarmShake .38s ease-in-out 0s 3, alarmPulse 1.2s ease-in-out infinite!important}}.flash.ok-flash{{position:sticky!important;top:10px!important;z-index:9996!important;background:#dcfce7!important;color:#065f46!important;border:2px solid #86efac!important;border-left:10px solid #16a34a!important;border-radius:18px!important;padding:16px 18px!important;font-weight:850!important;box-shadow:0 14px 34px rgba(22,163,74,.16)!important}}@keyframes alarmShake{{0%,100%{{transform:translateX(0)}}25%{{transform:translateX(-5px)}}75%{{transform:translateX(5px)}}}}@keyframes alarmPulse{{0%,100%{{box-shadow:0 18px 45px rgba(220,38,38,.22)}}50%{{box-shadow:0 18px 55px rgba(220,38,38,.45)}}}}
+.req-cap-alert{{position:fixed;left:50%;top:24px;transform:translateX(-50%);z-index:10050;max-width:min(760px,92vw);background:#fee2e2;color:#7f1d1d;border:2px solid #ef4444;border-left:12px solid #dc2626;border-radius:20px;padding:18px 22px;font-weight:950;box-shadow:0 24px 70px rgba(220,38,38,.32);animation:alarmShake .38s ease-in-out 0s 3}}.req-cap-alert small{{display:block;color:#991b1b;margin-top:4px;font-weight:750}}
+.req-detail-btn{{display:inline-flex;align-items:center;gap:8px;background:#ecfdf5!important;color:#047857!important;border:1.5px solid #86efac!important;border-radius:999px!important;padding:10px 14px!important;font-weight:850!important;box-shadow:none!important}}.req-detail-btn:hover{{background:#bbf7d0!important;color:#064e3b!important}}.req-count-pill{{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:8px 12px;background:#f0fdf4;color:#047857;border:1px solid #86efac;font-weight:850;white-space:nowrap}}.req-count-pill.full{{background:#fee2e2;color:#991b1b;border-color:#fecaca}}.req-count-pill.warn{{background:#fffbeb;color:#92400e;border-color:#fde68a}}
+
 /* IA HR PRO - estilo verde corporativo, limpio y uniforme */
 .iahr-fab{{position:fixed;right:22px;bottom:22px;z-index:9998;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;border-radius:999px;padding:13px 17px;box-shadow:0 18px 40px rgba(16,185,129,.28);display:flex;align-items:center;gap:8px;font-weight:900;cursor:pointer;border:1px solid rgba(255,255,255,.24)}}
 .iahr-fab i{{font-size:18px}}.iahr-panel{{position:fixed;right:22px;bottom:82px;width:min(430px,calc(100vw - 28px));max-height:76vh;z-index:9999;background:#ffffff;border:1px solid #bbf7d0;border-radius:22px;box-shadow:0 28px 72px rgba(15,23,42,.22),0 0 0 1px rgba(16,185,129,.08);display:none;overflow:hidden}}.iahr-panel.open{{display:block}}.iahr-head{{display:flex;justify-content:space-between;align-items:center;padding:18px 18px;background:#16a34a;border-bottom:1px solid rgba(255,255,255,.12)}}.iahr-head b{{display:flex;align-items:center;gap:8px;color:#fff;font-size:18px;line-height:1.1}}.iahr-bot{{font-size:17px}}.iahr-head small{{display:block;color:#ecfdf5;font-size:12px;margin-top:6px;font-weight:700}}.iahr-head button{{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:12px;width:38px;height:38px;font-size:24px;line-height:1;cursor:pointer;font-weight:900;display:grid;place-items:center}}.iahr-head button:hover{{background:rgba(255,255,255,.28);transform:none}}.iahr-body{{padding:18px;background:#fff}}.iahr-ex{{font-size:12px;color:#065f46;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:14px;padding:12px;margin-bottom:12px;line-height:1.45;font-weight:750}}.iahr-body textarea{{width:100%;min-height:112px;border-radius:16px;border:1.5px solid #86efac!important;background:#fff!important;color:#0f172a!important;padding:15px!important;font-weight:750;resize:vertical;box-shadow:0 0 0 4px rgba(34,197,94,.10);outline:none}}.iahr-body textarea:focus{{border-color:#22c55e!important;box-shadow:0 0 0 5px rgba(34,197,94,.16)!important}}.iahr-body textarea::placeholder{{color:#7c8da1}}.iahr-send{{width:100%;margin-top:16px;justify-content:center;border-radius:15px!important;background:#16a34a!important;color:#fff!important;border:0!important;font-size:15px!important;padding:14px 18px!important;box-shadow:0 14px 32px rgba(22,163,74,.18)!important}}.iahr-send:hover{{background:#15803d!important;transform:translateY(-1px)}}.iahr-respuesta{{margin-top:13px;max-height:310px;overflow:auto;background:#fff;color:#0f172a}}.ia-result{{border-radius:14px;padding:13px;border:1px solid #dbe7ef;background:#f8fafc;color:#0f172a}}.ia-result h3{{margin:0 0 8px;color:#0f172a}}.ia-result h4{{margin:10px 0 6px}}.ia-result p{{margin:7px 0;line-height:1.45}}.ia-result ul{{margin:8px 0 0 18px;padding:0}}.ia-result.ok{{border-color:#86efac;background:#f0fdf4}}.ia-result.warn{{border-color:#fde68a;background:#fffbeb}}.ia-result.bad{{border-color:#fecdd3;background:#fff1f2}}.ia-result.legal{{border-color:#93c5fd;background:#eff6ff}}.ia-result a{{color:#047857;font-weight:900}}.ia-result small,.ia-result .muted,.iahr-respuesta .muted{{color:#475569;font-weight:700}}.ia-admin-form{{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:12px}}.ia-admin-form textarea{{grid-column:1/-1;min-height:110px}}.ia-admin-form .full{{grid-column:1/-1}}.ia-table td{{vertical-align:top}}
@@ -4452,13 +4458,32 @@ async function iahrAsk(ev){{
 
 
 def flashes():
-    out = ""
-    for cat, msg in list(getattr(request, 'flashes', []) or []):
-        out += f"<div class='flash {'err' if cat=='error' else ''}'>{msg}</div>"
-    # Flask get_flashed_messages unavailable without import? import below lazily
+    # Mensajes visibles tipo alarma. Si es error, se fija arriba, vibra y emite sonido.
     from flask import get_flashed_messages
-    out = "".join([f"<div class='flash {'err' if c=='error' else ''}'>{m}</div>" for c, m in get_flashed_messages(with_categories=True)])
-    return out
+    mensajes = get_flashed_messages(with_categories=True)
+    if not mensajes:
+        return ""
+    html_msgs = []
+    hay_error = False
+    for c, m in mensajes:
+        es_error = c in ('error', 'err')
+        hay_error = hay_error or es_error
+        icono = '🚨' if es_error else '✅'
+        html_msgs.append(f"<div class='flash {'err alarm-flash' if es_error else 'ok-flash'}'>{icono} {m}</div>")
+    script = ""
+    if hay_error:
+        script = """<script>
+        document.addEventListener('DOMContentLoaded',function(){
+          try{
+            const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC();
+            const seq=[620,420,620]; let t=ctx.currentTime;
+            seq.forEach((f,i)=>{const o=ctx.createOscillator(); const g=ctx.createGain(); o.frequency.value=f; o.type='square'; g.gain.setValueAtTime(0.001,t); g.gain.exponentialRampToValueAtTime(0.08,t+0.02); g.gain.exponentialRampToValueAtTime(0.001,t+0.18); o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+0.2); t+=0.23;});
+            setTimeout(()=>ctx.close(),900);
+          }catch(e){}
+          try{ if(navigator.vibrate) navigator.vibrate([180,80,180]); }catch(e){}
+        });
+        </script>"""
+    return "".join(html_msgs) + script
 
 
 def item(tipo, label, icon, active):
@@ -7110,8 +7135,11 @@ def admin_contratacion():
         if accion == 'registrar_dni_requerimiento':
             ticket = clean(request.form.get('ticket_req'))
             dni = normalizar_dni(request.form.get('dni_scan'))
+            ajax_req = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
             if not ticket or not dni:
-                flash('Seleccione requerimiento y escanee/digite DNI obligatorio.', 'error')
+                msg = 'Seleccione requerimiento y escanee/digite DNI obligatorio.'
+                if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
+                flash(msg, 'error')
                 return redirect(url_for('admin_contratacion', sec='requerimientos'))
             with db() as con:
                 req = con.execute('SELECT * FROM contratacion_requerimientos WHERE ticket=? ORDER BY id DESC LIMIT 1', (ticket,)).fetchone()
@@ -7135,7 +7163,9 @@ def admin_contratacion():
                 existe = con.execute('SELECT id FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni,ticket)).fetchone()
                 if existe:
                     con.commit()
-                    flash(f'ALERTA: el DNI {dni} ya está registrado en el requerimiento {ticket}. No se permite duplicar postulante.', 'error')
+                    msg = f'ALERTA: el DNI {dni} ya está registrado en el requerimiento {ticket}. No se permite duplicar postulante.'
+                    if ajax_req: return jsonify(ok=False, msg=msg, sound='error')
+                    flash(msg, 'error')
                     return redirect(url_for('admin_contratacion', sec='requerimientos'))
                 if req:
                     try:
@@ -7146,13 +7176,17 @@ def admin_contratacion():
                     if cantidad_req > 0 and registrados_req >= cantidad_req:
                         con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO' WHERE ticket=?", (ticket,))
                         con.commit()
-                        flash(f'Cupo cerrado: el requerimiento {ticket} ya alcanzó {cantidad_req} postulante(s).', 'error')
+                        msg = f'🚨 CUPO COMPLETO: el requerimiento {ticket} ya alcanzó {cantidad_req} postulante(s). No se puede registrar más personal.'
+                        if ajax_req: return jsonify(ok=False, msg=msg, sound='error', cupo=True, cantidad=cantidad_req, registrados=registrados_req)
+                        flash(msg, 'error')
                         return redirect(url_for('admin_contratacion', sec='requerimientos'))
                 vals = (dni,nombre,empresa,req['sede'] if req else '',ticket,req['actividad'] if req else '',tipo,'PRE REGISTRADO',req['fecha_ingreso'] if req else fecha_sin_hora(hoy_iso()),cargo or (req['cargo'] if req else ''),area,correo,celular,'Registrado desde escaneo DNI/código de barras en requerimiento',now_txt(),session.get('admin_user','admin'))
                 con.execute("INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", vals)
                 sincronizar_estado_requerimiento_por_cupo(con, ticket)
                 con.commit()
-            flash('DNI conectado al requerimiento. Si existe en historial, se marca como REINGRESANTE; si no, queda como NUEVO para completar ficha.', 'ok')
+            msg = 'DNI conectado al requerimiento. Si existe en historial, se marca como REINGRESANTE; si no, queda como NUEVO para completar ficha.'
+            if ajax_req: return jsonify(ok=True, msg=msg, sound='ok', dni=dni, tipo=tipo, nombre=nombre or '')
+            flash(msg, 'ok')
             return redirect(url_for('admin_contratacion', sec='requerimientos'))
         if accion == 'guardar_requerimiento':
             ticket = clean(request.form.get('ticket')) or ('REQ-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
@@ -7500,6 +7534,22 @@ def admin_contratacion():
                 flash('Campos obligatorios pendientes: ' + ', '.join(faltan), 'error')
                 return redirect(url_for('admin_contratacion', sec='nuevos'))
             with db() as con:
+                # Bloqueo PRO: no permite superar la cantidad solicitada del requerimiento.
+                # Si el DNI ya estaba pre-registrado en ese ticket, solo se completa su ficha.
+                if requerimiento:
+                    req_cap = con.execute('SELECT * FROM contratacion_requerimientos WHERE ticket=? ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
+                    ing_ya_existe_cap = con.execute('SELECT id FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni, requerimiento)).fetchone()
+                    if req_cap and not ing_ya_existe_cap:
+                        try:
+                            cantidad_req_cap = int(req_cap['cantidad'] or 0)
+                        except Exception:
+                            cantidad_req_cap = 0
+                        registrados_req_cap = con.execute('SELECT COUNT(*) FROM contratacion_ingresos WHERE requerimiento=?', (requerimiento,)).fetchone()[0]
+                        if cantidad_req_cap > 0 and registrados_req_cap >= cantidad_req_cap:
+                            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO' WHERE ticket=?", (requerimiento,))
+                            con.commit()
+                            flash(f'🚨 CUPO COMPLETO: el requerimiento {requerimiento} solicitó {cantidad_req_cap} postulante(s) y ya tiene {registrados_req_cap}. No se puede registrar otro trabajador.', 'error')
+                            return redirect(url_for('admin_contratacion', sec='nuevos', req=requerimiento))
                 existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
                 if existe:
                     con.execute("""UPDATE trabajadores SET nombre=?, empresa=?, cargo=?, area=?, correo=?, celular=?, activo=1, fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso), observacion=?, foto_ruta=COALESCE(NULLIF(?,''),foto_ruta), fecha_nacimiento=COALESCE(NULLIF(?,''),fecha_nacimiento), fecha_fin_contrato=COALESCE(NULLIF(?,''),fecha_fin_contrato), tipo_contrato=COALESCE(NULLIF(?,''),tipo_contrato), remuneracion_basica=COALESCE(NULLIF(?,''),remuneracion_basica) WHERE dni=?""", (nombre,empresa,cargo,area,correo,celular,fecha_ingreso,obs,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica,dni))
@@ -8650,7 +8700,14 @@ html,body{overflow-x:hidden!important;}
         """)
     elif sec=='requerimientos':
         req_options=''.join([f"<option value='{h(r['ticket'])}'>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['actividad'])}</option>" for r in requerimientos])
-        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='8'>Sin requerimientos registrados.</td></tr>"
+        req_reg_map = {}
+        try:
+            with db() as con_req_count:
+                for rr in con_req_count.execute('SELECT requerimiento, COUNT(*) total FROM contratacion_ingresos GROUP BY requerimiento').fetchall():
+                    req_reg_map[clean(rr['requerimiento'])] = int(rr['total'] or 0)
+        except Exception:
+            req_reg_map = {}
+        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><span class='req-count-pill {'full' if int(req_reg_map.get(clean(r['ticket']),0)) >= int(r['cantidad'] or 0) and int(r['cantidad'] or 0)>0 else ('warn' if int(req_reg_map.get(clean(r['ticket']),0))>0 else '')}'>{int(req_reg_map.get(clean(r['ticket']),0))} / {int(r['cantidad'] or 0)}</span></td><td><a class='req-detail-btn' href='/admin/contratacion?sec=datos_completos&req={h(r['ticket'])}'>👁 Ver postulantes</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
         trabajadores_scan_js = json.dumps({normalizar_dni(r['dni']): {'nombre': (r['nombre'] or ''), 'empresa': (r['empresa'] or ''), 'cargo': (r['cargo'] or ''), 'area': (r['area'] or ''), 'correo': (r['correo'] or '')} for r in trabajadores}, ensure_ascii=False)
         content=wrap(f'''
         <h2 class='c-title'>Requerimiento de personal</h2>
@@ -8659,12 +8716,13 @@ html,body{overflow-x:hidden!important;}
           <form method='post' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Ticket / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001'><b>Empresa</b><select name='empresa' required>{opt_empresa_select}</select><b>Área</b><input name='area' list='lista_areas_cfg' required placeholder='Área desde Datos Maestros'><b>Cargo</b><input name='cargo' list='lista_cargos_cfg' required placeholder='Cargo desde Datos Maestros'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' required placeholder='Actividad desde Datos Maestros'><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha ingreso objetivo</b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Tipo contrato</b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral</b><select name='regimen_laboral'>{opt_regimen_select}</select><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear ticket</button><span class='muted2'>Al cumplir la cantidad, el sistema cierra el cupo automáticamente.</span></div></form>
           <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='ticket_req' id='ticket_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏹ Detener</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
         </div>
-        <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Eliminar</th><th>Responsable</th></tr>{req_rows}</table></div>
+        <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle postulantes</th><th>Eliminar</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
         let scanReqStream=null, scanReqCount=0, scanReqNuevos=0, scanReqReingresos=0, scanReqSaving=false;
         const trabajadoresReq = {trabajadores_scan_js};
         function limpiarDniReq(v){{return (v||'').replace(/\D/g,'').slice(-8);}}
-        function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.frequency.value=(tipo==='reingreso'?880:520); gain.gain.value=0.06; osc.connect(gain); gain.connect(ctx.destination); osc.start(); setTimeout(()=>{{osc.stop();ctx.close();}},140);}}catch(e){{}}}}
+        function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const freqs=(tipo==='error'?[620,420,620]:[tipo==='reingreso'?880:520]); let t=ctx.currentTime; freqs.forEach(f=>{{const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type=tipo==='error'?'square':'sine'; osc.frequency.value=f; gain.gain.value=tipo==='error'?0.09:0.06; osc.connect(gain); gain.connect(ctx.destination); osc.start(t); osc.stop(t+0.18); t+=0.22;}}); setTimeout(()=>ctx.close(),900);}}catch(e){{}}}}
+        function mostrarAlarmaReq(msg){{beepReq('error'); try{{if(navigator.vibrate) navigator.vibrate([180,80,180]);}}catch(e){{}} const old=document.querySelector('.req-cap-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-cap-alert'; a.innerHTML='🚨 '+(msg||'No se pudo registrar.')+'<small>Revise la cantidad solicitada del requerimiento o el DNI duplicado.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},6500);}}
         document.addEventListener('DOMContentLoaded',()=>{{const i=document.getElementById('dni_scan_req'); if(i){{i.addEventListener('keydown',function(e){{if(e.key==='Enter'){{e.preventDefault(); agregarDniLocalReq();}}}}); i.addEventListener('input',function(){{const dni=limpiarDniReq(i.value); if(document.getElementById('scan_masivo_req')?.checked && dni.length===8){{setTimeout(()=>agregarDniLocalReq(),80);}}}});}}}});
         async function agregarDniLocalReq(){{
           if(scanReqSaving) return;
@@ -8675,7 +8733,9 @@ html,body{overflow-x:hidden!important;}
           const trab=trabajadoresReq[dni]; const esRe=!!trab; const nombre=esRe?(trab.nombre||'REINGRESANTE'):'NUEVO - solo DNI';
           try{{
             const fd=new FormData(); fd.append('accion','registrar_dni_requerimiento'); fd.append('ticket_req',ticket); fd.append('dni_scan',dni);
-            await fetch(window.location.href, {{method:'POST', body:fd, credentials:'same-origin'}});
+            const resp = await fetch(window.location.href, {{method:'POST', body:fd, credentials:'same-origin', headers:{{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}}}});
+            let data={{ok:false,msg:'No se pudo registrar.'}}; try{{data=await resp.json();}}catch(e){{}}
+            if(!data.ok){{document.getElementById('scan_result_req').value=data.msg||'Registro bloqueado'; mostrarAlarmaReq(data.msg); i.select(); scanReqSaving=false; return;}}
             scanReqCount++; if(esRe) scanReqReingresos++; else scanReqNuevos++;
             document.getElementById('cntLeidos').innerText='Leídos: '+scanReqCount;
             document.getElementById('cntNuevos').innerText='Nuevos: '+scanReqNuevos;
