@@ -4279,8 +4279,34 @@ function appShell(){return document.querySelector('.app')}
 function saveSideScroll(){const s=side(); if(s){localStorage.setItem('sideScroll',s.scrollTop||0)}}
 function restoreSideScroll(){const s=side(); if(s){s.scrollTop=parseInt(localStorage.getItem('sideScroll')||'0')}}
 function toggleSide(){const s=side(), a=appShell(); if(!s)return; if(window.innerWidth<1000){s.classList.toggle('open')}else{const c=!s.classList.contains('collapsed'); s.classList.toggle('collapsed',c); if(a)a.classList.toggle('side-collapsed',c); localStorage.setItem('sideCollapsed',c?'1':'0')}}
-function toggleGroup(id){const g=document.getElementById(id); if(!g)return; g.classList.toggle('closed'); localStorage.setItem('group_'+id,g.classList.contains('closed')?'1':'0')}
-function initSide(){const s=side(), a=appShell(); if(!s)return; const c=localStorage.getItem('sideCollapsed')==='1' && window.innerWidth>=1000; s.classList.toggle('collapsed',c); if(a)a.classList.toggle('side-collapsed',c); document.querySelectorAll('.menu-group[data-group]').forEach(g=>{const id=g.id; const saved=localStorage.getItem('group_'+id); if(saved==='1' && !g.classList.contains('force-open')) g.classList.add('closed')}); if(!location.hash){setTimeout(restoreSideScroll,60)}; document.querySelectorAll('.menu-item').forEach(a=>a.addEventListener('click',()=>{saveSideScroll(); if(window.innerWidth<1000){const s=side(); if(s)s.classList.remove('open')}}));}
+function groupHasActive(g){return !!g.querySelector('.menu-item.active,.menu-item.current-menu,.menu-title.active')}
+function openParents(el){let g=el.closest ? el.closest('.menu-group') : null; while(g){g.classList.remove('closed'); localStorage.setItem('group_'+g.id,'0'); g=g.parentElement?g.parentElement.closest('.menu-group'):null;}}
+function toggleGroup(id){
+  const g=document.getElementById(id); if(!g)return;
+  g.classList.toggle('closed');
+  localStorage.setItem('group_'+id,g.classList.contains('closed')?'1':'0');
+}
+function initSide(){
+  const s=side(), a=appShell(); if(!s)return;
+  const c=localStorage.getItem('sideCollapsed')==='1' && window.innerWidth>=1000;
+  s.classList.toggle('collapsed',c); if(a)a.classList.toggle('side-collapsed',c);
+
+  // PRO FIX SIDEBAR: no abrir todos los submódulos al cambiar de módulo.
+  // Respeta lo que el usuario contrae/expande y solo abre el grupo donde está el módulo activo.
+  document.querySelectorAll('.menu-group[data-group]').forEach(g=>{
+    const id=g.id;
+    const saved=localStorage.getItem('group_'+id);
+    const isNested=g.classList.contains('nested');
+    const hasActive=groupHasActive(g);
+    if(hasActive){ g.classList.remove('closed'); return; }
+    if(saved==='1'){ g.classList.add('closed'); return; }
+    if(saved==='0'){ g.classList.remove('closed'); return; }
+    if(isNested){ g.classList.add('closed'); }
+  });
+  document.querySelectorAll('.menu-item.active,.menu-item.current-menu').forEach(openParents);
+  if(!location.hash){setTimeout(restoreSideScroll,60)};
+  document.querySelectorAll('.menu-item').forEach(a=>a.addEventListener('click',()=>{saveSideScroll(); if(window.innerWidth<1000){const s=side(); if(s)s.classList.remove('open')}}));
+}
 function filterCards(){const q=(document.getElementById('cardSearch')?.value||'').toLowerCase();document.querySelectorAll('.doc-card').forEach(c=>{c.style.display=c.innerText.toLowerCase().includes(q)?'block':'none'})}
 window.addEventListener('DOMContentLoaded',()=>{initSide(); if(location.hash){document.querySelectorAll('.menu-item').forEach(x=>{if(x.getAttribute('href')&&x.getAttribute('href').endsWith(location.hash)) x.classList.add('active')}); setTimeout(()=>{document.querySelector(location.hash)?.scrollIntoView({block:'start'});},120)}});window.addEventListener('beforeunload',saveSideScroll)
 </script>
@@ -4471,7 +4497,7 @@ def sidebar(active):
             <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Doc. Postulantes</span></a>
             <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
             <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
-            <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested force-open'>
+            <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested'>
               <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
                 <a class='{cls('maestros')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=maestros'><i class='bi bi-grid'></i><span class='label'>Mantenedor General</span></a>
@@ -4483,7 +4509,7 @@ def sidebar(active):
                 <a class='{cls('integracion_nisira')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=integracion_nisira'><i class='bi bi-database-check'></i><span class='label'>Base Central / Integración</span></a>
                 <a class='{cls('ficha')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=ficha'><i class='bi bi-person-lines-fill'></i><span class='label'>Ficha Trabajador</span></a>
                 <a class='{cls('documentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=documentaria'><i class='bi bi-folder-check'></i><span class='label'>Archivos Trabajador {'OK' if docs_count_con else ''}</span></a>
-                <div id='grp_config_doc_maestros' data-group='config_doc_maestros' class='menu-group nested force-open'>
+                <div id='grp_config_doc_maestros' data-group='config_doc_maestros' class='menu-group nested'>
                   <button type='button' class='menu-title' onclick="toggleGroup('grp_config_doc_maestros')"><i class='bi bi-file-earmark-word'></i><span class='label'>Configuración Documentaria</span><span class='chev'>∨</span></button>
                   <div class='submenu'>
                     <a class='{cls('plantillas')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=plantillas'><i class='bi bi-file-earmark-word'></i><span class='label'>Plantillas Documentales</span></a>
@@ -7140,11 +7166,14 @@ def admin_contratacion():
             except Exception:
                 cantidad = 0
             fecha_ingreso = fecha_sin_hora(request.form.get('fecha_ingreso')) or fecha_sin_hora(hoy_iso())
+            # FIX: tipo_contrato y regimen_laboral deben definirse ANTES de validar.
+            # Antes se evaluaba tipo_contrato sin existir y generaba Internal Server Error
+            # al registrar un requerimiento.
+            regimen_laboral = clean(request.form.get('regimen_laboral')).upper()
+            tipo_contrato = clean(request.form.get('tipo_contrato')).upper()
             if not ticket or not empresa or not area or not cargo or not actividad or not fecha_ingreso or not tipo_contrato:
                 flash('Campos obligatorios: requerimiento, empresa, área, cargo, actividad, fecha objetivo y tipo de contrato.', 'error')
                 return redirect(url_for('admin_contratacion', sec='requerimientos'))
-            regimen_laboral = clean(request.form.get('regimen_laboral')).upper()
-            tipo_contrato = clean(request.form.get('tipo_contrato')).upper()
             prioridad = clean(request.form.get('prioridad')) or 'MEDIA'
             estado = clean(request.form.get('estado')) or 'SOLICITADO'
             responsable = clean(request.form.get('responsable'))
