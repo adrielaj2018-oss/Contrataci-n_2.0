@@ -4543,6 +4543,24 @@ except Exception:
     pass
 # ======================= FIN PATCH UI FINAL 2026-05-28 =======================
 
+
+# ======================= TEMA GLOBAL POSTULANTES PRO 2026 =======================
+# Unifica todos los módulos/submódulos al formato verde/blanco del módulo Postulantes,
+# sin tocar la lógica funcional del sistema.
+GLOBAL_POSTULANTES_THEME_PRO = r'''
+:root{--prz-bg:#eef7f4;--prz-card:#ffffff;--prz-soft:#f8fbfd;--prz-soft-green:#ecfdf5;--prz-green:#00843d;--prz-green-2:#10b981;--prz-green-3:#16a34a;--prz-dark:#0b243f;--prz-muted:#64748b;--prz-border:#d7e5ef;--prz-border-green:#a7f3d0;--prz-shadow:0 18px 42px rgba(15,23,42,.08);--prz-shadow-green:0 18px 42px rgba(16,185,129,.14)}
+body{background:var(--prz-bg)!important;color:var(--prz-dark)!important;font-family:Inter,Segoe UI,Arial,sans-serif!important}.app{background:var(--prz-bg)!important}.main{background:radial-gradient(circle at 94% -12%,rgba(16,185,129,.13),transparent 28%),linear-gradient(180deg,#f8fbfd 0%,#eef7f4 100%)!important;color:var(--prz-dark)!important;padding:26px!important;overflow-x:hidden!important}.main *{text-shadow:none!important}.main .c-card,.main .card,.main .filter-card,.main .table-wrap,.main .dashboard-card,.main .panel,.main .box,.main .section,.main .bloque,.main .form-card,.main .gestion-card,.main .dashboard-panel,.main .plantilla-top,.main .plantilla-filter,.main .modal-section,.main .content-card,.main .post-card,.main .req-card,.main .metric-card,.main .kpi-card,.main .med-card,.main .doc-card{background:var(--prz-card)!important;color:var(--prz-dark)!important;border:1px solid var(--prz-border)!important;border-radius:22px!important;box-shadow:var(--prz-shadow)!important}.main .c-card:hover,.main .card:hover,.main .dashboard-card:hover,.main .gestion-card:hover,.main .metric-card:hover,.main .kpi-card:hover{box-shadow:0 22px 52px rgba(15,23,42,.11)!important}.main h1,.main h2,.main h3,.main h4,.main .c-title,.main .title,.main .section-title,.main .plantilla-top .c-title{color:var(--prz-dark)!important;font-weight:1000!important;letter-spacing:-.03em!important}.main p,.main small,.main .muted,.main .sub,.main .help,.main .desc{color:#53667f!important}.main b,.main strong,.main label{color:var(--prz-dark)!important;font-weight:950!important}.main .hero,.main .page-hero,.main .plantilla-top,.main .head-card,.main .top-card{background:#fff!important;border:1px solid var(--prz-border)!important;border-radius:24px!important;box-shadow:var(--prz-shadow)!important;padding:28px 34px!important}.main .hero h1,.main .page-hero h1,.main .plantilla-top h1{color:var(--prz-dark)!important;font-size:clamp(30px,3.2vw,54px)!important;line-height:1.05!important}
+.main input,.main select,.main textarea,.main .input,.main .select-soft{background:#fff!important;color:var(--prz-dark)!important;border:1.5px solid #cfe0ee!important;border-radius:15px!important;font-weight:850!important;box-shadow:none!important}.main input::placeholder,.main textarea::placeholder{color:#7b8aa3!important}.main input:focus,.main select:focus,.main textarea:focus{border-color:var(--prz-green-2)!important;box-shadow:0 0 0 4px rgba(16,185,129,.16)!important;outline:none!important}.main option{background:#fff!important;color:var(--prz-dark)!important}.main .form-label,.main .label,.main .filter-label,.main .plantilla-filter b{background:#eef4f8!important;color:var(--prz-dark)!important;border-radius:14px!important;font-weight:950!important}.main .btn,.main .c-btn,.main button,.main a.btn,.main .crear-btn,.main .btn-green,.main .primary,.main .green{border-radius:15px!important;font-weight:1000!important;border:1px solid transparent!important;box-shadow:0 14px 30px rgba(0,132,61,.18)!important}.main .btn-green,.main .green,.main .primary,.main .crear-btn,.main .btn.primary,.main button[type=submit],.main input[type=submit],.main .btn-success{background:linear-gradient(135deg,var(--prz-green),var(--prz-green-2))!important;color:#fff!important}.main .btn:hover,.main .c-btn:hover,.main button:hover,.main a.btn:hover{transform:translateY(-1px)}.main .btn.gray,.main .gray,.main .btn-secondary,.main .btn-dark{background:#1f2937!important;color:#fff!important;border-color:#1f2937!important;box-shadow:0 12px 28px rgba(15,23,42,.12)!important}.main .btn-white,.main .btn-light,.main .btn-outline,.main .outline{background:#fff!important;color:var(--prz-dark)!important;border:1px solid #cfe0ee!important;box-shadow:none!important}.main .btn-red,.main .danger,.main .btn-danger{background:#ef4444!important;color:#fff!important;border:0!important}
+.main .kpi,.main .kpis .item,.main .metric,.main .metric-card,.main .dash-metric,.main .stat-card,.main .summary-card{background:#fff!important;color:var(--prz-dark)!important;border:1px solid var(--prz-border)!important;border-radius:18px!important;box-shadow:var(--prz-shadow)!important;min-height:92px!important}.main .kpi *,.main .metric *,.main .stat-card *,.main .summary-card *{color:var(--prz-dark)!important}.main .kpi b,.main .metric b,.main .stat-card b,.main .summary-card b,.main .kpi .num,.main .metric .num,.main .stat-card .num{color:var(--prz-dark)!important;font-size:30px!important;font-weight:1000!important}.main .kpi small,.main .metric small,.main .stat-card small{color:#53667f!important;font-weight:750!important}.main .kpi .icon,.main .metric .icon,.main .stat-icon,.main .mi,.main .kpi-icon,.main .dash-metric .mi{width:48px!important;height:48px!important;min-width:48px!important;border-radius:50%!important;display:inline-grid!important;place-items:center!important;background:linear-gradient(135deg,var(--prz-green),#009f58)!important;color:#fff!important;box-shadow:0 14px 28px rgba(0,132,61,.24)!important;font-size:22px!important}.main .soft-icon,.main .circle-icon,.main .round-icon{width:50px!important;height:50px!important;border-radius:50%!important;display:grid!important;place-items:center!important;background:#dcfce7!important;color:#047857!important;font-weight:1000!important}
+.main .table-wrap{overflow:auto!important;max-width:100%!important;padding:0!important}.main table,.main .c-table,.main .tpl-table,.main .plantilla-table{width:100%!important;border-collapse:separate!important;border-spacing:0!important;background:#fff!important;color:var(--prz-dark)!important;min-width:980px}.main th,.main .c-table th,.main .tpl-table th,.main .plantilla-table th{background:linear-gradient(180deg,#00924c,#007a3d)!important;color:#fff!important;border:0!important;border-right:1px solid rgba(255,255,255,.18)!important;padding:14px 12px!important;text-transform:none!important;letter-spacing:0!important;font-weight:1000!important;white-space:nowrap!important}.main th:first-child{border-top-left-radius:12px!important}.main th:last-child{border-top-right-radius:12px!important;border-right:0!important}.main td,.main .c-table td,.main .tpl-table td,.main .plantilla-table td{background:#fff!important;color:var(--prz-dark)!important;border-bottom:1px solid #e2edf5!important;border-right:1px solid #e2edf5!important;padding:13px 12px!important;font-weight:800!important;vertical-align:middle!important}.main tr:nth-child(even) td{background:#f8fbfd!important}.main tr:hover td{background:#ecfdf5!important;color:var(--prz-dark)!important}.main td *{color:inherit}.main .pill,.main .badge,.main .status-pill,.main .state-pill,.main .tag,.main .estado,.main .estado-pill,.main .req-count-pill{border-radius:999px!important;padding:8px 13px!important;font-weight:1000!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;border:1px solid var(--prz-border-green)!important;background:#ecfdf5!important;color:#047857!important;white-space:nowrap!important}.main .pill.warn,.main .badge.warn,.main .status-pill.warn,.main .state-pill.warn{background:#fffbeb!important;color:#b45309!important;border-color:#fde68a!important}.main .pill.bad,.main .badge.bad,.main .status-pill.bad,.main .state-pill.bad{background:#fee2e2!important;color:#b91c1c!important;border-color:#fecaca!important}.main .pill.ok,.main .badge.ok,.main .status-pill.ok,.main .state-pill.ok{background:#dcfce7!important;color:#047857!important;border-color:#86efac!important}
+.main .form-grid,.main .c-form,.main .laboral-grid,.main .grid-form{background:#fff!important;border:1px solid var(--prz-border)!important;border-radius:22px!important;box-shadow:var(--prz-shadow)!important;padding:20px!important}.main .form-grid label,.main .c-form label,.main .laboral-grid label,.main .field-label{background:#eef4f8!important;color:var(--prz-dark)!important;border-radius:14px!important;padding:12px!important;font-weight:950!important}.main .missing-note,.main .ok-note,.main .note-green,.main .alert-soft{background:#ecfdf5!important;color:#047857!important;border:1px solid #a7f3d0!important;border-radius:18px!important;font-weight:900!important}.main .alert-warn,.main .note-warn{background:#fffbeb!important;color:#92400e!important;border:1px solid #fdba74!important;border-radius:18px!important}.main .alert-danger,.main .note-danger{background:#fee2e2!important;color:#991b1b!important;border:1px solid #fecaca!important;border-radius:18px!important}.main .avatar,.main .photo,.main .foto,.main .photo-box,.main .avatar-panel img,.main img.avatar-img{border-radius:14px!important;border:1px solid #bbf7d0!important;background:#ecfdf5!important;object-fit:cover!important}.main .sin-foto,.main .no-photo{background:#fee2e2!important;color:#b91c1c!important;border:1px solid #fecaca!important;border-radius:18px!important;font-weight:1000!important}.modal-box{background:#fff!important;color:var(--prz-dark)!important;border:1px solid var(--prz-border)!important;border-radius:24px!important;box-shadow:0 28px 80px rgba(15,23,42,.22)!important}.modal-head{background:#ecfdf5!important;border-bottom:1px solid var(--prz-border-green)!important;color:var(--prz-dark)!important}.modal-head h2{color:var(--prz-dark)!important}.modal-body{background:#fff!important;color:var(--prz-dark)!important}.modal-close{color:var(--prz-dark)!important}.main .gestion-card,.main .dashboard-panel{background:#fff!important;border:1px solid var(--prz-border)!important;border-radius:24px!important;box-shadow:var(--prz-shadow)!important}.main .gestion-icon,.main .module-icon{background:linear-gradient(135deg,var(--prz-green),var(--prz-green-2))!important;color:#fff!important;border-radius:18px!important;box-shadow:0 14px 28px rgba(0,132,61,.22)!important}.main .full-link{background:#ecfdf5!important;color:#047857!important;border:1px solid #bbf7d0!important;border-radius:14px!important}.main .table-wrap::-webkit-scrollbar,.main .scroll-x::-webkit-scrollbar{height:10px!important;width:10px!important}.main .table-wrap::-webkit-scrollbar-thumb,.main .scroll-x::-webkit-scrollbar-thumb{background:#9fb3c5!important;border-radius:999px!important}.main .table-wrap::-webkit-scrollbar-track,.main .scroll-x::-webkit-scrollbar-track{background:#eef4f8!important;border-radius:999px!important}.side{background:linear-gradient(180deg,#073f33,#064333 55%,#04372d)!important;border-right:1px solid rgba(167,243,208,.20)!important}.side-top{background:#064333!important;border-bottom:1px solid rgba(255,255,255,.10)!important}.side .menu-title.active,.side .menu-item.active,.side .menu-item.parent-active,.side .menu-group.force-open>.menu-title{background:linear-gradient(135deg,#10b981,#0ea565)!important;color:#fff!important;border-left:0!important;border-radius:18px!important;box-shadow:0 16px 30px rgba(16,185,129,.25)!important}.side .menu-title,.side .menu-item{color:#f8fafc!important}.side .menu-title:hover,.side .menu-item:hover{background:rgba(255,255,255,.08)!important;color:#fff!important}.side-user{background:rgba(255,255,255,.10)!important;border:1px solid rgba(255,255,255,.18)!important;border-radius:20px!important}@media(max-width:900px){.main{padding:16px!important}.main table{min-width:900px!important}.main .hero,.main .page-hero,.main .plantilla-top,.main .head-card,.main .top-card{padding:20px!important}}
+'''
+try:
+    BASE = BASE.replace('</style>', GLOBAL_POSTULANTES_THEME_PRO + '\n</style>')
+except Exception:
+    pass
+# ======================= FIN TEMA GLOBAL POSTULANTES PRO 2026 =======================
+
 def safe_ia_widget_hr(active):
     try:
         return ia_widget_hr(active) if 'ia_widget_hr' in globals() else ''
@@ -9563,48 +9581,66 @@ html,body{overflow-x:hidden!important;}
         content=wrap(f"""
         <style>
           .med-page-pro{{display:flex;flex-direction:column;gap:16px}}
-          .med-filter-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:16px;box-shadow:0 14px 30px #0f172a0b}}
-          .med-filter-grid{{display:grid;grid-template-columns:220px minmax(280px,1fr) 190px 1fr;gap:12px;align-items:center}}
-          .med-filter-grid b{{background:#eef4f8;border-radius:12px;padding:14px;text-align:right;color:#0b2742}}
-          .med-filter-grid select,.med-filter-grid input{{width:100%;border:1px solid #d6e3ef;border-radius:14px;padding:14px;font-weight:900;background:#fff;color:#0b2742}}
-          .med-kpis{{display:grid;grid-template-columns:repeat(5,minmax(135px,1fr));gap:12px}}
-          .med-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:18px;padding:16px;display:flex;gap:12px;align-items:center;box-shadow:0 12px 28px #0f172a0b}}
-          .med-kpi i{{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#e8fff1;color:#008b4d;font-size:20px}}
-          .med-kpi.warn i{{background:#fff4cf;color:#b7791f}} .med-kpi.danger i{{background:#ffe1e1;color:#dc2626}} .med-kpi.gray i{{background:#e5e7eb;color:#475569}}
-          .med-kpi small{{display:block;font-weight:900;color:#475569}} .med-kpi b{{display:block;font-size:28px;color:#0b2742;line-height:1}}
-          .med-table-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:16px;box-shadow:0 14px 30px #0f172a0b}}
-          .med-table-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}}
-          .med-table-head h3{{margin:0;color:#007a3d;font-size:18px}}
-          .med-scroll{{width:100%;overflow-x:auto;border-radius:16px;border:1px solid #dce8f2}}
-          .med-grid-table{{width:max-content;min-width:1300px;border-collapse:separate;border-spacing:0;background:#fff}}
-          .med-grid-table th{{background:linear-gradient(180deg,#008c4f,#00783f);color:#fff;padding:12px 14px;text-align:center;font-size:13px;white-space:nowrap}}
-          .med-grid-table td{{padding:12px 14px;border-bottom:1px solid #e5edf4;border-right:1px solid #e5edf4;text-align:center;font-weight:800;color:#0b2742;white-space:nowrap}}
-          .med-grid-table tr:hover td{{background:#ecfdf5;cursor:pointer}}
-          .med-photo{{width:48px;height:48px;border-radius:14px;object-fit:cover;border:2px solid #8ff0b7}}
-          .med-no-photo{{display:inline-flex;align-items:center;justify-content:center;width:56px;height:46px;border-radius:14px;background:#fee2e2;color:#991b1b;font-weight:1000;font-size:12px}}
-          .med-pill{{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:7px 10px;font-weight:1000;font-size:12px;background:#e2e8f0;color:#334155;white-space:nowrap}}
-          .med-pill.ok{{background:#dcfce7;color:#166534}} .med-pill.warn{{background:#fef3c7;color:#92400e}} .med-pill.danger{{background:#fee2e2;color:#991b1b}} .med-pill.pending{{background:#e2e8f0;color:#334155}}
-          .med-select-btn{{border:1px solid #a7f3d0;background:#f0fdf4;color:#008a4b;border-radius:10px;padding:8px 10px;font-weight:1000}}
-          .med-empty{{padding:22px;border-radius:16px;background:#f8fafc;color:#64748b;font-weight:1000;text-align:center}}
-          .med-selected{{background:#ffffff;border:1px solid #dbe7ef;border-radius:22px;padding:18px;display:grid;grid-template-columns:190px 1fr 1fr;gap:14px;box-shadow:0 14px 30px #0f172a0b}}
-          .med-selected-photo{{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border-radius:18px;background:#f8fafc;border:1px solid #e2e8f0;padding:14px}}
-          .med-selected-photo img{{width:110px;height:120px;object-fit:cover;border-radius:18px;border:3px solid #86efac}}
-          .med-selected-photo .blank{{width:110px;height:120px;border-radius:18px;background:#fee2e2;color:#991b1b;display:flex;align-items:center;justify-content:center;font-weight:1000}}
-          .med-status-card{{border-radius:18px;padding:16px;color:#0f172a;background:#f8fafc;border:1px solid #dbe7ef}}
-          .med-status-card h3{{margin:0 0 8px;font-size:13px;color:#475569;text-transform:uppercase;letter-spacing:.04em}}
-          .med-status-value{{font-size:28px;font-weight:1000;line-height:1.05;color:#0b2742}}
-          .med-status-card.ok{{background:#ecfdf5;border-color:#86efac}} .med-status-card.warn{{background:#fffbeb;border-color:#fcd34d}} .med-status-card.danger{{background:#fef2f2;border-color:#fca5a5}} .med-status-card.pending{{background:#f8fafc;border-color:#cbd5e1}}
-          .med-person{{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin-top:12px;grid-column:1/4}}
-          .med-person div{{background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:12px}}
-          .med-person small{{display:block;color:#64748b;font-weight:800;margin-bottom:4px}}
-          .med-person b{{display:block;color:#0b2742;font-size:14px}}
-          .med-block-msg{{grid-column:1/4;border-radius:16px;padding:12px;font-weight:1000;background:#ecfdf5;color:#166534;text-align:center}}
-          .med-block-msg.blocked{{background:#fef2f2;color:#991b1b}}
-          .med-form-grid{{display:grid;grid-template-columns:180px 1fr 180px 1fr;gap:12px;align-items:center;padding:20px}}
-          .med-form-grid b{{text-align:right;color:#0b2742;background:#eef4f8;border-radius:12px;padding:12px}}
-          .med-form-grid input,.med-form-grid select,.med-form-grid textarea{{width:100%;border:1px solid #d6e3ef;border-radius:12px;padding:11px;font-weight:800;background:#fff;color:#0b2742}}
-          .med-form-grid .full{{grid-column:2 / 5}} .med-form-grid .span-all{{grid-column:1 / 5}}
-          @media(max-width:900px){{.med-filter-grid,.med-selected,.med-person,.med-form-grid,.med-kpis{{grid-template-columns:1fr}}.med-form-grid b,.med-filter-grid b{{text-align:left}}.med-form-grid .full,.med-form-grid .span-all,.med-person,.med-block-msg{{grid-column:auto}}}}
+          .med-page-pro .dash-hero{{background:#fff;border:1px solid #d7e5ef;border-radius:24px;padding:26px 30px;box-shadow:0 16px 35px rgba(15,23,42,.06)}}
+          .med-page-pro .dash-hero h1{{color:#007a3d;font-size:34px;margin:0 0 8px;font-weight:1000;letter-spacing:-.5px}}
+          .med-filter-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:16px 18px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}
+          .med-filter-grid{{display:grid;grid-template-columns:220px minmax(300px,1.2fr) 170px minmax(260px,.8fr);gap:12px;align-items:center}}
+          .med-filter-grid b{{background:#eef6f3;border-radius:12px;padding:14px;text-align:center;color:#007a3d;font-weight:1000;border:1px solid #d9f1e7}}
+          .med-filter-grid select,.med-filter-grid input{{height:48px;border:1px solid #cfe0ec;border-radius:13px;padding:0 16px;font-weight:850;color:#0b2742;background:#fff;outline:none}}
+          .med-filter-grid select:focus,.med-filter-grid input:focus{{border-color:#00a862;box-shadow:0 0 0 4px rgba(0,168,98,.10)}}
+          .med-kpis{{display:grid;grid-template-columns:repeat(5,minmax(160px,1fr));gap:14px}}
+          .med-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:18px;padding:16px 18px;display:flex;align-items:center;gap:14px;min-height:86px;box-shadow:0 12px 25px rgba(15,23,42,.06);position:relative;overflow:hidden}}
+          .med-kpi:after{{content:"";position:absolute;right:-24px;top:-24px;width:72px;height:72px;border-radius:50%;background:rgba(0,168,98,.08)}}
+          .med-kpi .med-ico{{width:46px;height:46px;border-radius:50%;background:#007a3d;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 10px 20px rgba(0,122,61,.22);flex:0 0 46px}}
+          .med-kpi .med-ico svg{{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}}
+          .med-kpi small{{display:block;color:#607089;font-weight:900;margin-bottom:3px}}
+          .med-kpi b{{font-size:30px;line-height:1;color:#0b2742;font-weight:1000}}
+          .med-kpi.warn .med-ico{{background:#f59e0b;box-shadow:0 10px 20px rgba(245,158,11,.22)}}
+          .med-kpi.danger .med-ico{{background:#e11d48;box-shadow:0 10px 20px rgba(225,29,72,.20)}}
+          .med-kpi.gray .med-ico{{background:#64748b;box-shadow:0 10px 20px rgba(100,116,139,.20)}}
+          .med-table-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:16px 16px 18px;box-shadow:0 12px 28px rgba(15,23,42,.06);overflow:hidden}}
+          .med-table-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}}
+          .med-table-head h3{{margin:0;color:#007a3d;font-size:19px;font-weight:1000}}
+          .med-scroll{{overflow:auto;border-radius:14px;border:1px solid #dbe7ef;max-width:100%;background:#fff}}
+          .med-grid-table{{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;background:#fff;font-size:13px}}
+          .med-grid-table th{{background:linear-gradient(180deg,#008a48,#006f3a);color:#fff;padding:13px 14px;text-align:center;font-size:12px;font-weight:1000;border-right:1px solid rgba(255,255,255,.28);white-space:nowrap;position:sticky;top:0;z-index:1}}
+          .med-grid-table td{{padding:12px 14px;border-right:1px solid #e1ebf3;border-bottom:1px solid #e1ebf3;text-align:center;color:#0b2742;font-weight:750;vertical-align:middle;background:#fff}}
+          .med-grid-table tr:hover td{{background:#f0fff7}}
+          .med-grid-table td:nth-child(2),.med-grid-table th:nth-child(2){{position:sticky;left:0;background:inherit;z-index:2}}
+          .med-grid-table th:nth-child(2){{background:linear-gradient(180deg,#008a48,#006f3a);z-index:3}}
+          .med-photo-mini{{width:46px;height:54px;border-radius:12px;object-fit:cover;border:2px solid #b8f0d2;background:#fff;display:block;margin:auto}}
+          .med-photo-empty{{width:54px;height:54px;border-radius:14px;background:#ffe0e0;color:#b00020;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:1000;margin:auto;border:1px solid #ffc5c5}}
+          .med-pill{{display:inline-flex;align-items:center;justify-content:center;min-width:96px;border-radius:999px;padding:7px 10px;font-weight:1000;font-size:12px}}
+          .med-pill.ok{{background:#e6fff0;color:#007a3d;border:1px solid #9be7bc}}
+          .med-pill.warn{{background:#fff7dd;color:#9a6500;border:1px solid #ffd36e}}
+          .med-pill.danger{{background:#ffe2e2;color:#b00020;border:1px solid #ffb0b0}}
+          .med-pill.pending{{background:#eef2f6;color:#607089;border:1px solid #d8e2eb}}
+          .med-select-btn{{border:1px solid #9be7bc;background:#fff;color:#007a3d;border-radius:10px;padding:8px 10px;font-weight:1000;cursor:pointer}}
+          .med-select-btn:hover{{background:#00a862;color:#fff;box-shadow:0 10px 18px rgba(0,168,98,.18)}}
+          .med-selected{{display:grid;grid-template-columns:160px 1fr 1fr;gap:14px;align-items:stretch;background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}
+          .med-selected-photo{{background:#f8fbfd;border:1px solid #dbe7ef;border-radius:18px;padding:14px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#607089;font-weight:900}}
+          .med-selected-photo img{{width:108px;height:128px;border-radius:16px;object-fit:cover;border:3px solid #b8f0d2;box-shadow:0 12px 22px rgba(0,168,98,.16)}}
+          .med-selected-photo .blank{{width:108px;height:128px;border-radius:16px;background:#ffe1e1;color:#b00020;display:flex;align-items:center;justify-content:center;font-weight:1000;border:1px solid #ffc1c1}}
+          .med-status-card{{border:1px solid #dbe7ef;border-radius:18px;padding:18px;background:#fff;box-shadow:0 10px 24px rgba(15,23,42,.05)}}
+          .med-status-card h3{{margin:0 0 8px;color:#007a3d;text-transform:uppercase;font-size:13px;font-weight:1000}}
+          .med-status-card .med-status-value{{font-size:30px;font-weight:1000;color:#0b2742}}
+          .med-status-card.ok{{border-color:#9be7bc;background:#f2fff7}}
+          .med-status-card.warn{{border-color:#ffd36e;background:#fffaf0}}
+          .med-status-card.danger{{border-color:#ffb0b0;background:#fff5f5}}
+          .med-status-card.pending{{border-color:#dbe7ef;background:#f8fbfd}}
+          .med-block-msg{{grid-column:1/-1;background:#e8fff2;border:1px solid #b8f0d2;color:#007a3d;border-radius:14px;padding:13px;text-align:center;font-weight:1000}}
+          .med-block-msg.blocked{{background:#ffe5e5;border-color:#ffb0b0;color:#b00020}}
+          .med-person{{grid-column:1/-1;display:grid;grid-template-columns:repeat(5,1fr);gap:10px}}
+          .med-person div{{background:#f8fbfd;border:1px solid #dbe7ef;border-radius:14px;padding:12px}}
+          .med-person small{{display:block;color:#607089;font-weight:850;margin-bottom:5px}}
+          .med-person b{{font-size:14px;color:#0b2742;font-weight:1000}}
+          .med-form-grid{{display:grid;grid-template-columns:200px 1fr 200px 1fr;gap:12px;align-items:center;background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}
+          .med-form-grid b{{background:#eef6f3;border:1px solid #d9f1e7;color:#007a3d;border-radius:12px;padding:13px;text-align:right;font-weight:1000}}
+          .med-form-grid input,.med-form-grid select,.med-form-grid textarea{{border:1px solid #cfe0ec;border-radius:12px;padding:13px;color:#0b2742;font-weight:850;background:#fff;outline:none;width:100%}}
+          .med-form-grid textarea{{min-height:72px}}
+          .med-form-grid input:focus,.med-form-grid select:focus,.med-form-grid textarea:focus{{border-color:#00a862;box-shadow:0 0 0 4px rgba(0,168,98,.10)}}
+          .med-form-grid .full,.med-form-grid .span-all{{grid-column:1/-1}}
+          @media(max-width:1100px){{.med-kpis{{grid-template-columns:repeat(2,1fr)}}.med-filter-grid,.med-form-grid,.med-selected,.med-person{{grid-template-columns:1fr}}.med-form-grid b,.med-filter-grid b{{text-align:left}}}}
         </style>
 
         <div class='med-page-pro'>
@@ -9627,11 +9663,11 @@ html,body{overflow-x:hidden!important;}
           </div>
 
           <div class='med-kpis'>
-            <div class='med-kpi'><i class='bi bi-people-fill'></i><div><small>Postulantes</small><b>{total_med_req}</b></div></div>
-            <div class='med-kpi'><i class='bi bi-heart-pulse-fill'></i><div><small>Aptos</small><b>{aptos_med_req}</b></div></div>
-            <div class='med-kpi gray'><i class='bi bi-clock-fill'></i><div><small>Pendientes</small><b>{pendientes_med_req}</b></div></div>
-            <div class='med-kpi warn'><i class='bi bi-exclamation-triangle-fill'></i><div><small>Restricciones</small><b>{obs_med_req}</b></div></div>
-            <div class='med-kpi danger'><i class='bi bi-x-octagon-fill'></i><div><small>No aptos/vencidos</small><b>{no_aptos_med_req + vencidos_med_req}</b></div></div>
+            <div class='med-kpi'><span class='med-ico'><svg viewBox='0 0 24 24'><path d='M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M22 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg></span><div><small>Postulantes</small><b>{total_med_req}</b></div></div>
+            <div class='med-kpi'><span class='med-ico'><svg viewBox='0 0 24 24'><path d='M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z'/><path d='M3.5 12H8l2-3 4 6 2-3h4.5'/></svg></span><div><small>Aptos</small><b>{aptos_med_req}</b></div></div>
+            <div class='med-kpi gray'><span class='med-ico'><svg viewBox='0 0 24 24'><circle cx='12' cy='12' r='9'/><path d='M12 7v6l4 2'/></svg></span><div><small>Pendientes</small><b>{pendientes_med_req}</b></div></div>
+            <div class='med-kpi warn'><span class='med-ico'><svg viewBox='0 0 24 24'><path d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z'/><path d='M12 9v4'/><path d='M12 17h.01'/></svg></span><div><small>Restricciones</small><b>{obs_med_req}</b></div></div>
+            <div class='med-kpi danger'><span class='med-ico'><svg viewBox='0 0 24 24'><path d='m15 9-6 6'/><path d='m9 9 6 6'/><path d='M7.8 2h8.4L22 7.8v8.4L16.2 22H7.8L2 16.2V7.8Z'/></svg></span><div><small>No aptos/vencidos</small><b>{no_aptos_med_req + vencidos_med_req}</b></div></div>
           </div>
 
           <div class='med-table-card'>
