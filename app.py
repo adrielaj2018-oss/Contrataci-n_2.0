@@ -8526,7 +8526,17 @@ def admin_contratacion():
           <td><small>{h(faltantes_txt or 'Ficha completa')}</small></td>
           <td class='actions-cell'><a class='icon-btn' href='/admin/contratacion?sec=datos_completos&req={h(row_get(r,'requerimiento'))}'>Ficha 360°</a><a class='icon-btn' href='/admin/contratacion?sec=firma&req={h(row_get(r,'requerimiento'))}'>Firma</a><a class='icon-btn' href='/admin/contratacion?sec=fotocheck&req={h(row_get(r,'requerimiento'))}'>Fotocheck</a></td>
         </tr>""")
-    postulante_tabla_360_html = ''.join(postulante_rows_360) or "<tr><td colspan='8'>Seleccione un requerimiento o registre postulantes para ver el control 360°.</td></tr>"
+    postulante_tabla_360_html = ''.join(postulante_rows_360)
+    demo_postulantes_360 = not postulante_tabla_360_html
+    if demo_postulantes_360:
+        # DEMOS VISUALES: solo se muestran en pantalla cuando no hay postulantes reales.
+        # No se guardan en BD ni alteran los indicadores reales del requerimiento.
+        post_completos_demo, post_aptos_demo, post_pend_docs_demo, post_pend_firma_demo, post_inducidos_demo, post_alerta_demo, avance_req_demo = 1, 2, 2, 2, 1, 1, 72
+        postulante_tabla_360_html = '''
+        <tr class="demo-row"><td><span class="demo-tag">DEMO</span><b>74324033</b><small>NUEVO</small></td><td><b>PEREZ GARCIA Juan Carlos</b><small>OPERARIO DE CAMPO · COSECHA</small></td><td><span class="estado-flujo warn">🟡 En validación</span><small>Sin alerta activa</small></td><td><div class="mini-progress"><span style="width:75%"></span></div><b>75%</b></td><td>✅ Médico<br>⏳ Docs<br>✅ Foto/Bio</td><td>✅ Contrato<br>⏳ Firma<br>⏳ Fotocheck</td><td><small>Documento domiciliario, firma</small></td><td class="actions-cell"><a class="icon-btn">👁</a><a class="icon-btn">📄</a><a class="icon-btn">✎</a></td></tr>
+        <tr class="demo-row"><td><span class="demo-tag">DEMO</span><b>80234111</b><small>REINGRESANTE</small></td><td><b>RAMOS LOPEZ Miguel Angel</b><small>SUPERVISOR DE CAMPO · OPERACIONES</small></td><td><span class="estado-flujo ok">🟢 Completo</span><small>Sin alerta activa</small></td><td><div class="mini-progress"><span style="width:100%"></span></div><b>100%</b></td><td>✅ Médico<br>✅ Docs<br>✅ Foto/Bio</td><td>✅ Contrato<br>✅ Firma<br>✅ Fotocheck</td><td><small>Ficha completa</small></td><td class="actions-cell"><a class="icon-btn">👁</a><a class="icon-btn">📄</a><a class="icon-btn">⋮</a></td></tr>
+        <tr class="demo-row"><td><span class="demo-tag">DEMO</span><b>71234567</b><small>NUEVO</small></td><td><b>QUISPE ROJAS Maria Fernanda</b><small>COSECHADOR · CAMPO</small></td><td><span class="estado-flujo danger">🔴 Incompleto</span><small>NIVEL 1 Validación RRHH</small></td><td><div class="mini-progress danger"><span style="width:40%"></span></div><b>40%</b></td><td>🔴 No apto<br>⏳ Docs<br>⏳ Foto/Bio</td><td>⏳ Contrato<br>⏳ Firma<br>⏳ Fotocheck</td><td><small>Dirección, fecha fin, básico</small></td><td class="actions-cell"><a class="icon-btn">👁</a><a class="icon-btn">📄</a><a class="icon-btn">⋮</a></td></tr>
+        '''
 
     postulante_css_pro = """
     <style>
@@ -8538,17 +8548,17 @@ def admin_contratacion():
     .postulantes-control-pro{display:grid;grid-template-columns:1.35fr repeat(6,minmax(128px,1fr));gap:14px;margin:0 0 18px 0;align-items:stretch}
     .postulantes-control-pro>div{min-height:112px;background:linear-gradient(135deg,#ffffff 0%,#f3fff8 100%);border:1px solid var(--prz-border);border-bottom:3px solid #18b46b;border-radius:18px;padding:14px 14px;box-shadow:0 12px 28px rgba(6,78,59,.08);position:relative;overflow:hidden}
     .postulantes-control-pro>div:before{content:'';position:absolute;right:-26px;top:-28px;width:82px;height:82px;border-radius:50%;background:rgba(16,185,129,.10)}
-    .postulantes-control-pro .main{display:flex;gap:12px;align-items:center}
-    .postulantes-control-pro .main-icon,.kpi-icon{width:44px;height:44px;min-width:44px;border-radius:15px;background:linear-gradient(135deg,#0ea35b,#067a43);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 10px 18px rgba(6,122,67,.20)}
-    .postulantes-control-pro .main b{display:block;color:#067a43;font-size:18px;line-height:1.1}
-    .postulantes-control-pro .main span,.postulantes-control-pro small{display:block;color:#52637a;font-weight:800;font-size:12px;margin-top:4px}
-    .postulantes-control-pro .kpi{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
-    .postulantes-control-pro .kpi b{font-size:28px;line-height:1;color:#073763;font-weight:950}
-    .postulantes-control-pro .kpi small{color:#52637a;font-weight:800}
-    .postulantes-control-pro .kpi.warn{border-bottom-color:#f59e0b;background:linear-gradient(135deg,#fff,#fffdf4)}
-    .postulantes-control-pro .kpi.warn .kpi-icon{background:linear-gradient(135deg,#fbbf24,#d97706)}
-    .postulantes-control-pro .kpi.danger{border-bottom-color:#ef4444;background:linear-gradient(135deg,#fff,#fff7f7)}
-    .postulantes-control-pro .kpi.danger .kpi-icon{background:linear-gradient(135deg,#fb7185,#dc2626)}
+    .postulantes-control-pro .pz-main{display:flex;gap:12px;align-items:center}
+    .postulantes-control-pro .pz-main-icon,.pz-kpi-icon{width:44px;height:44px;min-width:44px;border-radius:15px;background:linear-gradient(135deg,#0ea35b,#067a43);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 10px 18px rgba(6,122,67,.20)}
+    .postulantes-control-pro .pz-main b{display:block;color:#067a43;font-size:18px;line-height:1.1}
+    .postulantes-control-pro .pz-main span,.postulantes-control-pro small{display:block;color:#52637a;font-weight:800;font-size:12px;margin-top:4px}
+    .postulantes-control-pro .pz-kpi{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center}
+    .postulantes-control-pro .pz-kpi b{font-size:28px;line-height:1;color:#073763;font-weight:950}
+    .postulantes-control-pro .pz-kpi small{color:#52637a;font-weight:800}
+    .postulantes-control-pro .pz-kpi.warn{border-bottom-color:#f59e0b;background:linear-gradient(135deg,#fff,#fffdf4)}
+    .postulantes-control-pro .pz-kpi.warn .pz-kpi-icon{background:linear-gradient(135deg,#fbbf24,#d97706)}
+    .postulantes-control-pro .pz-kpi.danger{border-bottom-color:#ef4444;background:linear-gradient(135deg,#fff,#fff7f7)}
+    .postulantes-control-pro .pz-kpi.danger .pz-kpi-icon{background:linear-gradient(135deg,#fb7185,#dc2626)}
     .control-360-card{border:1px solid var(--prz-line);background:#fff;border-radius:22px;padding:16px;margin:0 0 18px 0;box-shadow:0 14px 34px rgba(6,78,59,.08)}
     .control-360-title{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
     .control-360-title h3{margin:0;color:#067a43;font-size:20px;font-weight:950}
@@ -8574,6 +8584,29 @@ def admin_contratacion():
     .ticket-first{border:1px solid var(--prz-line)!important;border-radius:20px!important;box-shadow:0 12px 30px rgba(6,78,59,.07)!important}
     .ticket-first b{color:#067a43}
     .nr-tabs a.active,.c-btn{background:linear-gradient(135deg,#10b981,#067a43)!important;color:#fff!important;border:0!important;box-shadow:0 10px 22px rgba(6,122,67,.18)}
+
+    /* === POSTULANTES VERDE PRO COMPACTO FINAL - CSS AISLADO === */
+    .prz-postulantes-pro{padding:16px!important;border-radius:18px!important;margin-bottom:16px!important;box-shadow:0 10px 24px rgba(6,78,59,.08)!important;background:#fff!important;overflow:visible!important}
+    .prz-panel-head{margin-bottom:12px!important}.prz-panel-head h3{font-size:18px!important;color:#067a43!important}.prz-panel-head p{font-size:12px!important}
+    .req-summary-pro{display:grid!important;grid-template-columns:1.15fr repeat(6,minmax(118px,1fr))!important;gap:10px!important;align-items:start!important;margin:0 0 14px 0!important}
+    .req-summary-pro>div{height:86px!important;min-height:86px!important;max-height:86px!important;padding:12px 12px!important;border-radius:14px!important;background:#fff!important;border:1px solid #d9efe5!important;border-bottom:3px solid #059669!important;box-shadow:0 8px 18px rgba(15,23,42,.06)!important;overflow:hidden!important}
+    .req-summary-pro>div:before{width:60px!important;height:60px!important;right:-22px!important;top:-22px!important;background:rgba(16,185,129,.10)!important}
+    .req-main{gap:10px!important}.req-main b{font-size:14px!important;line-height:1.1!important;color:#0b253a!important;display:block!important;max-height:36px!important;overflow:hidden!important}.req-main span{font-size:11px!important;line-height:1.15!important;color:#64748b!important;display:block!important}
+    .req-kpi b{font-size:25px!important;line-height:1!important;color:#0b253a!important}.req-kpi span{font-size:12px!important;color:#334155!important;font-weight:800!important}
+    .postulantes-control-pro{display:grid!important;grid-template-columns:1.15fr repeat(6,minmax(118px,1fr))!important;gap:10px!important;align-items:start!important;margin:0!important}
+    .postulantes-control-pro>div{height:98px!important;min-height:98px!important;max-height:98px!important;padding:12px!important;border-radius:14px!important;background:#fff!important;border:1px solid #ccefdc!important;border-bottom:3px solid #059669!important;box-shadow:0 8px 18px rgba(15,23,42,.06)!important;overflow:hidden!important;display:flex!important;align-items:center!important}
+    .postulantes-control-pro>div:before{width:62px!important;height:62px!important;right:-20px!important;top:-24px!important;background:rgba(16,185,129,.11)!important}
+    .postulantes-control-pro .pz-main{display:flex!important;align-items:center!important;gap:10px!important;width:100%!important}.postulantes-control-pro .pz-main b{font-size:18px!important;color:#067a43!important}.postulantes-control-pro .pz-main span{font-size:11px!important;color:#64748b!important;line-height:1.1!important}
+    .postulantes-control-pro .pz-kpi{display:grid!important;grid-template-columns:38px 1fr!important;gap:9px!important;align-items:center!important;width:100%!important}.postulantes-control-pro .pz-kpi b{font-size:26px!important;color:#0b253a!important}.postulantes-control-pro .pz-kpi small{font-size:11px!important;line-height:1.15!important;color:#475569!important;font-weight:800!important}
+    .postulantes-control-pro .pz-main-icon,.postulantes-control-pro .pz-kpi-icon{width:38px!important;height:38px!important;min-width:38px!important;border-radius:13px!important;background:linear-gradient(135deg,#059669,#047857)!important;color:#fff!important;font-size:17px!important;display:flex!important;align-items:center!important;justify-content:center!important;box-shadow:0 6px 12px rgba(5,150,105,.20)!important}
+    .postulantes-control-pro .warn{border-bottom-color:#f59e0b!important}.postulantes-control-pro .danger{border-bottom-color:#ef4444!important}.postulantes-control-pro .warn .pz-kpi-icon{background:linear-gradient(135deg,#fbbf24,#d97706)!important}.postulantes-control-pro .danger .pz-kpi-icon{background:linear-gradient(135deg,#fb7185,#dc2626)!important}
+    .control-360-card{border-radius:18px!important;padding:14px!important;margin-top:16px!important;background:#fff!important;box-shadow:0 10px 24px rgba(6,78,59,.08)!important}.control-360-title h3{font-size:17px!important;color:#067a43!important}.control-360-title p{font-size:12px!important;color:#475569!important}
+    .tabla-360 th{padding:10px 9px!important;background:linear-gradient(180deg,#078f4d,#047857)!important;font-size:11px!important}.tabla-360 td{padding:9px!important;font-size:12px!important}.tabla-360 td small{font-size:10.5px!important}
+    .mini-progress{height:8px!important;min-width:76px!important}.mini-progress.danger span{background:linear-gradient(90deg,#ef4444,#dc2626)!important}.estado-flujo{padding:5px 9px!important;font-size:10.5px!important}.actions-cell .icon-btn{min-width:30px!important;padding:6px 8px!important;border-radius:8px!important;border:1px solid #bbf7d0!important;color:#047857!important;background:#fff!important;text-align:center!important}
+    .demo-tag{display:inline-block;margin-right:5px;padding:2px 5px;border-radius:999px;background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:950}.demo-row td{background:#fcfffd!important}
+    @media(max-width:1350px){.req-summary-pro,.postulantes-control-pro{grid-template-columns:repeat(3,minmax(150px,1fr))!important}.req-summary-pro>div,.postulantes-control-pro>div{height:auto!important;min-height:86px!important;max-height:none!important}}
+    @media(max-width:760px){.req-summary-pro,.postulantes-control-pro{grid-template-columns:1fr!important}.control-360-title{display:block!important}.quick-actions-360{margin-top:10px!important}}
+
     @media(max-width:1200px){.postulantes-control-pro,.req-summary-pro{grid-template-columns:1fr 1fr}.tabla-360{font-size:12px}.actions-cell{display:block}.actions-cell .icon-btn{display:block;margin-bottom:4px}}
     @media(max-width:720px){.postulantes-control-pro,.req-summary-pro{grid-template-columns:1fr}.postulantes-control-pro>div,.req-summary-pro>div{min-height:auto}.control-360-card{padding:12px}}
     </style>
@@ -8584,17 +8617,17 @@ def admin_contratacion():
     <div class='prz-postulantes-pro'>
       <div class='prz-panel-head'><div><h3>Centro de Control 360°</h3><p>Avance general del requerimiento con semáforos por etapa.</p></div></div>
       <div class='postulantes-control-pro'>
-        <div class='main'><div class='main-icon'>◎</div><div><b>{avance_req_360}%</b><span>completo del requerimiento</span><div class='mini-progress'><span style='width:{avance_req_360}%'></span></div></div></div>
-        <div class='kpi'><div class='kpi-icon'>✓</div><div><b>{post_completos}</b><small>Completos<br>Listos para ingresar</small></div></div>
-        <div class='kpi'><div class='kpi-icon'>❤</div><div><b>{post_aptos}</b><small>Aptos médicos<br>Aptitud aprobada</small></div></div>
-        <div class='kpi warn'><div class='kpi-icon'>▣</div><div><b>{post_pend_docs}</b><small>Pend. documentos<br>Documentos faltantes</small></div></div>
-        <div class='kpi warn'><div class='kpi-icon'>✎</div><div><b>{post_pend_firma}</b><small>Pend. firma/fotocheck<br>Por completar</small></div></div>
-        <div class='kpi'><div class='kpi-icon'>🎓</div><div><b>{post_inducidos}</b><small>Inducidos<br>Inducción realizada</small></div></div>
-        <div class='kpi danger'><div class='kpi-icon'>!</div><div><b>{post_alerta}</b><small>Observados<br>Requiere atención</small></div></div>
+        <div class='pz-main'><div class='pz-main-icon'>◎</div><div><b>{avance_req_demo if demo_postulantes_360 else avance_req_360}%</b><span>completo del requerimiento</span><div class='mini-progress'><span style='width:{avance_req_demo if demo_postulantes_360 else avance_req_360}%' ></span></div></div></div>
+        <div class='pz-kpi'><div class='pz-kpi-icon'>✓</div><div><b>{post_completos_demo if demo_postulantes_360 else post_completos}</b><small>Completos<br>Listos para ingresar</small></div></div>
+        <div class='pz-kpi'><div class='pz-kpi-icon'>❤</div><div><b>{post_aptos_demo if demo_postulantes_360 else post_aptos}</b><small>Aptos médicos<br>Aptitud aprobada</small></div></div>
+        <div class='pz-kpi warn'><div class='pz-kpi-icon'>▣</div><div><b>{post_pend_docs_demo if demo_postulantes_360 else post_pend_docs}</b><small>Pend. documentos<br>Documentos faltantes</small></div></div>
+        <div class='pz-kpi warn'><div class='pz-kpi-icon'>✎</div><div><b>{post_pend_firma_demo if demo_postulantes_360 else post_pend_firma}</b><small>Pend. firma/fotocheck<br>Por completar</small></div></div>
+        <div class='pz-kpi'><div class='pz-kpi-icon'>🎓</div><div><b>{post_inducidos_demo if demo_postulantes_360 else post_inducidos}</b><small>Inducidos<br>Inducción realizada</small></div></div>
+        <div class='pz-kpi danger'><div class='pz-kpi-icon'>!</div><div><b>{post_alerta_demo if demo_postulantes_360 else post_alerta}</b><small>Observados<br>Requiere atención</small></div></div>
       </div>
     </div>
     <div class='control-360-card table-wrap'>
-      <div class='control-360-title'><div><h3>Lista de postulantes del requerimiento</h3><p>Semáforo por trabajador: datos obligatorios, médico, documentos, contrato, firma, fotocheck e inducción.</p></div><div class='quick-actions-360'><a class='c-btn gray' href='/admin/contratacion?sec=datos_completos&req={h(ticket_sel)}'>📋 Ver ficha 360°</a><a class='c-btn gray' href='/admin/contratacion?sec=medica&req={h(ticket_sel)}'>🩺 Médico</a><a class='c-btn gray' href='/admin/contratacion?sec=induccion&req={h(ticket_sel)}'>🎓 Inducción</a></div></div>
+      <div class='control-360-title'><div><h3>Lista de postulantes del requerimiento</h3><p>Semáforo por trabajador: datos obligatorios, médico, documentos, contrato, firma, fotocheck e inducción. {'Vista demo referencial: no guarda datos.' if demo_postulantes_360 else ''}</p></div><div class='quick-actions-360'><a class='c-btn gray' href='/admin/contratacion?sec=datos_completos&req={h(ticket_sel)}'>📋 Ver ficha 360°</a><a class='c-btn gray' href='/admin/contratacion?sec=medica&req={h(ticket_sel)}'>🩺 Médico</a><a class='c-btn gray' href='/admin/contratacion?sec=induccion&req={h(ticket_sel)}'>🎓 Inducción</a></div></div>
       <table id='tabla_360_postulantes' class='c-table tabla-360'><tr><th>DNI</th><th>Trabajador</th><th>Estado proceso</th><th>% Completitud</th><th>Validaciones</th><th>Proceso</th><th>Faltantes</th><th>Acciones</th></tr>{postulante_tabla_360_html}</table>
     </div>
     """
@@ -9616,7 +9649,7 @@ html,body{overflow-x:hidden!important;}
             <h2 class='c-title'>Datos Postulantes</h2>
             <div class='dash-hero' style='margin-bottom:18px'><div><h1>Datos Postulantes por Requerimiento</h1><p class='muted2'>Primero elige el requerimiento. El sistema jala automáticamente todos los postulantes registrados y muestra contrato, fotocheck, foto, indumentaria y avance.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Completar ficha</a></div>
             <div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>Requerimiento / Ticket</b><select onchange="location.href='/admin/contratacion?sec=datos_completos&req='+encodeURIComponent(this.value)">{req_select_opts}</select><b>Buscar postulante</b><input oninput="filtrarTabla(this,'tabla_datos_postulantes')" placeholder='DNI, trabajador, cargo, estado...'></div>
-            <div class='datos-kpi'><div class='kpi'><span>Total postulantes</span><b>{total}</b></div><div class='kpi'><span>Pendiente contrato</span><b>{pend_contrato}</b></div><div class='kpi'><span>Sin foto</span><b>{pend_foto}</b></div><div class='kpi'><span>Pendiente fotocheck</span><b>{pend_fotocheck}</b></div></div>
+            <div class='datos-kpi'><div class='pz-kpi'><span>Total postulantes</span><b>{total}</b></div><div class='pz-kpi'><span>Pendiente contrato</span><b>{pend_contrato}</b></div><div class='pz-kpi'><span>Sin foto</span><b>{pend_foto}</b></div><div class='pz-kpi'><span>Pendiente fotocheck</span><b>{pend_fotocheck}</b></div></div>
             <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_documentos'>Firma de contrato / documentos</option><option value='fotocheck_estado'>Fotocheck</option><option value='estado_indumentaria'>Indumentaria</option><option value='estado_medico'>Evaluación médica</option><option value='estado_capacitacion'>Inducción / capacitación</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>GENERADO</option><option>ENVIADO</option><option>FIRMADO</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>Contrato / Docs</th><th>Fotocheck</th><th>Foto</th><th>Indumentaria</th><th>Detalle</th><th>Anular</th></tr>{tabla_rows}</table></div></form>
             """)
         else:
@@ -9740,11 +9773,11 @@ html,body{overflow-x:hidden!important;}
               <input oninput="filtrarTabla(this,'tabla_fotocheck')" placeholder='DNI, trabajador, cargo, área, estado...'>
             </div>
             <div class='foto-kpis'>
-              <div class='kpi'><span>Total</span><b>{total_foto}</b></div>
-              <div class='kpi'><span>Sin foto</span><b>{sin_foto}</b></div>
-              <div class='kpi'><span>Foto aprobada</span><b>{foto_ok}</b></div>
-              <div class='kpi'><span>Listos imprimir</span><b>{listos}</b></div>
-              <div class='kpi'><span>Impresos / cargo</span><b>{impresos}</b></div>
+              <div class='pz-kpi'><span>Total</span><b>{total_foto}</b></div>
+              <div class='pz-kpi'><span>Sin foto</span><b>{sin_foto}</b></div>
+              <div class='pz-kpi'><span>Foto aprobada</span><b>{foto_ok}</b></div>
+              <div class='pz-kpi'><span>Listos imprimir</span><b>{listos}</b></div>
+              <div class='pz-kpi'><span>Impresos / cargo</span><b>{impresos}</b></div>
             </div>
             <form method='post'>
               <input type='hidden' name='req_return' value='{h(req_actual)}'>
