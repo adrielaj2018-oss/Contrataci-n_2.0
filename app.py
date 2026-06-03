@@ -2103,6 +2103,8 @@ def init_db():
         for col, ddl in [
             ('regimen_laboral', 'ALTER TABLE contratacion_requerimientos ADD COLUMN regimen_laboral TEXT'),
             ('tipo_contrato', 'ALTER TABLE contratacion_requerimientos ADD COLUMN tipo_contrato TEXT'),
+            ('fecha_inicio_contrato', 'ALTER TABLE contratacion_requerimientos ADD COLUMN fecha_inicio_contrato TEXT'),
+            ('fecha_fin_contrato', 'ALTER TABLE contratacion_requerimientos ADD COLUMN fecha_fin_contrato TEXT'),
             ('cupos_registrados', 'ALTER TABLE contratacion_requerimientos ADD COLUMN cupos_registrados INTEGER DEFAULT 0'),
             ('cupos_completos', 'ALTER TABLE contratacion_requerimientos ADD COLUMN cupos_completos INTEGER DEFAULT 0'),
         ]:
@@ -2269,6 +2271,7 @@ def init_db():
             ('discapacidad', 'ALTER TABLE contratacion_ingresos ADD COLUMN discapacidad TEXT'),
             ('cantidad_hijos', 'ALTER TABLE contratacion_ingresos ADD COLUMN cantidad_hijos TEXT'),
             ('fecha_nacimiento', 'ALTER TABLE contratacion_ingresos ADD COLUMN fecha_nacimiento TEXT'),
+            ('fecha_inicio_contrato', 'ALTER TABLE contratacion_ingresos ADD COLUMN fecha_inicio_contrato TEXT'),
             ('fecha_fin_contrato', 'ALTER TABLE contratacion_ingresos ADD COLUMN fecha_fin_contrato TEXT'),
             ('tipo_contrato', 'ALTER TABLE contratacion_ingresos ADD COLUMN tipo_contrato TEXT'),
             ('remuneracion_basica', 'ALTER TABLE contratacion_ingresos ADD COLUMN remuneracion_basica TEXT'),
@@ -2747,16 +2750,20 @@ def registrar_dni_en_requerimiento_backend(ticket, dni, usuario='admin'):
                            (dni,nombre,empresa,activo,fecha_registro,usuario_portal,clave_portal)
                            VALUES(?,?,?,1,?,?,?)""", (dni, '', empresa, now_txt(), dni, dni))
 
+        fecha_inicio_req = row_get(req, 'fecha_inicio_contrato') or row_get(req, 'fecha_ingreso') or fecha_sin_hora(hoy_iso())
+        fecha_fin_req = row_get(req, 'fecha_fin_contrato') or ''
+        tipo_contrato_req = row_get(req, 'tipo_contrato') or ''
+        regimen_req = row_get(req, 'regimen_laboral') or ''
         vals = (
             dni, nombre, empresa, req['sede'] or '', ticket, req['actividad'] or '', tipo,
-            'PRE REGISTRADO', req['fecha_ingreso'] or fecha_sin_hora(hoy_iso()),
+            'PRE REGISTRADO', fecha_inicio_req,
             cargo, area, correo, celular,
             'Registrado automáticamente desde digitación/lector/cámara en requerimiento',
-            now_txt(), usuario or 'admin'
+            now_txt(), usuario or 'admin', fecha_inicio_req, fecha_fin_req, tipo_contrato_req, regimen_req
         )
         con.execute("""INSERT INTO contratacion_ingresos
-            (dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", vals)
+            (dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por,fecha_inicio_contrato,fecha_fin_contrato,tipo_contrato,regimen_laboral)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", vals)
         sincronizar_estado_requerimiento_por_cupo(con, ticket)
         registrados_final = contar_postulantes_requerimiento(con, ticket)
         con.commit()
@@ -7361,13 +7368,15 @@ def admin_contratacion():
             actividad = clean(request.form.get('actividad'))
             cantidad = int_safe(request.form.get('cantidad'), 0)
             fecha_ingreso = fecha_sin_hora(request.form.get('fecha_ingreso')) or fecha_sin_hora(hoy_iso())
+            fecha_inicio_contrato = fecha_sin_hora(request.form.get('fecha_inicio_contrato')) or fecha_ingreso or fecha_sin_hora(hoy_iso())
+            fecha_fin_contrato = fecha_sin_hora(request.form.get('fecha_fin_contrato'))
             # FIX: tipo_contrato y regimen_laboral deben definirse ANTES de validar.
             # Antes se evaluaba tipo_contrato sin existir y generaba Internal Server Error
             # al registrar un requerimiento.
             regimen_laboral = clean(request.form.get('regimen_laboral')).upper()
             tipo_contrato = clean(request.form.get('tipo_contrato')).upper()
-            if not ticket or not empresa or not area or not cargo or not actividad or not fecha_ingreso or not tipo_contrato:
-                flash('Campos obligatorios: requerimiento, empresa, área, cargo, actividad, fecha objetivo y tipo de contrato.', 'error')
+            if not ticket or not empresa or not area or not cargo or not actividad or not fecha_inicio_contrato or not fecha_fin_contrato or not tipo_contrato or not regimen_laboral:
+                flash('Campos obligatorios: requerimiento, empresa, régimen laboral, área, cargo, actividad, fecha inicio contrato, fecha fin contrato y tipo de contrato.', 'error')
                 return redirect(url_for('admin_contratacion', sec='requerimientos'))
             prioridad = clean(request.form.get('prioridad')) or 'MEDIA'
             estado = clean(request.form.get('estado')) or 'SOLICITADO'
@@ -7380,17 +7389,17 @@ def admin_contratacion():
                 existente_req = con.execute('SELECT id FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) LIMIT 1', (ticket,)).fetchone()
                 if existente_req:
                     con.execute('''UPDATE contratacion_requerimientos
-                                      SET empresa=?, sede=?, area=?, cargo=?, actividad=?, cantidad=?, fecha_ingreso=?,
+                                      SET empresa=?, sede=?, area=?, cargo=?, actividad=?, cantidad=?, fecha_ingreso=?, fecha_inicio_contrato=?, fecha_fin_contrato=?,
                                           prioridad=?, estado=?, responsable=?, observacion=?, fecha_registro=?,
                                           registrado_por=?, regimen_laboral=?, tipo_contrato=?
                                     WHERE id=?''',
-                                (empresa,sede,area,cargo,actividad,cantidad,fecha_ingreso,prioridad,estado,responsable,observacion,
+                                (empresa,sede,area,cargo,actividad,cantidad,fecha_ingreso,fecha_inicio_contrato,fecha_fin_contrato,prioridad,estado,responsable,observacion,
                                  now_txt(),session.get('admin_user','admin'),regimen_laboral,tipo_contrato,existente_req['id']))
                 else:
                     con.execute('''INSERT INTO contratacion_requerimientos
-                        (ticket,empresa,sede,area,cargo,actividad,cantidad,fecha_solicitud,fecha_ingreso,prioridad,estado,responsable,observacion,fecha_registro,registrado_por,regimen_laboral,tipo_contrato,cupos_registrados,cupos_completos)
-                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0)''',
-                        (ticket,empresa,sede,area,cargo,actividad,cantidad,now_txt(),fecha_ingreso,prioridad,estado,responsable,observacion,now_txt(),session.get('admin_user','admin'),regimen_laboral,tipo_contrato))
+                        (ticket,empresa,sede,area,cargo,actividad,cantidad,fecha_solicitud,fecha_ingreso,fecha_inicio_contrato,fecha_fin_contrato,prioridad,estado,responsable,observacion,fecha_registro,registrado_por,regimen_laboral,tipo_contrato,cupos_registrados,cupos_completos)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0)''',
+                        (ticket,empresa,sede,area,cargo,actividad,cantidad,now_txt(),fecha_ingreso,fecha_inicio_contrato,fecha_fin_contrato,prioridad,estado,responsable,observacion,now_txt(),session.get('admin_user','admin'),regimen_laboral,tipo_contrato))
                 sincronizar_estado_requerimiento_por_cupo(con, ticket)
                 con.commit()
             flash(f'Requerimiento registrado correctamente con {cantidad} cupo(s) solicitado(s).', 'ok')
@@ -7734,6 +7743,19 @@ def admin_contratacion():
                                                         WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
                                                           AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
                                                         ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
+                    if req_cap:
+                        # HERENCIA PRO: los datos del requerimiento mandan sobre Postulantes.
+                        # Así Empresa, Área, Cargo, Actividad, Régimen, Tipo contrato y Fechas pasan automáticamente.
+                        empresa = row_get(req_cap, 'empresa') or empresa
+                        sede = row_get(req_cap, 'sede') or sede or 'GENERAL'
+                        area = row_get(req_cap, 'area') or area
+                        cargo = row_get(req_cap, 'cargo') or cargo
+                        actividad = row_get(req_cap, 'actividad') or actividad
+                        regimen_laboral = row_get(req_cap, 'regimen_laboral') or regimen_laboral
+                        tipo_contrato = row_get(req_cap, 'tipo_contrato') or tipo_contrato
+                        fecha_inicio_contrato_req = row_get(req_cap, 'fecha_inicio_contrato') or row_get(req_cap, 'fecha_ingreso') or fecha_ingreso
+                        fecha_ingreso = fecha_inicio_contrato_req or fecha_ingreso
+                        fecha_fin_contrato = row_get(req_cap, 'fecha_fin_contrato') or fecha_fin_contrato
                     if req_cap and not ing_ya_existe_cap:
                         cantidad_req_cap = cantidad_solicitada_requerimiento(req_cap)
                         registrados_req_cap = contar_postulantes_requerimiento(con, requerimiento)
@@ -7757,7 +7779,7 @@ def admin_contratacion():
                     con.execute("""UPDATE contratacion_ingresos SET trabajador=?,empresa=?,sede=?,requerimiento=?,actividad=?,tipo_ingreso=?,estado='REGISTRADO',fecha_ingreso=?,cargo=?,area=?,correo=?,celular=?,observacion=?,fecha_registro=?,registrado_por=?,foto_ruta=COALESCE(NULLIF(?,''),foto_ruta),huella_ruta=COALESCE(NULLIF(?,''),huella_ruta),origen_validacion=?,direccion=?,modalidad=?,jefe=?,cuenta_bancaria=?,talla_indumentaria=?,contacto_emergencia=?,biometria_estado=?,departamento=?,provincia=?,distrito=?,estado_civil=?,sistema_pensionario=?,ultima_empresa=?,discapacidad=?,cantidad_hijos=? WHERE id=?""", (nombre,empresa,sede,requerimiento,actividad,tipo_ingreso,fecha_ingreso,cargo,area,correo,celular,obs,now_txt(),session.get('admin_user','admin'),foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,'CAPTURADA' if huella_ruta else 'PENDIENTE',departamento,provincia,distrito,estado_civil,sistema_pensionario,ultima_empresa,discapacidad,cantidad_hijos,ing_existe['id']))
                 else:
                     con.execute("""INSERT INTO contratacion_ingresos(dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por,foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,biometria_estado,departamento,provincia,distrito,estado_civil,sistema_pensionario,ultima_empresa,discapacidad,cantidad_hijos) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (dni,nombre,empresa,sede,requerimiento,actividad,tipo_ingreso,'REGISTRADO',fecha_ingreso,cargo,area,correo,celular,obs,now_txt(),session.get('admin_user','admin'),foto_ruta,huella_ruta,origen_validacion,direccion,modalidad,jefe,cuenta_bancaria,talla_indumentaria,contacto_emergencia,'CAPTURADA' if huella_ruta else 'PENDIENTE',departamento,provincia,distrito,estado_civil,sistema_pensionario,ultima_empresa,discapacidad,cantidad_hijos))
-                con.execute('''UPDATE contratacion_ingresos SET fecha_nacimiento=?, fecha_fin_contrato=?, tipo_contrato=?, remuneracion_basica=?, remuneracion_letra=?, nacionalidad=?, sexo=?, regimen_laboral=?, periodicidad_pago=?, tipo_pago=?, cuspp=?, nombre_moneda=?, simbolo_moneda=?, funciones=?, meses_contrato=? WHERE dni=? AND requerimiento=?''', (fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica,remuneracion_letra,nacionalidad,sexo,regimen_laboral,periodicidad_pago,tipo_pago,cuspp,nombre_moneda,simbolo_moneda,funciones,meses_contrato,dni,requerimiento))
+                con.execute('''UPDATE contratacion_ingresos SET fecha_nacimiento=?, fecha_inicio_contrato=?, fecha_fin_contrato=?, tipo_contrato=?, remuneracion_basica=?, remuneracion_letra=?, nacionalidad=?, sexo=?, regimen_laboral=?, periodicidad_pago=?, tipo_pago=?, cuspp=?, nombre_moneda=?, simbolo_moneda=?, funciones=?, meses_contrato=? WHERE dni=? AND requerimiento=?''', (fecha_nacimiento,fecha_ingreso,fecha_fin_contrato,tipo_contrato,remuneracion_basica,remuneracion_letra,nacionalidad,sexo,regimen_laboral,periodicidad_pago,tipo_pago,cuspp,nombre_moneda,simbolo_moneda,funciones,meses_contrato,dni,requerimiento))
                 sincronizar_estado_requerimiento_por_cupo(con, requerimiento)
                 con.commit()
             flash(f'Trabajador {tipo_ingreso} registrado correctamente. Estado de ficha: {estado_ficha_postulante(row_to_dict({})) if False else "actualizado"}.', 'ok')
@@ -9203,17 +9225,45 @@ html,body{overflow-x:hidden!important;}
             req_cant_map = {}
         req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><span class='req-count-pill {'full' if int_safe(req_reg_map.get(clean(r['ticket']),0)) >= int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r))) and int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r)))>0 else ('warn' if int_safe(req_reg_map.get(clean(r['ticket']),0))>0 else '')}'>{int_safe(req_reg_map.get(clean(r['ticket']),0))} / {int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r)))}</span></td><td><a class='req-detail-btn' href='/admin/contratacion?sec=datos_completos&req={h(r['ticket'])}'>👁 Ver postulantes</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
         trabajadores_scan_js = json.dumps({normalizar_dni(r['dni']): {'nombre': (r['nombre'] or ''), 'empresa': (r['empresa'] or ''), 'cargo': (r['cargo'] or ''), 'area': (r['area'] or ''), 'correo': (r['correo'] or '')} for r in trabajadores}, ensure_ascii=False)
+        relaciones_req_js = json.dumps([{
+            'empresa': row_get(r,'empresa'), 'area': row_get(r,'area'), 'cargo': row_get(r,'cargo'), 'actividad': row_get(r,'actividad'),
+            'regimen_laboral': row_get(r,'regimen_laboral'), 'tipo_contrato': row_get(r,'tipo_contrato'), 'modalidad': row_get(r,'modalidad')
+        } for r in relaciones_laborales if int_safe(row_get(r,'activo'),1)==1], ensure_ascii=False)
+        req_info_js = json.dumps({clean(r['ticket']): {
+            'empresa': row_get(r,'empresa'), 'area': row_get(r,'area'), 'cargo': row_get(r,'cargo'), 'actividad': row_get(r,'actividad'),
+            'regimen_laboral': row_get(r,'regimen_laboral'), 'tipo_contrato': row_get(r,'tipo_contrato'),
+            'fecha_inicio_contrato': row_get(r,'fecha_inicio_contrato') or row_get(r,'fecha_ingreso'), 'fecha_fin_contrato': row_get(r,'fecha_fin_contrato')
+        } for r in requerimientos}, ensure_ascii=False)
         content=wrap(f'''
         <h2 class='c-title'>Requerimiento de personal</h2>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Requerimiento de contratación</h1><p class='muted2'>Primero crea el requerimiento por empresa, área y actividad. Luego escanea DNI o código de barras en este mismo módulo para armar la base del requerimiento.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Completar ficha trabajador</a></div>
         <div class='req-pro-grid'>
-          <form method='post' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Ticket / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001'><b>Empresa</b><select name='empresa' required>{opt_empresa_select}</select><b>Área</b><input name='area' list='lista_areas_cfg' required placeholder='Área desde Datos Maestros'><b>Cargo</b><input name='cargo' list='lista_cargos_cfg' required placeholder='Cargo desde Datos Maestros'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' required placeholder='Actividad desde Datos Maestros'><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha ingreso objetivo</b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Tipo contrato</b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral</b><select name='regimen_laboral'>{opt_regimen_select}</select><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear ticket</button><span class='muted2'>Al cumplir la cantidad, el sistema cierra el cupo automáticamente.</span></div></form>
+          <form method='post' class='pro-card nice-form req-cascade-form' id='form_req_laboral'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Ticket / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001'><b>Régimen laboral</b><select name='regimen_laboral' id='req_regimen_laboral' required>{opt_regimen_select}</select><b>Empresa</b><select name='empresa' id='req_empresa' required>{opt_empresa_select}</select><b>Área</b><select name='area' id='req_area' required><option value=''>Seleccione área</option></select><b>Cargo</b><select name='cargo' id='req_cargo' required><option value=''>Seleccione cargo</option></select><b>Actividad</b><select name='actividad' id='req_actividad' required><option value=''>Seleccione actividad</option></select><b>Tipo contrato</b><select name='tipo_contrato' id='req_tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha inicio contrato</b><input type='date' name='fecha_inicio_contrato' id='req_fecha_inicio_contrato' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato' id='req_fecha_fin_contrato' required><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear ticket</button><span class='muted2'>Los datos del ticket pasarán automáticamente a Postulantes.</span></div></form>
           <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='ticket_req' id='ticket_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
         </div>
         <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar ticket, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Ticket</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle postulantes</th><th>Anular</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
         let scanReqStream=null, scanReqCount=0, scanReqNuevos=0, scanReqReingresos=0, scanReqSaving=false, scanReqLast='', scanReqLastAt=0, scanReqPoll=null, scanReqDetector=null, scanReqDetecting=false;
-        const trabajadoresReq = {trabajadores_scan_js};
+        const relacionesReq = {relaciones_req_js};
+        const requerimientosInfoReq = {req_info_js};
+        function uniqReq(a){{return [...new Set(a.filter(Boolean))].sort((x,y)=>String(x).localeCompare(String(y),'es'));}}
+        function fillReqSelect(id, vals, ph){{const el=document.getElementById(id); if(!el)return; const prev=el.value; el.innerHTML='<option value="">'+ph+'</option>'+vals.map(v=>'<option>'+String(v).replace(/[&<>]/g,m=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[m]))+'</option>').join(''); if(vals.includes(prev)) el.value=prev;}}
+        function syncReqCascade(){{
+          const emp=document.getElementById('req_empresa')?.value||'';
+          const area=document.getElementById('req_area')?.value||'';
+          const cargo=document.getElementById('req_cargo')?.value||'';
+          const act=document.getElementById('req_actividad')?.value||'';
+          fillReqSelect('req_area', uniqReq(relacionesReq.filter(r=>!emp||r.empresa===emp).map(r=>r.area)), 'Seleccione área');
+          const area2=document.getElementById('req_area')?.value||'';
+          fillReqSelect('req_cargo', uniqReq(relacionesReq.filter(r=>(!emp||r.empresa===emp)&&(!area2||r.area===area2)).map(r=>r.cargo)), 'Seleccione cargo');
+          const cargo2=document.getElementById('req_cargo')?.value||'';
+          fillReqSelect('req_actividad', uniqReq(relacionesReq.filter(r=>(!emp||r.empresa===emp)&&(!area2||r.area===area2)&&(!cargo2||r.cargo===cargo2)).map(r=>r.actividad)), 'Seleccione actividad');
+          const act2=document.getElementById('req_actividad')?.value||'';
+          const rel=relacionesReq.find(r=>(!emp||r.empresa===emp)&&(!area2||r.area===area2)&&(!cargo2||r.cargo===cargo2)&&(!act2||r.actividad===act2));
+          if(rel){{ const reg=document.getElementById('req_regimen_laboral'); const tc=document.getElementById('req_tipo_contrato'); if(reg && rel.regimen_laboral) reg.value=rel.regimen_laboral; if(tc && rel.tipo_contrato) tc.value=rel.tipo_contrato; }}
+        }}
+        document.addEventListener('DOMContentLoaded',()=>{{['req_empresa','req_area','req_cargo','req_actividad'].forEach(id=>document.getElementById(id)?.addEventListener('change',syncReqCascade)); syncReqCascade();}});
+        {marker}
         function limpiarDniReq(v){{return (v||'').replace(/\D/g,'').slice(-8);}}
         function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const freqs=(tipo==='error'?[620,420,620]:[tipo==='reingreso'?[880,1040]:[520,760]][0]); let t=ctx.currentTime; (Array.isArray(freqs)?freqs:[freqs]).forEach(f=>{{const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type=tipo==='error'?'square':'sine'; osc.frequency.value=f; gain.gain.value=tipo==='error'?0.10:0.07; osc.connect(gain); gain.connect(ctx.destination); osc.start(t); osc.stop(t+0.20); t+=0.23;}}); setTimeout(()=>ctx.close(),1000);}}catch(e){{}}}}
         function mostrarAlarmaReq(msg){{beepReq('error'); try{{if(navigator.vibrate) navigator.vibrate([180,80,180]);}}catch(e){{}} const old=document.querySelector('.req-cap-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-cap-alert'; a.innerHTML='🚨 '+(msg||'No se pudo registrar.')+'<small>Revise cupo, requerimiento activo o DNI duplicado.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},7000);}}
