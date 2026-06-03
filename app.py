@@ -8423,6 +8423,137 @@ def admin_contratacion():
     req_pendientes = max(req_solicitados - req_registrados, 0) if req_solicitados else 0
     req_nuevos = len([r for r in ingresos_mostrar if clean(r['tipo_ingreso']).upper() == 'NUEVO' and clean(r['estado']).upper() not in ('ANULADO','CANCELADO')])
     req_reingresos = len([r for r in ingresos_mostrar if clean(r['tipo_ingreso']).upper() == 'REINGRESANTE' and clean(r['estado']).upper() not in ('ANULADO','CANCELADO')])
+    # ============================================================
+    # POSTULANTES PRO 360 - indicadores, completitud y semáforo
+    # ============================================================
+    def _ok_estado(v):
+        return clean(v).upper() in ('OK','APTO','APROBADO','REGISTRADO','IMPORTADO','ENTREGADO','ENVIADO','GENERADO','CAPTURADA','FINALIZADO','FIRMADO','VALIDADO','COMPLETO')
+
+    def _pend_estado(v):
+        vv = clean(v).upper()
+        return (not vv) or vv in ('PENDIENTE','EN PROCESO','OBSERVADO','NO APTO','RECHAZADO')
+
+    obs_por_dni = {}
+    for _o in observados:
+        _dni_o = normalizar_dni(row_get(_o, 'dni'))
+        if _dni_o and _dni_o not in obs_por_dni and clean(row_get(_o, 'estado', 'ACTIVO')).upper() not in ('INACTIVO','ANULADO','CANCELADO'):
+            obs_por_dni[_dni_o] = _o
+
+    docs_por_dni = {}
+    for _d in docs:
+        _dni_d = normalizar_dni(row_get(_d, 'dni') or row_get(_d, 'trabajador_dni'))
+        if _dni_d:
+            docs_por_dni.setdefault(_dni_d, 0)
+            docs_por_dni[_dni_d] += 1
+
+    CAMPOS_OBLIGATORIOS_POSTULANTE = [
+        ('dni','DNI'),('trabajador','Trabajador'),('empresa','Empresa'),('celular','Celular'),('correo','Correo'),
+        ('direccion','Dirección'),('distrito','Distrito'),('provincia','Provincia'),('departamento','Departamento'),
+        ('fecha_ingreso','Fecha ingreso'),('fecha_fin_contrato','Fecha fin contrato'),('cargo','Cargo'),('area','Área'),
+        ('regimen_laboral','Régimen laboral'),('tipo_contrato','Tipo contrato'),('remuneracion_basica','Remuneración básica')
+    ]
+
+    def _analizar_postulante(r):
+        faltantes = [label for key,label in CAMPOS_OBLIGATORIOS_POSTULANTE if not clean(row_get(r, key))]
+        dni_r = normalizar_dni(row_get(r, 'dni'))
+        obs = obs_por_dni.get(dni_r)
+        nivel = clean(row_get(obs, 'nivel_restriccion') or row_get(obs, 'nivel') or row_get(obs, 'restriccion')) if obs else ''
+        motivo = clean(row_get(obs, 'motivo') or row_get(obs, 'observacion')) if obs else ''
+        medico_ok = _ok_estado(row_get(r, 'estado_medico'))
+        docs_ok = _ok_estado(row_get(r, 'estado_documentos')) or docs_por_dni.get(dni_r, 0) > 0
+        foto_ok = bool(clean(row_get(r, 'foto_ruta')))
+        bio_ok = _ok_estado(row_get(r, 'biometria_estado'))
+        foto_bio_ok = foto_ok or bio_ok
+        fotocheck_ok = _ok_estado(row_get(r, 'fotocheck_estado'))
+        induccion_ok = _ok_estado(row_get(r, 'estado_capacitacion'))
+        indumentaria_ok = _ok_estado(row_get(r, 'estado_indumentaria'))
+        checks = [len(faltantes)==0, medico_ok, docs_ok, foto_bio_ok, fotocheck_ok, induccion_ok, indumentaria_ok]
+        avance = int(round((sum(1 for x in checks if x) / len(checks)) * 100)) if checks else 0
+        if obs and '3' in nivel:
+            estado_visual = '🔴 Observado Nivel 3'
+            clase = 'danger'
+        elif faltantes:
+            estado_visual = '🔴 Faltan datos'
+            clase = 'danger'
+        elif avance >= 100:
+            estado_visual = '🟢 Completo'
+            clase = 'ok'
+        elif avance >= 70:
+            estado_visual = '🟡 En validación'
+            clase = 'warn'
+        else:
+            estado_visual = '🔴 Incompleto'
+            clase = 'danger'
+        return {
+            'dni': dni_r,
+            'faltantes': faltantes,
+            'obs': obs,
+            'nivel': nivel,
+            'motivo': motivo,
+            'medico_ok': medico_ok,
+            'docs_ok': docs_ok,
+            'foto_bio_ok': foto_bio_ok,
+            'fotocheck_ok': fotocheck_ok,
+            'induccion_ok': induccion_ok,
+            'indumentaria_ok': indumentaria_ok,
+            'avance': avance,
+            'estado_visual': estado_visual,
+            'clase': clase,
+        }
+
+    analisis_postulantes = [(r, _analizar_postulante(r)) for r in ingresos_mostrar if clean(row_get(r,'estado')).upper() not in ('ANULADO','CANCELADO')]
+    total_post_360 = len(analisis_postulantes)
+    post_completos = sum(1 for r,a in analisis_postulantes if a['avance'] >= 100 and not a['obs'])
+    post_alerta = sum(1 for r,a in analisis_postulantes if a['obs'])
+    post_pend_docs = sum(1 for r,a in analisis_postulantes if not a['docs_ok'])
+    post_pend_firma = sum(1 for r,a in analisis_postulantes if not a['fotocheck_ok'])
+    post_inducidos = sum(1 for r,a in analisis_postulantes if a['induccion_ok'])
+    post_aptos = sum(1 for r,a in analisis_postulantes if a['medico_ok'])
+    avance_req_360 = int(round((post_completos / total_post_360) * 100)) if total_post_360 else 0
+
+    postulante_rows_360 = []
+    for r,a in analisis_postulantes[:300]:
+        faltantes_txt = ', '.join(a['faltantes'][:5]) + ('...' if len(a['faltantes']) > 5 else '')
+        alerta_txt = f"{h(a['nivel'])} {h(a['motivo'])}" if a['obs'] else 'Sin alerta activa'
+        postulante_rows_360.append(f"""
+        <tr>
+          <td><b>{h(row_get(r,'dni'))}</b><small>{h(row_get(r,'tipo_ingreso'))}</small></td>
+          <td><b>{h(row_get(r,'trabajador'))}</b><small>{h(row_get(r,'cargo'))} · {h(row_get(r,'area'))}</small></td>
+          <td><span class='estado-flujo {a['clase']}'>{h(a['estado_visual'])}</span><small>{h(alerta_txt)}</small></td>
+          <td><div class='mini-progress'><span style='width:{a['avance']}%'></span></div><b>{a['avance']}%</b></td>
+          <td>{'✅' if a['medico_ok'] else '⏳'} Médico<br>{'✅' if a['docs_ok'] else '⏳'} Docs<br>{'✅' if a['foto_bio_ok'] else '⏳'} Foto/Bio</td>
+          <td>{'✅' if a['fotocheck_ok'] else '⏳'} Fotocheck<br>{'✅' if a['induccion_ok'] else '⏳'} Inducción<br>{'✅' if a['indumentaria_ok'] else '⏳'} Indumentaria</td>
+          <td><small>{h(faltantes_txt or 'Ficha completa')}</small></td>
+          <td class='actions-cell'><a class='icon-btn' href='/admin/contratacion?sec=datos_completos&req={h(row_get(r,'requerimiento'))}'>Ficha 360°</a><a class='icon-btn' href='/admin/contratacion?sec=firma&req={h(row_get(r,'requerimiento'))}'>Firma</a><a class='icon-btn' href='/admin/contratacion?sec=fotocheck&req={h(row_get(r,'requerimiento'))}'>Fotocheck</a></td>
+        </tr>""")
+    postulante_tabla_360_html = ''.join(postulante_rows_360) or "<tr><td colspan='8'>Seleccione un requerimiento o registre postulantes para ver el control 360°.</td></tr>"
+
+    postulante_css_pro = """
+    <style>
+    .postulantes-control-pro{display:grid;grid-template-columns:1.7fr repeat(6, minmax(105px,1fr));gap:12px;margin:0 0 18px 0}
+    .postulantes-control-pro>div{background:linear-gradient(135deg,#ffffff,#f0fdf4);border:1px solid #bbf7d0;border-radius:18px;padding:14px;box-shadow:0 10px 25px rgba(15,23,42,.06)}
+    .postulantes-control-pro .main b{display:block;color:#064e3b;font-size:18px}.postulantes-control-pro .main span,.postulantes-control-pro small{display:block;color:#64748b;font-weight:800;font-size:12px}.postulantes-control-pro .kpi b{font-size:26px;color:#065f46}.postulantes-control-pro .warn b{color:#d97706}.postulantes-control-pro .danger b{color:#dc2626}
+    .control-360-card{border:1px solid #bbf7d0;background:#f8fffb;border-radius:20px;padding:16px;margin:0 0 18px 0}.control-360-title{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.control-360-title h3{margin:0;color:#064e3b}.control-360-title p{margin:4px 0 0 0;color:#64748b;font-weight:700}.mini-progress{height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden;min-width:90px}.mini-progress span{display:block;height:100%;background:#16a34a;border-radius:999px}.estado-flujo{display:inline-block;border-radius:999px;padding:6px 10px;font-weight:900;font-size:12px}.estado-flujo.ok{background:#dcfce7;color:#166534}.estado-flujo.warn{background:#fef3c7;color:#92400e}.estado-flujo.danger{background:#fee2e2;color:#991b1b}.tabla-360 td small{display:block;color:#64748b;font-weight:700;margin-top:3px}.actions-cell{display:flex;gap:6px;flex-wrap:wrap}.actions-cell .icon-btn{text-decoration:none;white-space:nowrap}.bloqueo-contrato{background:#fff7ed;border:1px solid #fdba74;border-radius:16px;padding:12px;margin:10px 0;color:#9a3412;font-weight:800}.quick-actions-360{display:flex;gap:8px;flex-wrap:wrap}.quick-actions-360 a{text-decoration:none}
+    @media(max-width:1150px){.postulantes-control-pro{grid-template-columns:1fr 1fr}.tabla-360{font-size:12px}.actions-cell{display:block}.actions-cell .icon-btn{display:block;margin-bottom:4px}}
+    </style>
+    """
+
+    postulante_control_html = f"""
+    {postulante_css_pro}
+    <div class='postulantes-control-pro'>
+      <div class='main'><b>Centro de Control 360°</b><span>Avance del requerimiento: {avance_req_360}% completo</span><div class='mini-progress' style='margin-top:10px'><span style='width:{avance_req_360}%'></span></div></div>
+      <div class='kpi'><b>{post_completos}</b><small>Completos</small></div>
+      <div class='kpi'><b>{post_aptos}</b><small>Aptos médicos</small></div>
+      <div class='kpi warn'><b>{post_pend_docs}</b><small>Pend. documentos</small></div>
+      <div class='kpi warn'><b>{post_pend_firma}</b><small>Pend. fotocheck/firma</small></div>
+      <div class='kpi'><b>{post_inducidos}</b><small>Inducidos</small></div>
+      <div class='kpi danger'><b>{post_alerta}</b><small>Observados</small></div>
+    </div>
+    <div class='control-360-card table-wrap'>
+      <div class='control-360-title'><div><h3>Ficha operativa de postulantes</h3><p>Semáforo por trabajador: datos obligatorios, médico, documentos, foto/biometría, fotocheck, inducción e indumentaria.</p></div><div class='quick-actions-360'><a class='c-btn gray' href='/admin/contratacion?sec=datos_completos&req={h(ticket_sel)}'>Ver ficha 360°</a><a class='c-btn gray' href='/admin/contratacion?sec=medica&req={h(ticket_sel)}'>Médico</a><a class='c-btn gray' href='/admin/contratacion?sec=induccion&req={h(ticket_sel)}'>Inducción</a></div></div>
+      <table id='tabla_360_postulantes' class='c-table tabla-360'><tr><th>DNI</th><th>Trabajador</th><th>Estado proceso</th><th>%</th><th>Validaciones</th><th>Proceso</th><th>Faltantes</th><th>Acciones</th></tr>{postulante_tabla_360_html}</table>
+    </div>
+    """
     req_detalle_txt = (f"{req_sel_row['ticket']} · {req_sel_row['empresa']} · {req_sel_row['area']} · {req_sel_row['actividad']}" if req_sel_row else "Seleccione un requerimiento para activar la ficha")
     opt_trab=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['nombre'])}</option>" for r in trabajadores])
     opt_ingresos=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['trabajador'])} - {h(r['requerimiento'])}</option>" for r in trabajadores_proceso_mostrar])
@@ -8994,6 +9125,7 @@ html,body{overflow-x:hidden!important;}
           <div class='req-kpi'><b>{req_reingresos}</b><span>Reingresos</span></div>
           <div class='req-kpi danger'><b>{req_anulados}</b><span>Anulados</span></div>
         </div>
+        {postulante_control_html}
         <div class='nr-tabs'><a class='active' href='#nuevo'>Nuevo</a><a href='#reingresante'>Reingresante</a><span>El DNI detecta si ya existe y cambia automáticamente a REINGRESANTE.</span></div><style>.req-summary-pro{{display:grid;grid-template-columns:2fr repeat(6, minmax(110px,1fr));gap:12px;margin:0 0 18px 0}}.req-summary-pro>div{{background:#fff;border:1px solid #dbeafe;border-radius:18px;padding:14px;box-shadow:0 10px 25px rgba(15,23,42,.06)}}.req-main b{{display:block;color:#073763;font-size:16px}}.req-main span,.req-kpi span{{display:block;color:#64748b;font-weight:800;font-size:12px}}.req-kpi b{{font-size:26px;color:#073763}}.req-kpi.ok b{{color:#059669}}.req-kpi.warn b{{color:#d97706}}.req-kpi.danger b{{color:#dc2626}}.req-lock-alert{{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:18px;padding:16px 18px;margin-bottom:12px}}.req-lock-alert b{{display:block;font-size:18px}}.req-lock-alert small{{display:block;margin-top:4px}}.form-bloqueado{{opacity:.62;filter:grayscale(.1)}}.form-bloqueado input:not([type=hidden]),.form-bloqueado select,.form-bloqueado textarea,.form-bloqueado button{{pointer-events:none}}.fixed-field{{background:#eef6ff!important;font-weight:700}}.history-box summary{{cursor:pointer;font-weight:900;color:#073763;margin-bottom:12px}}.missing-note{{grid-column:1/-1;background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:12px;color:#1e3a8a;font-weight:800}}@media(max-width:1100px){{.req-summary-pro{{grid-template-columns:1fr 1fr}}}}</style>
         <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form' style='padding:20px' data-req-activo='{h(ticket_sel)}'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><input type='hidden' name='requerimiento' id='requerimiento_ingreso_hidden' value='{h(ticket_sel)}'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='missing-note'>Campos obligatorios alineados a plantillas: DNI, nombre, cargo, fechas, dirección, contacto, remuneración, funciones y duración del contrato.</div><div id='bloqueo_req_msg' class='full req-lock-alert' style='display:none'><b>Primero seleccione un requerimiento arriba.</b><small>La ficha queda bloqueada para evitar registros sueltos sin ticket.</small></div><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'>{opt_empresa_select}</select><b>Celular <span class='req-mark'>*</span></b><input name='celular' id='celular_ingreso' required><b>Correo <span class='req-mark'>*</span></b><input name='correo' id='correo_ingreso' type='email' required><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_fin_contrato' required><b>Tipo contrato <span class='req-mark'>*</span></b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required>{opt_regimen_select}</select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneración básica <span class='req-mark'>*</span></b><input name='remuneracion_basica' id='remuneracion_basica' required inputmode='decimal' oninput='actualizarRemuneracionLetras()' placeholder='Ej. 1130.00'><b>Remuneración en letras <span class='req-mark'>*</span></b><input name='remuneracion_letra' id='remuneracion_letra' required readonly class='fixed-field' placeholder='Se genera automáticamente'><b>Moneda</b><input name='nombre_moneda' value='{h(_moneda_nombre)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='{h(_moneda_simbolo)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'>{opt_periodicidad_select}</select><b>Tipo pago</b><select name='tipo_pago'>{opt_tipo_pago_select}</select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏻ Apagar cámara</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Funciones / labores <span class='req-mark'>*</span></b><textarea name='funciones' rows='2' required placeholder='Funciones que se usarán en contrato si la plantilla lo requiere.'></textarea><b>Duración contrato texto <span class='req-mark'>*</span></b><input name='meses_contrato' required placeholder='Ej. TRES MESES / 1 mes y 2 días'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button class='c-btn'>💾 Guardar trabajador</button></form><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
         <script>
