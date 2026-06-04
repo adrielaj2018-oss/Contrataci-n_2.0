@@ -10286,9 +10286,13 @@ html,body{overflow-x:hidden!important;}
               <span class='status-pill {cfg_estado_class}'>Zebra: {h(cfg_estado)}</span>
             </div>
             <div class='foto-design-panel'>
-              <div class='design-copy'><h3>Diseño PRIZE implementado</h3><p>Anverso con logo, nombre, DNI, foto centrada y cargo. Reverso con QR/código único, valores corporativos y web. Usa <b>Vista diseño</b> en cada trabajador para imprimir o guardar PDF.</p><div class='design-checks'><span>✅ Foto obligatoria</span><span>✅ DNI y nombre</span><span>✅ Cargo</span><span>✅ QR/código único</span></div></div>
-              <div class='mini-fc front-mini'><b>Prize</b><small>NOMBRE TRABAJADOR</small><div class='mini-photo'>FOTO</div><em>CARGO</em></div>
-              <div class='mini-fc back-mini'><div class='mini-qr'>▦</div><small>Código Único de Acceso y Control</small><em>www.prizesuperfruits.com</em></div>
+              <div class='design-copy'>
+                <h3>Vista previa Fotocheck PRIZE implementada</h3>
+                <p>Anverso con logo, nombres, DNI, foto centrada y cargo. Reverso con QR generado con el <b>DNI del trabajador</b>, texto Código Único de Acceso y Control, valores corporativos y web.</p>
+                <div class='design-checks'><span>✅ Foto obligatoria</span><span>✅ QR = DNI</span><span>✅ Anverso y reverso</span><span>✅ PDF / impresión</span></div>
+              </div>
+              <div class='mini-fc front-mini'><b>Prize<small>SUPERFRUITS</small></b><small>NOMBRE TRABAJADOR</small><strong>12345678</strong><div class='mini-photo'>FOTO</div><em>APOYO GTH</em></div>
+              <div class='mini-fc back-mini'><div class='mini-qr'>QR<br>DNI</div><small>Código Único de Acceso y Control</small><div class='mini-values'>✓ Visión &nbsp; ◎ Cercanía<br>◉ Transparencia &nbsp; ♥ Pasión</div><em>www.prizesuperfruits.com</em></div>
             </div>
             <div class='foto-flow'><div>1. Ticket</div><div>2. Postulantes</div><div>3. Foto</div><div>4. Validación</div><div>5. Vista diseño</div><div>6. Zebra/PDF</div></div>
             <form method='post' class='zebra-config'>
@@ -11917,8 +11921,8 @@ def contratacion_fotocheck_preview(ingreso_id):
     cargo = h(r['cargo'] if 'cargo' in r.keys() else '')
     req = h(r['requerimiento'] if 'requerimiento' in r.keys() else '')
     empresa = h(r['empresa'] if 'empresa' in r.keys() else 'PRIZE')
-    codigo = fotocheck_codigo_unico(r)
-    qr_data = f"{codigo}|DNI:{dni}|TRABAJADOR:{trabajador}|REQ:{req}|EMPRESA:{empresa}"
+    codigo = dni  # QR OFICIAL: el código QR contiene únicamente el número de DNI del trabajador.
+    qr_data = dni
     qr_svg = fotocheck_qr_svg(qr_data, 168)
     foto_src = url_for('foto_trabajador', dni=r['dni']) if ('foto_ruta' in r.keys() and r['foto_ruta']) else ''
     foto_html = f"<img src='{foto_src}' class='fc-photo'>" if foto_src else "<div class='fc-photo no'>SIN<br>FOTO</div>"
@@ -11929,17 +11933,17 @@ def contratacion_fotocheck_preview(ingreso_id):
     .page{{padding:22px;display:flex;gap:24px;align-items:flex-start;justify-content:center;flex-wrap:wrap}}
     .toolbar{{width:100%;max-width:760px;margin:0 auto 10px;display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:12px 16px;box-shadow:0 8px 22px rgba(15,23,42,.08)}}
     .btn{{border:0;border-radius:12px;background:#008a47;color:#fff;font-weight:900;padding:10px 16px;cursor:pointer;text-decoration:none}}.btn.gray{{background:#e8eef5;color:#08213e}}
-    .card{{width:54mm;height:86mm;background:#fff;border:1px solid #cbd5e1;border-radius:10px;position:relative;overflow:hidden;box-shadow:0 16px 34px rgba(15,23,42,.16)}}
-    .front:before{{content:'';position:absolute;left:-16mm;top:-14mm;width:80mm;height:27mm;background:linear-gradient(135deg,#084f9f,#0d7ee8);border-bottom-right-radius:65% 100%;transform:rotate(-2deg)}}
-    .front:after{{content:'';position:absolute;right:-16mm;bottom:-10mm;width:80mm;height:24mm;background:linear-gradient(135deg,#4461e9,#3127a6);border-top-left-radius:70% 100%;opacity:.9}}
+    .card{{width:54mm;height:86mm;background:#fff;border:1.2px solid #1f2937;border-radius:5px;position:relative;overflow:hidden;box-shadow:0 16px 34px rgba(15,23,42,.16)}}
+    .front:before{{content:'';position:absolute;left:-14mm;top:-13mm;width:80mm;height:30mm;background:linear-gradient(135deg,#084f9f,#0d7ee8);border-bottom-right-radius:62% 100%;transform:rotate(-2deg)}}
+    .front:after{{content:'';position:absolute;right:-13mm;bottom:-8mm;width:78mm;height:25mm;background:linear-gradient(135deg,#6257ec,#2d259f);border-top-left-radius:70% 100%;opacity:.96}}
     .back:before{{content:'';position:absolute;right:-18mm;top:-13mm;width:70mm;height:30mm;background:linear-gradient(135deg,#0d7ee8,#084f9f);border-bottom-left-radius:65% 100%}}
     .back:after{{content:'';position:absolute;left:-20mm;bottom:-13mm;width:76mm;height:25mm;background:linear-gradient(135deg,#0ea5e9,#3226a7);border-top-right-radius:70% 100%;opacity:.9}}
-    .logo{{position:absolute;top:6mm;left:6mm;color:#fff;font-style:italic;font-size:22px;font-weight:900;letter-spacing:.4px;z-index:2;text-shadow:0 2px 4px rgba(0,0,0,.2)}}
+    .logo{{position:absolute;top:5mm;left:6mm;color:#fff;font-style:italic;font-size:22px;font-weight:900;letter-spacing:.4px;z-index:2;text-shadow:0 2px 4px rgba(0,0,0,.2)}}
     .logo small{{display:block;font-size:5px;letter-spacing:1px;font-style:normal;margin-top:-2px}}
-    .front-body{{position:absolute;inset:26mm 5mm 12mm;z-index:3;text-align:center}}
+    .front-body{{position:absolute;inset:25mm 5mm 12mm;z-index:3;text-align:center}}
     .fc-name{{font-size:11px;line-height:1.15;color:#1d2a7b;font-weight:950;text-transform:uppercase;min-height:26px;display:flex;align-items:center;justify-content:center}}
     .fc-dni{{font-size:11px;color:#1d2a7b;font-weight:950;margin:2mm 0 3mm}}
-    .fc-photo{{width:26mm;height:31mm;object-fit:cover;border-radius:3px;margin:auto;display:block;background:#e5edf5}}
+    .fc-photo{{width:28mm;height:33mm;object-fit:cover;border-radius:2px;margin:auto;display:block;background:#e5edf5}}
     .fc-photo.no{{display:flex;align-items:center;justify-content:center;color:#991b1b;font-weight:950;background:#fee2e2;border:1px solid #fecaca}}
     .fc-cargo{{margin-top:5mm;color:#1d2a7b;font-size:10px;font-weight:950;text-transform:uppercase}}
     .back-body{{position:absolute;inset:17mm 5mm 13mm;z-index:3;text-align:center}}
@@ -11955,8 +11959,8 @@ def contratacion_fotocheck_preview(ingreso_id):
     <div class='toolbar'><b>Vista previa de fotocheck: {trabajador}</b><div><a class='btn gray' href='/admin/contratacion?sec=fotocheck&req={req}'>Volver</a> <button class='btn' onclick='window.print()'>Imprimir / guardar PDF</button></div></div>
     <div class='page'>
       <div class='card front'><div class='logo'>Prize<small>SUPERFRUITS</small></div><div class='front-body'><div class='fc-name'>{trabajador}</div><div class='fc-dni'>{dni}</div>{foto_html}<div class='fc-cargo'>{cargo or 'CARGO PENDIENTE'}</div></div></div>
-      <div class='card back'><div class='back-body'><div class='qrbox'>{qr_svg}</div><div class='code'>Código Único de Acceso y Control</div><div class='values'><div class='value'><i>✓</i>Visión de futuro</div><div class='value'><i>◎</i>Cercanía</div><div class='value'><i>◉</i>Transparencia</div><div class='value'><i>♥</i>Pasión</div></div><div class='web'>www.prizesuperfruits.com</div></div><div class='back-logo'>Prize</div></div>
-      <div class='meta'><b>Código:</b> {h(codigo)} &nbsp; <b>Requerimiento:</b> {req} &nbsp; <b>Empresa:</b> {empresa}<br>Validación: no imprimir si falta foto, DNI, nombre o cargo.</div>
+      <div class='card back'><div class='back-body'><div class='qrbox'>{qr_svg}</div><div class='code'>Código Único de Acceso y Control</div><div style='font-size:6px;color:#64748b;font-weight:800;margin-top:-3mm;margin-bottom:2mm'>QR = DNI: {dni}</div><div class='values'><div class='value'><i>✓</i>Visión de futuro</div><div class='value'><i>◎</i>Cercanía</div><div class='value'><i>◉</i>Transparencia</div><div class='value'><i>♥</i>Pasión</div></div><div class='web'>www.prizesuperfruits.com</div></div><div class='back-logo'>Prize</div></div>
+      <div class='meta'><b>QR/DNI:</b> {dni} &nbsp; <b>Requerimiento:</b> {req} &nbsp; <b>Empresa:</b> {empresa}<br>Validación: no imprimir si falta foto, DNI, nombre o cargo.</div>
     </div></body></html>
     """
     return html_out
