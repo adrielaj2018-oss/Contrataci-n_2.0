@@ -1762,14 +1762,14 @@ def sincronizar_jefes_vacaciones(con):
         for r in con.execute("SELECT id, jefe_dni FROM vacaciones_saldos WHERE COALESCE(jefe_dni,'')<>''").fetchall():
             nd = normalizar_dni(r['jefe_dni'])
             if nd and nd != (r['jefe_dni'] or ''):
-                con.execute("UPDATE vacaciones_saldos SET jefe_dni=? WHERE id=?", (nd, r['id']))
+                con.execute("UPDATE vacaciones_saldos SET jefe_dni=? WHERE id=?", (nd, row_get(r,'id')))
     except Exception:
         pass
     try:
         for r in con.execute("SELECT id, jefe_dni FROM vacaciones_solicitudes WHERE COALESCE(jefe_dni,'')<>''").fetchall():
             nd = normalizar_dni(r['jefe_dni'])
             if nd and nd != (r['jefe_dni'] or ''):
-                con.execute("UPDATE vacaciones_solicitudes SET jefe_dni=? WHERE id=?", (nd, r['id']))
+                con.execute("UPDATE vacaciones_solicitudes SET jefe_dni=? WHERE id=?", (nd, row_get(r,'id')))
     except Exception:
         pass
     try:
@@ -2568,7 +2568,7 @@ def init_db():
             for nom, desc, tipo, arch in semillas:
                 con.execute("INSERT INTO contratacion_plantillas(nombre_plantilla,descripcion,tipo_documento,archivo_nombre,fecha_creacion,fecha_actualizacion,creado_por) VALUES(?,?,?,?,?,?,?)", (nom,desc,tipo,arch,now_txt(),now_txt(),'Admin_AQUA'))
             campos=CONTRATACION_CAMPOS_CORRESPONDENCIA
-            for pid in [r['id'] for r in con.execute('SELECT id FROM contratacion_plantillas').fetchall()]:
+            for pid in [row_get(r,'id') for r in con.execute('SELECT id FROM contratacion_plantillas').fetchall()]:
                 for nom, origen, td in campos:
                     con.execute("INSERT INTO contratacion_plantilla_campos(plantilla_id,descripcion,nombre_campo,campo_origen,tipo_dato) VALUES(?,?,?,?,?)", (pid,'',nom,origen,td))
         asegurar_carpetas_documentales()
@@ -5200,7 +5200,7 @@ def tabla_docs(rows):
     with db() as con:
         nombres = {r['dni']: r['nombre'] for r in con.execute("SELECT dni,nombre FROM trabajadores").fetchall()}
     for r in rows:
-        rid = r['id']; estado = r['estado'] if 'estado' in r.keys() and r['estado'] else 'Pendiente'
+        rid = row_get(r,'id'); estado = r['estado'] if 'estado' in r.keys() and r['estado'] else 'Pendiente'
         row_cls = 'row-approved' if estado == 'Aprobado' else ('row-rejected' if estado == 'Rechazado' else '')
         pill_cls = 'status-pill ' + ('st-aprobado' if estado == 'Aprobado' else 'st-rechazado' if estado == 'Rechazado' else 'st-firmado' if estado == 'Firmado' else 'st-aceptado' if estado == 'Aceptado' else '')
         ver = f"<a class='btn-blue' target='_blank' href='{url_for('ver_doc', doc_id=rid)}'>Ver/Descargar</a>"
@@ -5323,7 +5323,7 @@ def admin_login():
             user = con.execute("SELECT * FROM usuarios_admin WHERE usuario=? AND activo=1", (u,)).fetchone()
         if not user or not check_password_hash(user['clave_hash'], c):
             return login_template(True, 'Usuario o clave incorrecta.')
-        session.clear(); session['admin_id']=user['id']; session['admin_user']=user['usuario']; session['admin_nombre']=user['nombre']
+        session.clear(); session['admin_id']=userow_get(r,'id'); session['admin_user']=user['usuario']; session['admin_nombre']=user['nombre']
         return redirect(url_for('admin'))
     return login_template(True)
 
@@ -5911,7 +5911,7 @@ def admin_vacaciones():
             params=[q_sol+'%', '%'+q_sol+'%']
         solicitudes=con.execute(f'SELECT * FROM vacaciones_solicitudes {where} ORDER BY id DESC LIMIT 500', params).fetchall()
     sal=''.join([f"<tr><td>{r['dni']}</td><td>{r['trabajador']}</td><td>{r['empresa'] or ''}</td><td>{r['area'] or ''}</td><td>{r['jefe_dni'] if 'jefe_dni' in r.keys() else ''}</td><td>{r['jefe'] or ''}</td><td>{r['periodo_inicio'] or ''}</td><td>{r['periodo_fin'] or ''}</td><td>{r['dias_ganados']}</td><td><b>{r['saldo']}</b></td></tr>" for r in saldos])
-    sol=''.join([f"<tr><td>{r['id']}</td><td>{r['dni']}</td><td>{r['trabajador']}</td><td>{r['jefe_dni'] if 'jefe_dni' in r.keys() else ''}</td><td>{r['fecha_inicio']} al {r['fecha_fin']}</td><td>{r['dias']}</td><td>{r['periodo_detalle'] if 'periodo_detalle' in r.keys() and r['periodo_detalle'] else ''}</td><td><span class='status-pill'>{r['estado']}</span></td><td class='actions'><a class='btn-green mini-btn' href='/admin/vacaciones/{r['id']}/jefe/aprobar'>Apr. jefe</a><a class='btn-green mini-btn' href='/admin/vacaciones/{r['id']}/gh/aprobar'>Apr. GTH</a><a class='btn-red mini-btn' href='/admin/vacaciones/{r['id']}/rechazar'>Rechazar</a></td></tr>" for r in solicitudes])
+    sol=''.join([f"<tr><td>{row_get(r,'id')}</td><td>{r['dni']}</td><td>{r['trabajador']}</td><td>{r['jefe_dni'] if 'jefe_dni' in r.keys() else ''}</td><td>{r['fecha_inicio']} al {r['fecha_fin']}</td><td>{r['dias']}</td><td>{r['periodo_detalle'] if 'periodo_detalle' in r.keys() and r['periodo_detalle'] else ''}</td><td><span class='status-pill'>{r['estado']}</span></td><td class='actions'><a class='btn-green mini-btn' href='/admin/vacaciones/{row_get(r,'id')}/jefe/aprobar'>Apr. jefe</a><a class='btn-green mini-btn' href='/admin/vacaciones/{row_get(r,'id')}/gh/aprobar'>Apr. GTH</a><a class='btn-red mini-btn' href='/admin/vacaciones/{row_get(r,'id')}/rechazar'>Rechazar</a></td></tr>" for r in solicitudes])
     content=f"""
     <div class='hero'><div class='topbar'><div><h1>Gestión <span class='accent'>Vacacional</span></h1><div class='subtitle'>Administrador carga saldos; usuario solicita goce; flujo: jefe inmediato → Gestión del Talento Humano.</div></div><a class='btn-green' href='/admin/vacaciones/plantilla'>Descargar plantilla</a><a class='btn-blue' href='/admin/vacaciones/sincronizar_jefes'>Sincronizar jefes</a></div></div>
     <section class='grid'><div id='aprobaciones' class='card mini'><div><h3>Pendientes de aprobación</h3><b>{len([r for r in solicitudes if 'Pendiente' in (r['estado'] or '')])}</b></div><div class='ico'>✅</div></div><div class='card mini'><div><h3>Saldos registrados</h3><b>{len(saldos)}</b></div><div class='ico'>🗓️</div></div><div class='card mini'><div><h3>Solicitudes totales</h3><b>{len(solicitudes)}</b></div><div class='ico'>📄</div></div><div id='cargar-saldos' class='card span-12'><h2>🏖️ Saldos Vacacionales</h2><form method='post' enctype='multipart/form-data' class='form-grid'><div class='field'><label>Excel saldos</label><input type='file' name='excel' accept='.xlsx' required></div><button class='btn-green'>Subir saldos</button></form><p class='muted'>Columnas: EMPRESA, DNI, TRABAJADOR, AREA, JEFE INMEDIATO (DNI), I_PERIODO, F_PERIODO, DIAS GANADOS, SALDO. No usar FECHA INGRESO ni PERIODO ni DÍAS GOZADOS.</p></div>
@@ -6038,11 +6038,11 @@ def trabajador_vacaciones():
         solicitudes=con.execute('SELECT * FROM vacaciones_solicitudes WHERE dni=? ORDER BY id DESC',(dni,)).fetchall()
         por_aprobar=con.execute(sql_solicitudes_jefe("AND vs.estado='Pendiente jefe' ORDER BY vs.id DESC"),(dni,dni,dni)).fetchall()
     sol=''.join([f"<div class='sol-card'><div data-label='Fecha'><b>{r['fecha_solicitud']}</b></div><div data-label='Rango'><b>{r['fecha_inicio']} al {r['fecha_fin']}</b></div><div data-label='Días' class='dias'><b>{r['dias']}</b></div><div data-label='Periodo usado'><b>{r['periodo_detalle'] if 'periodo_detalle' in r.keys() and r['periodo_detalle'] else '-'}</b></div><div data-label='Estado'><span class='status-pill'>{r['estado']}</span></div><div data-label='Comentario' class='coment'>{r['motivo'] or '-'}</div></div>" for r in solicitudes])
-    sol_aprobar=''.join([f"<tr><td>{r['fecha_solicitud']}</td><td>{r['dni']}</td><td>{r['trabajador']}</td><td>{r['fecha_inicio']} al {r['fecha_fin']}</td><td>{r['dias']}</td><td><span class='status-pill'>{r['estado']}</span></td><td class='actions'><a class='btn-green mini-btn' href='/vacaciones/aprobar_jefe/{r['id']}'>Aprobar</a><a class='btn-red mini-btn' href='/vacaciones/rechazar_jefe/{r['id']}'>Rechazar</a></td></tr>" for r in por_aprobar])
+    sol_aprobar=''.join([f"<tr><td>{r['fecha_solicitud']}</td><td>{r['dni']}</td><td>{r['trabajador']}</td><td>{r['fecha_inicio']} al {r['fecha_fin']}</td><td>{r['dias']}</td><td><span class='status-pill'>{r['estado']}</span></td><td class='actions'><a class='btn-green mini-btn' href='/vacaciones/aprobar_jefe/{row_get(r,'id')}'>Aprobar</a><a class='btn-red mini-btn' href='/vacaciones/rechazar_jefe/{row_get(r,'id')}'>Rechazar</a></td></tr>" for r in por_aprobar])
     with db() as con:
         usados_periodos = dias_reservados_periodos(con, dni)
     saldo_val = sum(saldo_disponible_real(r, usados_periodos) for r in saldos_usuario)
-    periodos_html = ''.join([f"<label class='period-card {'disabled' if saldo_disponible_real(r, usados_periodos) <= 0 else ''}'><input type='checkbox' name='periodos' value='{r['id']}' {'disabled' if saldo_disponible_real(r, usados_periodos) <= 0 else ''}><span class='period-main'><span class='period-years'>{r['periodo_inicio'] or ''} - {r['periodo_fin'] or ''}</span><span class='period-meta'><span class='period-badge'>Ganados: <strong>{r['dias_ganados']}</strong></span><span class='period-badge'>Saldo real: <strong>{saldo_disponible_real(r, usados_periodos)}</strong></span><span class='period-badge'>Usado/Pendiente: <strong>{usados_periodos.get(int(r['id']), 0)}</strong></span></span></span></label>" for r in saldos_usuario]) or '<p class=\'muted\'>No tiene periodos vacacionales cargados.</p>'
+    periodos_html = ''.join([f"<label class='period-card {'disabled' if saldo_disponible_real(r, usados_periodos) <= 0 else ''}'><input type='checkbox' name='periodos' value='{row_get(r,'id')}' {'disabled' if saldo_disponible_real(r, usados_periodos) <= 0 else ''}><span class='period-main'><span class='period-years'>{r['periodo_inicio'] or ''} - {r['periodo_fin'] or ''}</span><span class='period-meta'><span class='period-badge'>Ganados: <strong>{r['dias_ganados']}</strong></span><span class='period-badge'>Saldo real: <strong>{saldo_disponible_real(r, usados_periodos)}</strong></span><span class='period-badge'>Usado/Pendiente: <strong>{usados_periodos.get(int(row_get(r,'id')), 0)}</strong></span></span></span></label>" for r in saldos_usuario]) or '<p class=\'muted\'>No tiene periodos vacacionales cargados.</p>'
     content=f"""
     <div class='hero'><div class='topbar'><div><h1>Gestión <span class='accent'>Vacacional</span></h1><div class='subtitle'>Consulta tu saldo, valida días disponibles y registra solicitudes.</div></div></div></div>
     <section class='grid'><div class='card mini'><div><h3>Saldo disponible</h3><b>{saldo_val}</b></div><div class='ico'>🏖️</div></div><div class='card mini'><div><h3>Días ganados</h3><b>{sum(float(r['dias_ganados'] or 0) for r in saldos_usuario)}</b></div><div class='ico'>📈</div></div><div class='card mini'><div><h3>Periodos</h3><b>{len(saldos_usuario)}</b></div><div class='ico'>📅</div></div><div class='card mini'><div><h3>Fecha ingreso</h3><b>{fecha_sin_hora(t['fecha_ingreso'] if t and 'fecha_ingreso' in t.keys() else '') or '-'}</b></div><div class='ico'>🗓️</div></div>
@@ -6142,7 +6142,7 @@ def vacaciones_aprobaciones_jefe():
     for r in rows:
         acciones = ""
         if (r['estado'] or '') == 'Pendiente jefe':
-            acciones = f"<div class='actions'><a class='btn-green mini-btn' href='/vacaciones/aprobar_jefe/{r['id']}'>Aprobar</a><a class='btn-red mini-btn' href='/vacaciones/rechazar_jefe/{r['id']}'>Rechazar</a></div>"
+            acciones = f"<div class='actions'><a class='btn-green mini-btn' href='/vacaciones/aprobar_jefe/{row_get(r,'id')}'>Aprobar</a><a class='btn-red mini-btn' href='/vacaciones/rechazar_jefe/{row_get(r,'id')}'>Rechazar</a></div>"
         cards.append(f"""
         <div class='sol-card'>
           <div data-label='Fecha'><b>{r['fecha_solicitud']}</b></div>
@@ -6177,8 +6177,8 @@ def trabajador_contratacion():
             tokens_por_doc[fr['documento_id']]=fr['firma_token']
     filas=[]
     for r in docs:
-        token=tokens_por_doc.get(r['id'])
-        accion=f"<a class='btn-blue mini-btn' target='_blank' href='/contratacion/ver/{r['id']}'>Ver</a>"
+        token=tokens_por_doc.get(row_get(r,'id'))
+        accion=f"<a class='btn-blue mini-btn' target='_blank' href='/contratacion/ver/{row_get(r,'id')}'>Ver</a>"
         if token and 'FIRMADO' not in (r['estado'] or '').upper():
             accion += f" <a class='btn-green mini-btn' target='_blank' href='/firma/{token}'>Firmar ahora</a>"
         filas.append(f"<tr><td>{r['tipo_doc']}</td><td>{r['etapa']}</td><td><span class='status-pill'>{r['estado']}</span></td><td>{r['fecha_registro']}</td><td>{accion}</td></tr>")
@@ -6753,7 +6753,7 @@ def contratacion_plantilla_historial(pid):
         <td>{h(r['tipo_documento'])}</td>
         <td>{h(r['archivo_nombre'] or (r['nombre_plantilla'] + '.docx'))}</td>
         <td><span class='state {'ok' if r['activo'] else 'bad'}'>{'ACTIVO' if r['activo'] else 'INACTIVO'}</span></td>
-        <td><a class='mini-download' href='{url_for('contratacion_plantilla_archivo', pid=r['id'])}'>⬇ Word</a></td>
+        <td><a class='mini-download' href='{url_for('contratacion_plantilla_archivo', pid=row_get(r,'id'))}'>⬇ Word</a></td>
       </tr>""" for r in historial])
     content = f"""
     <style>
@@ -7828,7 +7828,7 @@ def admin_contratacion():
                         bloqueados += 1
                         continue
                     foto_estado = 'FOTO APROBADA' if foto_ruta else 'PENDIENTE FOTO'
-                    con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', (nuevo_estado, r['id']))
+                    con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', (nuevo_estado, row_get(r,'id')))
                     con.execute("""INSERT INTO contratacion_fotocheck
                         (dni,trabajador,empresa,area,cargo,actividad,requerimiento,fecha_ingreso,foto_estado,fotocheck_estado,impresora,lote_impresion,observacion,fecha_registro,fecha_impresion,fecha_entrega,registrado_por)
                         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -7867,7 +7867,7 @@ def admin_contratacion():
                 carpeta.mkdir(parents=True, exist_ok=True)
                 nombre_cargo = 'CARGO_FOTOCHECK_' + (req_return or 'GENERAL') + '_' + now_file() + '.html'
                 path_cargo = carpeta / secure_filename(nombre_cargo)
-                filas = ''.join([f"<tr><td>{h(r['dni'])}</td><td>{h(r['trabajador'])}</td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['cargo'])}</td><td>{h(r['requerimiento'])}</td><td>________________</td></tr>" for r in seleccionados])
+                filas = ''.join([f"<tr><td>{h(row_get(r,'dni'))}</td><td>{h(row_get(r,'trabajador'))}</td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['cargo'])}</td><td>{h(r['requerimiento'])}</td><td>________________</td></tr>" for r in seleccionados])
                 html_doc = f"""<!doctype html><html><head><meta charset='utf-8'><title>Cargo Fotocheck</title>
                 <style>body{{font-family:Arial,sans-serif;margin:28px;color:#111827}}h1{{font-size:20px}}table{{width:100%;border-collapse:collapse;margin-top:16px}}td,th{{border:1px solid #94a3b8;padding:8px;font-size:12px}}th{{background:#e2e8f0}}.firma{{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:60px}}.linea{{border-top:1px solid #111;padding-top:8px;text-align:center}}</style>
                 </head><body><h1>CARGO DE ENTREGA DE FOTOCHECK</h1><p><b>Requerimiento:</b> {h(req_return or 'GENERAL')} &nbsp; <b>Fecha:</b> {h(now_txt())}</p>
@@ -7876,7 +7876,7 @@ def admin_contratacion():
                 <div class='firma'><div class='linea'>Responsable RR.HH.</div><div class='linea'>V°B° / Control</div></div></body></html>"""
                 path_cargo.write_text(html_doc, encoding='utf-8')
                 for r in seleccionados:
-                    con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', ('CARGO GENERADO', r['id']))
+                    con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', ('CARGO GENERADO', row_get(r,'id')))
                     con.execute("""INSERT INTO contratacion_fotocheck
                         (dni,trabajador,empresa,area,cargo,actividad,requerimiento,fecha_ingreso,foto_estado,fotocheck_estado,impresora,lote_impresion,cargo_nombre,ruta_cargo,observacion,fecha_registro,registrado_por)
                         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -9019,9 +9019,9 @@ def admin_contratacion():
     </div>
     """
     req_detalle_txt = (f"{req_sel_row['ticket']} · {req_sel_row['empresa']} · {req_sel_row['area']} · {req_sel_row['actividad']}" if req_sel_row else "Seleccione un requerimiento para activar la ficha")
-    opt_trab=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['nombre'])}</option>" for r in trabajadores])
-    opt_ingresos=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['trabajador'])} - {h(r['requerimiento'])}</option>" for r in trabajadores_proceso_mostrar])
-    opt_req=''.join([f"<option value='{h(r['ticket'])}' {'selected' if ticket_sel==clean(r['ticket']) else ''}>{h(r['ticket'])} - {h(r['empresa'])} - {h(r['area'])} - {h(r['actividad'])}</option>" for r in requerimientos])
+    opt_trab=''.join([f"<option value='{h(row_get(r,'dni'))}'>{h(row_get(r,'dni'))} - {h(r['nombre'])}</option>" for r in trabajadores])
+    opt_ingresos=''.join([f"<option value='{h(row_get(r,'dni'))}'>{h(row_get(r,'dni'))} - {h(row_get(r,'trabajador'))} - {h(r['requerimiento'])}</option>" for r in trabajadores_proceso_mostrar])
+    opt_req=''.join([f"<option value='{h(row_get(r,'ticket'))}' {'selected' if ticket_sel==clean(row_get(r,'ticket')) else ''}>{h(row_get(r,'ticket'))} - {h(r['empresa'])} - {h(r['area'])} - {h(row_get(r,'actividad'))}</option>" for r in requerimientos])
     # Catálogos para autocompletar desde configuración/maestros del empleador y requerimientos existentes
     def maestros_tipo(tipo):
         return sorted({clean(r['nombre']) for r in maestros_empleador if clean(r['tipo']).upper()==tipo and int(r['activo'] or 0)==1 and clean(r['nombre'])})
@@ -9054,10 +9054,10 @@ def admin_contratacion():
         rows=[]
         for r in trabajadores_proceso_mostrar[:300]:
             rows.append("<tr>"
-              + f"<td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td>"
-              + f"<td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td>"
+              + f"<td><input type='checkbox' name='ingreso_ids' value='{row_get(r,'id')}'></td>"
+              + f"<td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(r['requerimiento'])}</td><td>{h(row_get(r,'actividad'))}</td><td>{h(row_get(r,'sede'))}</td><td>{h(r['cargo'])}</td>"
               + f"<td>{_estado_pill(r['estado'])}</td><td>{_estado_pill(r['estado_medico'])}</td><td>{_estado_pill(r['estado_capacitacion'])}</td><td>{_estado_pill(r['estado_indumentaria'])}</td><td>{_estado_pill(r['estado_nisira'])}</td>"
-              + f"<td><a class='icon-btn' href='/admin/contratacion?sec=ficha&dni={h(r['dni'])}' title='Ficha trabajador'>Ver</a></td>"
+              + f"<td><a class='icon-btn' href='/admin/contratacion?sec=ficha&dni={h(row_get(r,'dni'))}' title='Ficha trabajador'>Ver</a></td>"
               + "</tr>")
         body=''.join(rows) or "<tr><td colspan='13'>Aún no hay postulantes registrados para el ticket seleccionado.</td></tr>"
         return f"""
@@ -9147,8 +9147,8 @@ def admin_contratacion():
         return html.escape(str(v or ''), quote=True)
     tipos_rows=''.join([f"""
         <tr>
-          <td class='nowrap'><button type='button' class='icon-btn' onclick='editarTipoEtapa(\"{r['id']}\",\"{escjs(r['codigo'])}\",\"{escjs(r['descripcion'])}\",\"{escjs(r['etapa'])}\",\"{1 if r['activo'] else 0}\",\"{1 if r['obligatorio'] else 0}\",\"{1 if r['requiere_firma_digital'] else 0}\",\"{1 if r['requiere_firma_electronica'] else 0}\",\"{1 if r['requiere_confirmacion_recepcion'] else 0}\")'>✎</button><form method='post' style='display:inline' onsubmit='return confirm(\"¿Eliminar tipo de documento?\")'><input type='hidden' name='accion' value='eliminar_tipo_etapa'><input type='hidden' name='tipo_id' value='{r['id']}'><button class='icon-btn'>🗑</button></form></td>
-          <td><form method='post'><input type='hidden' name='accion' value='estado_tipo_etapa'><input type='hidden' name='tipo_id' value='{r['id']}'><select name='activo' onchange='this.form.submit()' class='select-mini'><option value='1' {'selected' if r['activo'] else ''}>🟢 Active</option><option value='0' {'selected' if not r['activo'] else ''}>🔴 Inactive</option></select></form></td>
+          <td class='nowrap'><button type='button' class='icon-btn' onclick='editarTipoEtapa(\"{row_get(r,'id')}\",\"{escjs(r['codigo'])}\",\"{escjs(r['descripcion'])}\",\"{escjs(r['etapa'])}\",\"{1 if r['activo'] else 0}\",\"{1 if r['obligatorio'] else 0}\",\"{1 if r['requiere_firma_digital'] else 0}\",\"{1 if r['requiere_firma_electronica'] else 0}\",\"{1 if r['requiere_confirmacion_recepcion'] else 0}\")'>✎</button><form method='post' style='display:inline' onsubmit='return confirm(\"¿Eliminar tipo de documento?\")'><input type='hidden' name='accion' value='eliminar_tipo_etapa'><input type='hidden' name='tipo_id' value='{row_get(r,'id')}'><button class='icon-btn'>🗑</button></form></td>
+          <td><form method='post'><input type='hidden' name='accion' value='estado_tipo_etapa'><input type='hidden' name='tipo_id' value='{row_get(r,'id')}'><select name='activo' onchange='this.form.submit()' class='select-mini'><option value='1' {'selected' if r['activo'] else ''}>🟢 Active</option><option value='0' {'selected' if not r['activo'] else ''}>🔴 Inactive</option></select></form></td>
           <td>{html.escape(str(r['codigo'] or ''))}</td><td>{html.escape(str(r['descripcion'] or ''))}</td><td>{html.escape(str(r['etapa'] or ''))}</td>
           <td>{chk_badge(r['requiere_firma_digital'])}</td><td>{chk_badge(r['requiere_firma_electronica'])}</td><td>{chk_badge(r['obligatorio'])}</td><td>{chk_badge(r['requiere_confirmacion_recepcion'])}</td>
         </tr>""" for r in tipos])
@@ -9158,25 +9158,25 @@ def admin_contratacion():
         return f"<form method='post'><input type='hidden' name='accion' value='{nombre_accion}'><input type='hidden' name='{id_name}' value='{rid}'><select name='activo' onchange='this.form.submit()' class='select-mini'><option value='1' {'selected' if activo else ''}>🟢 Active</option><option value='0' {'selected' if not activo else ''}>🔴 Inactive</option></select></form>"
     tipo_emp_rows=''.join([f"""
         <tr>
-          <td class='nowrap'><button type='button' class='icon-btn' onclick='editarTipoEmpleado("{r['id']}","{escjs(r['codigo'])}","{escjs(r['descripcion'])}","{escjs(r['nombre_corto'])}","{escjs(r['grupo'])}","{1 if r['activo'] else 0}","{1 if r['permite_doc_sin_cargo'] else 0}","{1 if r['requiere_validacion'] else 0}","{1 if r['tiene_fecha_vencimiento'] else 0}","{1 if r['es_contrato'] else 0}")'>✎</button><form method='post' style='display:inline' onsubmit='return confirm("¿Eliminar tipo documento de empleado?")'><input type='hidden' name='accion' value='eliminar_tipo_empleado'><input type='hidden' name='doc_emp_id' value='{r['id']}'><button class='icon-btn'>🗑</button></form></td>
-          <td>{estado_select('estado_tipo_empleado','doc_emp_id',r['id'],r['activo'])}</td><td>{h(r['codigo'])}</td><td>{h(r['descripcion'])}</td><td>{h(r['nombre_corto'])}</td><td>{h(r['grupo'])}</td>
+          <td class='nowrap'><button type='button' class='icon-btn' onclick='editarTipoEmpleado("{row_get(r,'id')}","{escjs(r['codigo'])}","{escjs(r['descripcion'])}","{escjs(r['nombre_corto'])}","{escjs(r['grupo'])}","{1 if r['activo'] else 0}","{1 if r['permite_doc_sin_cargo'] else 0}","{1 if r['requiere_validacion'] else 0}","{1 if r['tiene_fecha_vencimiento'] else 0}","{1 if r['es_contrato'] else 0}")'>✎</button><form method='post' style='display:inline' onsubmit='return confirm("¿Eliminar tipo documento de empleado?")'><input type='hidden' name='accion' value='eliminar_tipo_empleado'><input type='hidden' name='doc_emp_id' value='{row_get(r,'id')}'><button class='icon-btn'>🗑</button></form></td>
+          <td>{estado_select('estado_tipo_empleado','doc_emp_id',row_get(r,'id'),r['activo'])}</td><td>{h(r['codigo'])}</td><td>{h(r['descripcion'])}</td><td>{h(r['nombre_corto'])}</td><td>{h(r['grupo'])}</td>
         </tr>""" for r in tipo_empleado])
     cargo_rows=''.join([f"""
         <tr>
-          <td class='nowrap'><button type='button' class='icon-btn' onclick='editarCargo("{r['id']}","{escjs(r['codigo'])}","{escjs(r['nombre'])}","{escjs(r['nombre_corto'])}","{escjs(r['resumen'])}","{escjs(r['funciones'])}","{1 if r['activo'] else 0}")'>✎</button><form method='post' style='display:inline' onsubmit='return confirm("¿Eliminar cargo?")'><input type='hidden' name='accion' value='eliminar_cargo'><input type='hidden' name='cargo_id' value='{r['id']}'><button class='icon-btn'>🗑</button></form></td>
-          <td>{estado_select('estado_cargo','cargo_id',r['id'],r['activo'])}</td><td>{h(r['codigo'])}</td><td>{h(r['nombre'])}</td><td>{h(r['nombre_corto'])}</td>
+          <td class='nowrap'><button type='button' class='icon-btn' onclick='editarCargo("{row_get(r,'id')}","{escjs(r['codigo'])}","{escjs(r['nombre'])}","{escjs(r['nombre_corto'])}","{escjs(r['resumen'])}","{escjs(r['funciones'])}","{1 if r['activo'] else 0}")'>✎</button><form method='post' style='display:inline' onsubmit='return confirm("¿Eliminar cargo?")'><input type='hidden' name='accion' value='eliminar_cargo'><input type='hidden' name='cargo_id' value='{row_get(r,'id')}'><button class='icon-btn'>🗑</button></form></td>
+          <td>{estado_select('estado_cargo','cargo_id',row_get(r,'id'),r['activo'])}</td><td>{h(r['codigo'])}</td><td>{h(r['nombre'])}</td><td>{h(r['nombre_corto'])}</td>
         </tr>""" for r in cargos])
     plantillas_rows=''.join([
         f"""<tr class='plantilla-visible-row'>
           <td class='tpl-actions cell-visible'>
-            <a class='icon-btn action-edit' title='Abrir detalle / editar' href='{url_for('contratacion_plantilla_detalle', pid=r['id'])}'>✎</a><a class='icon-btn' title='Historial de cargas' href='{url_for('contratacion_plantilla_historial', pid=r['id'])}'>🔍</a><a class='icon-btn' title='Descargar plantilla Word' href='{url_for('contratacion_plantilla_archivo', pid=r['id'])}'>⬇</a>
-            <form method='post' action='{url_for('contratacion_plantilla_eliminar', pid=r['id'])}' style='display:inline' onsubmit="return confirm('¿Eliminar esta plantilla? No se borrarán contratos/documentos históricos.');">
+            <a class='icon-btn action-edit' title='Abrir detalle / editar' href='{url_for('contratacion_plantilla_detalle', pid=row_get(r,'id'))}'>✎</a><a class='icon-btn' title='Historial de cargas' href='{url_for('contratacion_plantilla_historial', pid=row_get(r,'id'))}'>🔍</a><a class='icon-btn' title='Descargar plantilla Word' href='{url_for('contratacion_plantilla_archivo', pid=row_get(r,'id'))}'>⬇</a>
+            <form method='post' action='{url_for('contratacion_plantilla_eliminar', pid=row_get(r,'id'))}' style='display:inline' onsubmit="return confirm('¿Eliminar esta plantilla? No se borrarán contratos/documentos históricos.');">
               <button class='icon-btn action-delete' title='Eliminar plantilla' type='submit'>🗑</button>
             </form>
           </td>
-          <td class='cell-visible'><form method='post' class='state-form'><input type='hidden' name='accion' value='estado_plantilla'><input type='hidden' name='plantilla_id' value='{r['id']}'><select name='activo' class='state-select {'inactive' if not r['activo'] else ''}' onchange='this.form.submit()'><option value='1' {'selected' if r['activo'] else ''}>Activo</option><option value='0' {'selected' if not r['activo'] else ''}>Inactivo</option></select></form></td>
+          <td class='cell-visible'><form method='post' class='state-form'><input type='hidden' name='accion' value='estado_plantilla'><input type='hidden' name='plantilla_id' value='{row_get(r,'id')}'><select name='activo' class='state-select {'inactive' if not r['activo'] else ''}' onchange='this.form.submit()'><option value='1' {'selected' if r['activo'] else ''}>Activo</option><option value='0' {'selected' if not r['activo'] else ''}>Inactivo</option></select></form></td>
           <td class='cell-visible'><span class='status-pill {'warn' if ('RENOV' in (r['tipo_documento'] or '').upper() or 'ADENDA' in (r['tipo_documento'] or '').upper() or 'RENOV' in (r['nombre_plantilla'] or '').upper() or 'ADENDA' in (r['nombre_plantilla'] or '').upper()) else 'ok'}'>{'RENOVACIÓN' if ('RENOV' in (r['tipo_documento'] or '').upper() or 'ADENDA' in (r['tipo_documento'] or '').upper() or 'RENOV' in (r['nombre_plantilla'] or '').upper() or 'ADENDA' in (r['nombre_plantilla'] or '').upper()) else 'CONTRATACIÓN'}</span></td>
-          <td class='cell-visible'><a class='tpl-link' href='{url_for('contratacion_plantilla_detalle', pid=r['id'])}'>{h(r['nombre_plantilla'])}</a></td>
+          <td class='cell-visible'><a class='tpl-link' href='{url_for('contratacion_plantilla_detalle', pid=row_get(r,'id'))}'>{h(r['nombre_plantilla'])}</a></td>
           <td class='cell-visible'>{h(r['tipo_documento'])}</td><td class='cell-visible'>{h(r['esquema'])}</td><td class='cell-visible'>{h(r['descripcion'])}</td><td class='cell-visible'>{h(r['version'])}</td><td class='cell-visible'>{h(r['condicion'])}</td><td class='cell-visible'>{h(r['archivo_nombre'])}</td>
         </tr>""" for r in plantillas])
     if not observados:
@@ -9216,11 +9216,11 @@ def admin_contratacion():
         actual = obs_estado_label(r['estado'])
         opts = [('ACTIVO','Activo'),('LEVANTADO','Levantado'),('ANULADO','Anulado'),('AUTORIZADO','Autorizado con excepción')]
         html_opts = ''.join([f"<option value='{v}' {'selected' if actual==label else ''}>{label}</option>" for v,label in opts])
-        return f"<form method='post' class='state-form'><input type='hidden' name='accion' value='estado_observado'><input type='hidden' name='observado_id' value='{r['id']}'><select name='estado' class='state-select {obs_estado_css(r['estado'])}' onchange='this.form.submit()'>{html_opts}</select></form>"
+        return f"<form method='post' class='state-form'><input type='hidden' name='accion' value='estado_observado'><input type='hidden' name='observado_id' value='{row_get(r,'id')}'><select name='estado' class='state-select {obs_estado_css(r['estado'])}' onchange='this.form.submit()'>{html_opts}</select></form>"
 
     def acciones_nivel(r):
         nivel = clean(r['nivel_restriccion'] or 'NIVEL 3').upper()
-        oid = r['id']
+        oid = row_get(r,'id')
         if '1' in nivel:
             return f"<form method='post' class='inline-form'><input type='hidden' name='accion' value='continuar_advertencia_observado'><input type='hidden' name='observado_id' value='{oid}'><input type='hidden' name='comentario_accion' value='Continuar con advertencia preventiva'><button class='mini-btn warn' title='Registra advertencia sin bloquear'>Continuar con advertencia</button></form>"
         if '2' in nivel:
@@ -9228,13 +9228,13 @@ def admin_contratacion():
         return f"<form method='post' class='inline-form'><input type='hidden' name='accion' value='solicitar_autorizacion_observado'><input type='hidden' name='observado_id' value='{oid}'><input name='comentario_accion' class='mini-input' placeholder='Motivo autorización'><button class='mini-btn bad'>Bloqueado / solicitar autorización</button></form>"
 
     def obs_edit_btn(r):
-        return (f"<button type='button' class='mini-btn gray' onclick=\"editarObsModal('{r['id']}','{escjs(r['numero_documento'])}','{escjs(r['nombre'])}','{escjs(r['motivo'])}','{escjs(r['nivel_restriccion'])}','{escjs(r['comentario'])}','{escjs(_row_get_safe(r,'ultima_empresa',''))}','{escjs(_row_get_safe(r,'cargo',''))}','{escjs(_row_get_safe(r,'area',''))}','{escjs(_row_get_safe(r,'fecha_observacion',''))}','{escjs(obs_estado_label(r['estado']))}')\">Editar alerta</button>")
+        return (f"<button type='button' class='mini-btn gray' onclick=\"editarObsModal('{row_get(r,'id')}','{escjs(r['numero_documento'])}','{escjs(r['nombre'])}','{escjs(r['motivo'])}','{escjs(r['nivel_restriccion'])}','{escjs(r['comentario'])}','{escjs(_row_get_safe(r,'ultima_empresa',''))}','{escjs(_row_get_safe(r,'cargo',''))}','{escjs(_row_get_safe(r,'area',''))}','{escjs(_row_get_safe(r,'fecha_observacion',''))}','{escjs(obs_estado_label(r['estado']))}')\">Editar alerta</button>")
 
     def obs_hist_btn(r):
         return f"<button type='button' class='mini-btn gray' onclick='showObsTab(\"historial\",document.getElementById(\"tabBtnHistorial\"));filtrarHistorialObs(\"{r['numero_documento']}\")'>Ver historial</button>"
 
     def obs_anular_btn(r):
-        return f"<form method='post' class='inline-form' onsubmit=\"return confirm('¿Anular esta alerta? Quedará en historial, no se eliminará físicamente.');\"><input type='hidden' name='accion' value='anular_observado'><input type='hidden' name='observado_id' value='{r['id']}'><input type='hidden' name='comentario_accion' value='Anulado desde tabla principal'><button class='mini-btn bad' type='submit'>Anular</button></form>"
+        return f"<form method='post' class='inline-form' onsubmit=\"return confirm('¿Anular esta alerta? Quedará en historial, no se eliminará físicamente.');\"><input type='hidden' name='accion' value='anular_observado'><input type='hidden' name='observado_id' value='{row_get(r,'id')}'><input type='hidden' name='comentario_accion' value='Anulado desde tabla principal'><button class='mini-btn bad' type='submit'>Anular</button></form>"
 
     obs_rows=''.join([f"""
       <tr data-dni='{h(r['numero_documento'])}'>
@@ -9455,7 +9455,7 @@ html,body{overflow-x:hidden!important;}
         total_nisira = len(lotes_nisira)
         aptos = len([r for r in medicas if (r['estado'] or '').upper()=='APTO'])
         avance = min(100, round(((total_med+total_cap+total_ind) / max(total_ing*3,1))*100, 1)) if total_ing else 0
-        ult_rows=''.join([f"<tr><td>—</td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos[:10]]) or "<tr><td colspan='7'>Sin ingresos registrados.</td></tr>"
+        ult_rows=''.join([f"<tr><td>—</td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(row_get(r,'sede'))}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(row_get(r,'estado'))}</span></td></tr>" for r in ingresos[:10]]) or "<tr><td colspan='7'>Sin ingresos registrados.</td></tr>"
         content=wrap(f"""
         <section class='dashboard-contratacion'>
           <div class='dash-hero'>
@@ -9468,7 +9468,7 @@ html,body{overflow-x:hidden!important;}
         </section>
         """)
     elif sec=='requerimientos':
-        req_options=''.join([f"<option value='{h(r['ticket'])}'>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['actividad'])}</option>" for r in requerimientos])
+        req_options=''.join([f"<option value='{h(row_get(r,'ticket'))}'>{h(row_get(r,'ticket'))} - {h(r['empresa'])} / {h(row_get(r,'actividad'))}</option>" for r in requerimientos])
         req_reg_map = {}
         req_cant_map = {}
         try:
@@ -9487,13 +9487,13 @@ html,body{overflow-x:hidden!important;}
         except Exception:
             req_reg_map = {}
             req_cant_map = {}
-        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><span class='req-count-pill {'full' if int_safe(req_reg_map.get(clean(r['ticket']),0)) >= int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r))) and int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r)))>0 else ('warn' if int_safe(req_reg_map.get(clean(r['ticket']),0))>0 else '')}'>{int_safe(req_reg_map.get(clean(r['ticket']),0))} / {int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r)))}</span></td><td><a class='req-detail-btn' href='/admin/contratacion?sec=datos_completos&req={h(r['ticket'])}'>👁 Ver postulantes</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
+        req_rows=''.join([f"<tr><td><b>{h(row_get(r,'ticket'))}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(row_get(r,'actividad'))}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(row_get(r,'estado'))}</span></td><td><span class='req-count-pill {'full' if int_safe(req_reg_map.get(clean(row_get(r,'ticket')),0)) >= int_safe(req_cant_map.get(clean(row_get(r,'ticket')), cantidad_solicitada_requerimiento(r))) and int_safe(req_cant_map.get(clean(row_get(r,'ticket')), cantidad_solicitada_requerimiento(r)))>0 else ('warn' if int_safe(req_reg_map.get(clean(row_get(r,'ticket')),0))>0 else '')}'>{int_safe(req_reg_map.get(clean(row_get(r,'ticket')),0))} / {int_safe(req_cant_map.get(clean(row_get(r,'ticket')), cantidad_solicitada_requerimiento(r)))}</span></td><td><a class='req-detail-btn' href='/admin/contratacion?sec=datos_completos&req={h(row_get(r,'ticket'))}'>👁 Ver postulantes</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar ticket?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{row_get(r,'id')}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
         trabajadores_scan_js = json.dumps({normalizar_dni(r['dni']): {'nombre': (r['nombre'] or ''), 'empresa': (r['empresa'] or ''), 'cargo': (r['cargo'] or ''), 'area': (r['area'] or ''), 'correo': (r['correo'] or '')} for r in trabajadores}, ensure_ascii=False)
         relaciones_req_js = json.dumps([{
             'empresa': row_get(r,'empresa'), 'area': row_get(r,'area'), 'cargo': row_get(r,'cargo'), 'actividad': row_get(r,'actividad'),
             'regimen_laboral': row_get(r,'regimen_laboral'), 'tipo_contrato': row_get(r,'tipo_contrato'), 'modalidad': row_get(r,'modalidad')
         } for r in relaciones_laborales if int_safe(row_get(r,'activo'),1)==1], ensure_ascii=False)
-        req_info_js = json.dumps({clean(r['ticket']): {
+        req_info_js = json.dumps({clean(row_get(r,'ticket')): {
             'empresa': row_get(r,'empresa'), 'area': row_get(r,'area'), 'cargo': row_get(r,'cargo'), 'actividad': row_get(r,'actividad'),
             'regimen_laboral': row_get(r,'regimen_laboral'), 'tipo_contrato': row_get(r,'tipo_contrato'),
             'fecha_inicio_contrato': row_get(r,'fecha_inicio_contrato') or row_get(r,'fecha_ingreso'), 'fecha_fin_contrato': row_get(r,'fecha_fin_contrato')
@@ -9609,7 +9609,7 @@ html,body{overflow-x:hidden!important;}
         </script>
         ''')
     elif sec=='nuevos':
-        ingreso_rows=''.join([f"<tr><td><form method='post' class='inline-del' onsubmit=\"return confirm('Se anulará el postulante y se liberará el cupo. ¿Continuar?')\"><input type='hidden' name='accion' value='eliminar_ingreso'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='motivo_anulacion' value='Anulado desde módulo Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td>{h(r['area'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos_mostrar]) or "<tr><td colspan='13'>Sin registros de ingresos.</td></tr>"
+        ingreso_rows=''.join([f"<tr><td><form method='post' class='inline-del' onsubmit=\"return confirm('Se anulará el postulante y se liberará el cupo. ¿Continuar?')\"><input type='hidden' name='accion' value='eliminar_ingreso'><input type='hidden' name='ingreso_id' value='{row_get(r,'id')}'><input type='hidden' name='motivo_anulacion' value='Anulado desde módulo Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['empresa'])}</td><td>{h(row_get(r,'sede'))}</td><td>{h(r['cargo'])}</td><td>{h(r['area'])}</td><td>{h(r['requerimiento'])}</td><td>{h(row_get(r,'actividad'))}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(row_get(r,'estado'))}</span></td></tr>" for r in ingresos_mostrar]) or "<tr><td colspan='13'>Sin registros de ingresos.</td></tr>"
         # POSTULANTES POR REQUERIMIENTO - MOCKUP FINAL LIMPIO
         def _rv(r,k,default=''):
             try: return r[k] if k in r.keys() else default
@@ -9931,7 +9931,7 @@ html,body{overflow-x:hidden!important;}
         else:
             med_table_html = "<tr><td colspan='12'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
 
-        med_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'requerimiento'))}</td><td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td><td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'fecha_resultado'))}</td><td>{h(row_get(r,'fecha_vencimiento'))}</td><td>{h(row_get(r,'clinica'))}</td><td>{h(row_get(r,'restricciones'))}</td><td>{h(row_get(r,'observacion'))}</td></tr>" for r in medicas]) or "<tr><td colspan='12'>Sin evaluaciones médicas.</td></tr>"
+        med_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{row_get(r,'id')}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'requerimiento'))}</td><td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td><td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'fecha_resultado'))}</td><td>{h(row_get(r,'fecha_vencimiento'))}</td><td>{h(row_get(r,'clinica'))}</td><td>{h(row_get(r,'restricciones'))}</td><td>{h(row_get(r,'observacion'))}</td></tr>" for r in medicas]) or "<tr><td colspan='12'>Sin evaluaciones médicas.</td></tr>"
 
         content=wrap(f"""
         <style>
@@ -10171,14 +10171,14 @@ html,body{overflow-x:hidden!important;}
         desc_mod = 'Carga temas de inducción por etapa y asigna videos obligatorios al trabajador.' if es_ind else 'Administra cursos, videos, evaluaciones, exámenes y estados por trabajador.'
         opciones_curso = "<option>Bienvenida corporativa</option><option>SST inducción</option><option>Reglamento interno</option><option>Uso de EPP</option><option>Buenas prácticas agrícolas</option><option>Código de conducta</option>" if es_ind else "<option>Curso SST</option><option>Buenas prácticas agrícolas</option><option>Manipulación de alimentos</option><option>Bioseguridad</option><option>Calidad</option><option>Uso de herramientas</option><option>Curso personalizado</option>"
         req_induc_sel = clean(request.args.get('req'))
-        req_induc_options = ''.join([f"<option value='{h(r['ticket'])}' {'selected' if req_induc_sel==clean(r['ticket']) else ''}>{h(r['ticket'])} · {h(row_get(r,'empresa'))} · {h(row_get(r,'area'))} · {h(row_get(r,'cargo'))}</option>" for r in requerimientos])
+        req_induc_options = ''.join([f"<option value='{h(row_get(r,'ticket'))}' {'selected' if req_induc_sel==clean(row_get(r,'ticket')) else ''}>{h(row_get(r,'ticket'))} · {h(row_get(r,'empresa'))} · {h(row_get(r,'area'))} · {h(row_get(r,'cargo'))}</option>" for r in requerimientos])
         trabajadores_induccion_base = [r for r in trabajadores_proceso if (not req_induc_sel or clean(row_get(r,'requerimiento')) == req_induc_sel)]
         req_induc_panel = (f"<div class='req-selected-ok induction-req-ok'><i class='bi bi-check2-circle'></i><div><b>Requerimiento seleccionado</b><span>{h(req_induc_sel)} · {len(trabajadores_induccion_base)} postulante(s) para inducción</span></div></div>" if req_induc_sel else "<div class='req-selected-warn induction-req-warn'><i class='bi bi-exclamation-triangle'></i><div><b>Primero seleccione requerimiento</b><span>Luego asigne videos, registre avance y cierre la inducción.</span></div></div>")
-        cap_rows=''.join([f"<tr><td><input type='checkbox' name='cap_ids' value='{r['id']}'></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['curso'])}</td><td>{h(r['archivo_video_nombre'] or r['video_url'])}</td><td>{h(r['nota'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar capacitación?&quot;)'><input type='hidden' name='accion' value='eliminar_capacitacion'><input type='hidden' name='capacitacion_id' value='{r['id']}'><button class='delete-mini'>Eliminar</button></form></td><td>{h(r['observacion'])}</td></tr>" for r in capacitaciones])
-        video_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['curso'])}</b></td><td>{h(r['tipo_video'])}</td><td>{h(r['archivo_video_nombre'] or r['video_url'])}</td><td>{h(r['duracion_min'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in capacitaciones if (r['archivo_video_nombre'] or r['video_url'])]) or "<tr><td colspan='6'>Sin videos registrados todavía.</td></tr>"
+        cap_rows=''.join([f"<tr><td><input type='checkbox' name='cap_ids' value='{row_get(r,'id')}'></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'curso'))}</td><td>{h(row_get(r,'archivo_video_nombre') or row_get(r,'video_url'))}</td><td>{h(row_get(r,'nota'))}</td><td><span class='status-pill ok'>{h(row_get(r,'estado'))}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar capacitación?&quot;)'><input type='hidden' name='accion' value='eliminar_capacitacion'><input type='hidden' name='capacitacion_id' value='{row_get(r,'id')}'><button class='delete-mini'>Eliminar</button></form></td><td>{h(row_get(r,'observacion'))}</td></tr>" for r in capacitaciones])
+        video_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'curso'))}</b></td><td>{h(row_get(r,'tipo_video'))}</td><td>{h(row_get(r,'archivo_video_nombre') or row_get(r,'video_url'))}</td><td>{h(row_get(r,'duracion_min'))}</td><td><span class='status-pill ok'>{h(row_get(r,'estado'))}</span></td></tr>" for r in capacitaciones if (r['archivo_video_nombre'] or r['video_url'])]) or "<tr><td colspan='6'>Sin videos registrados todavía.</td></tr>"
         if not cap_rows:
-            cap_rows=''.join([f"<tr><td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{'Inducción general' if es_ind else 'Pendiente de curso'}</td><td></td><td></td><td><span class='status-pill ok'>{h(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</span></td><td class='col-delete'>—</td><td>Trabajador registrado en Postulantes pendiente de avance.</td></tr>" for r in trabajadores_induccion_base]) or "<tr><td colspan='10'>Seleccione un requerimiento con postulantes registrados.</td></tr>"
-        induccion_asig_rows = ''.join([f"<tr><td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador']) or 'NUEVO - PENDIENTE COMPLETAR'}</td><td>{h(r['requerimiento'])}</td><td>{h(r['sede'])}</td><td>{h(r['actividad'])}</td><td><span class='status-pill ok'>{h(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</span></td></tr>" for r in trabajadores_induccion_base]) or "<tr><td colspan='7'>Seleccione un requerimiento con postulantes registrados desde Postulantes.</td></tr>"
+            cap_rows=''.join([f"<tr><td><input type='checkbox' name='ingreso_ids' value='{row_get(r,'id')}'></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{'Inducción general' if es_ind else 'Pendiente de curso'}</td><td></td><td></td><td><span class='status-pill ok'>{h(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</span></td><td class='col-delete'>—</td><td>Trabajador registrado en Postulantes pendiente de avance.</td></tr>" for r in trabajadores_induccion_base]) or "<tr><td colspan='10'>Seleccione un requerimiento con postulantes registrados.</td></tr>"
+        induccion_asig_rows = ''.join([f"<tr><td><input type='checkbox' name='ingreso_ids' value='{row_get(r,'id')}'></td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador')) or 'NUEVO - PENDIENTE COMPLETAR'}</td><td>{h(r['requerimiento'])}</td><td>{h(row_get(r,'sede'))}</td><td>{h(row_get(r,'actividad'))}</td><td><span class='status-pill ok'>{h(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</span></td></tr>" for r in trabajadores_induccion_base]) or "<tr><td colspan='7'>Seleccione un requerimiento con postulantes registrados desde Postulantes.</td></tr>"
         asignacion_html = (f"""<h3 class='pro-section-title'>2) Asignación masiva a trabajadores</h3><div class='full table-wrap induccion-masiva-box'><table class='c-table clean-table' id='tabla_induccion_masiva'><tr><th><input type='checkbox' onclick=\"document.querySelectorAll('#tabla_induccion_masiva input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)\"></th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Sede</th><th>Actividad</th><th>Estado inducción</th></tr>{induccion_asig_rows}</table></div><input type='hidden' name='volver' value='induccion'><input type='hidden' name='campo_estado' value='estado_capacitacion'><b>Estado masivo</b><select name='nuevo_estado'><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>PENDIENTE</option></select><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observación del administrador.'></textarea><div class='actions'><button type='submit' class='c-btn' onclick=\"this.form.accion.value='avance_masivo_ingresos'\">✅ Aplicar inducción masiva</button></div>""" if es_ind else f"""<h3 class='pro-section-title'>2) Asignación masiva a trabajadores</h3><b>DNI</b><input name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI y seleccione trabajador'><datalist id='lista_ingresos'>{opt_ingresos}</datalist><b>Estado</b><select name='estado' required><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>EVALUADO POR TRABAJADOR</option><option>APROBADO</option><option>DESAPROBADO</option></select><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observación del administrador.'></textarea><div class='actions'><button class='c-btn'>💾 Guardar curso/asignación</button></div>""")
         ind_total = len(trabajadores_induccion_base)
         ind_asignados = sum(1 for r in trabajadores_induccion_base if clean(row_get(r,'estado_capacitacion')).upper() in ('VIDEO ASIGNADO','VIDEO VISTO','APROBADO','INDUCIDO','OK','COMPLETO','COMPLETADO'))
@@ -10194,7 +10194,7 @@ html,body{overflow-x:hidden!important;}
         .datos-kpi.ind-kpis .pz-kpi span{{display:block!important;color:#0f513f!important;font-size:11px!important;font-weight:950!important;text-transform:uppercase!important;letter-spacing:.05em!important}}.datos-kpi.ind-kpis .pz-kpi b{{display:block!important;color:#071b34!important;font-size:30px!important;line-height:1.05!important;font-weight:1000!important}}
         .req-first-card{{display:flex;gap:16px;align-items:end;justify-content:space-between;margin-bottom:14px;padding:18px!important;background:linear-gradient(135deg,#ecfdf5,#fff)!important;border:1px solid #bbf7d0!important}}.req-first-card>div{{flex:1}}.req-first-card label{{display:block;font-weight:1000;color:#0f172a;margin-bottom:8px}}.req-first-card select{{width:100%;border-radius:16px;padding:14px 16px;border:1px solid #dbe5ee;font-weight:900}}.req-selected-ok,.req-selected-warn{{display:flex;gap:12px;align-items:center;border-radius:18px;padding:15px 18px;margin-bottom:16px;font-weight:900}}.req-selected-ok{{background:#dcfce7;color:#065f46;border:1px solid #86efac}}.req-selected-warn{{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}}.req-selected-ok i,.req-selected-warn i{{font-size:24px}}.req-selected-ok span,.req-selected-warn span{{display:block;font-weight:700;color:#334155}}
         .induction-hero h1{{font-size:36px!important}}.learning-grid.solo-induccion{{display:grid!important;grid-template-columns:1fr!important;gap:18px!important}}.video-base-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}.video-base-grid div{{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:16px;padding:14px}}.video-base-grid small{{display:block;color:#0f513f;font-weight:950;text-transform:uppercase;font-size:11px}}.video-base-grid b{{font-size:26px;color:#071b34}}.records-toolbar,.mass-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}}.records-toolbar input{{flex:1;min-width:260px}}
-        @media(max-width:1000px){{.datos-kpi.ind-kpis{{grid-template-columns:1fr 1fr!important}}.req-first-card{{flex-direction:column;align-items:stretch}}.video-base-grid{{grid-template-columns:1fr 1fr}}
+        @media(max-width:1000px){{.datos-kpi.ind-kpis{{grid-template-columns:1fr 1fr!important}}.req-first-card{{flex-direction:column;align-items:stretch}}.video-base-grid{{grid-template-columns:1fr 1fr}}}}
         </style>
         <h2 class='c-title'>{titulo_mod}</h2><div class='dash-hero induction-hero' style='margin-bottom:18px'><div><h1>🎓 {titulo_mod}</h1><p class='muted2'>{desc_mod} La evaluación/respuesta queda preparada para el usuario trabajador desde celular.</p></div><a class='c-btn' href='/admin/contratacion?sec=datos_completos'>Ver seguimiento</a></div>
         <form method='get' class='c-card req-first-card'><input type='hidden' name='sec' value='induccion'><div><label><i class='bi bi-ticket-perforated'></i> 1) Requerimiento / ticket</label><select name='req' onchange='this.form.submit()'><option value=''>Seleccione requerimiento primero...</option>{req_induc_options}</select></div><a class='c-btn gray' href='/admin/contratacion?sec=requerimientos'>Ver requerimientos</a></form>
@@ -10209,7 +10209,7 @@ html,body{overflow-x:hidden!important;}
         ''')
     elif sec=='indumentaria':
         req_ind_sel = clean(request.args.get('req'))
-        req_options = ''.join([f"<option value='{h(r['ticket'])}' {'selected' if req_ind_sel==clean(r['ticket']) else ''}>{h(r['ticket'])} · {h(row_get(r,'empresa'))} · {h(row_get(r,'area'))} · {h(row_get(r,'cargo'))}</option>" for r in requerimientos])
+        req_options = ''.join([f"<option value='{h(row_get(r,'ticket'))}' {'selected' if req_ind_sel==clean(row_get(r,'ticket')) else ''}>{h(row_get(r,'ticket'))} · {h(row_get(r,'empresa'))} · {h(row_get(r,'area'))} · {h(row_get(r,'cargo'))}</option>" for r in requerimientos])
         ind_base = [r for r in trabajadores_proceso if (not req_ind_sel or clean(row_get(r,'requerimiento')) == req_ind_sel)]
         ind_total = len(ind_base)
         ind_entregados = sum(1 for r in ind_base if clean(row_get(r,'estado_indumentaria')).upper() in ('ENTREGADO','OK','COMPLETO','COMPLETADO'))
@@ -10217,7 +10217,7 @@ html,body{overflow-x:hidden!important;}
         ind_pendientes = max(ind_total - ind_entregados - ind_parciales, 0)
         ind_fotos = sum(1 for r in ind_base if clean(row_get(r,'fotocheck_estado')).upper() in ('IMPRESO','ENTREGADO','GENERADO','EMITIDO','OK'))
         ind_avance = int((ind_entregados / ind_total) * 100) if ind_total else 0
-        opt_ingresos_ind = ''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} · {h(row_get(r,'trabajador'))} · {h(row_get(r,'requerimiento'))}</option>" for r in ind_base]) or opt_ingresos
+        opt_ingresos_ind = ''.join([f"<option value='{h(row_get(r,'dni'))}'>{h(row_get(r,'dni'))} · {h(row_get(r,'trabajador'))} · {h(row_get(r,'requerimiento'))}</option>" for r in ind_base]) or opt_ingresos
         def _ind_pill(v):
             vv=clean(v).upper() or 'PENDIENTE'
             css='ok' if vv in ('ENTREGADO','OK','COMPLETO','COMPLETADO') else ('warn' if vv in ('PENDIENTE','PARCIAL','EN PROCESO') else 'danger')
@@ -10227,12 +10227,12 @@ html,body{overflow-x:hidden!important;}
             req_panel = f"<div class='req-selected-ok'><i class='bi bi-check2-circle'></i><div><b>Requerimiento seleccionado</b><span>{h(req_ind_sel)} · {ind_total} postulante(s) vinculados</span></div></div>"
         else:
             req_panel = "<div class='req-selected-warn'><i class='bi bi-exclamation-triangle'></i><div><b>Primero seleccione requerimiento</b><span>Luego elija DNI para registrar prendas y cargo de entrega.</span></div></div>"
-        ind_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(row_get(r,'requerimiento'))}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(r['polo'])}</td><td>{h(r['pantalon'])}</td><td>{h(r['botas'])}</td><td>{h(r['fotocheck'])}</td><td>{_ind_pill(r['estado'])}</td><td>{h(row_get(r,'responsable_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td></tr>" for r in indumentarias if (not req_ind_sel or clean(row_get(r,'requerimiento')) == req_ind_sel)]) or "<tr><td colspan='14'>Sin entregas registradas para este requerimiento.</td></tr>"
+        ind_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'requerimiento'))}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'polo'))}</td><td>{h(row_get(r,'pantalon'))}</td><td>{h(row_get(r,'botas'))}</td><td>{h(row_get(r,'fotocheck'))}</td><td>{_ind_pill(row_get(r,'estado'))}</td><td>{h(row_get(r,'responsable_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{row_get(r,'id')}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td></tr>" for r in indumentarias if (not req_ind_sel or clean(row_get(r,'requerimiento')) == req_ind_sel)]) or "<tr><td colspan='14'>Sin entregas registradas para este requerimiento.</td></tr>"
         postulantes_ind_rows = ''.join([f"<tr onclick=\"seleccionarIndFila('{h(row_get(r,'dni'))}')\"><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador')) or 'PENDIENTE COMPLETAR'}</td><td>{h(row_get(r,'cargo'))}</td><td>{_ind_pill(row_get(r,'estado_indumentaria'))}</td><td>{_ind_pill(row_get(r,'fotocheck_estado'))}</td></tr>" for r in ind_base]) or "<tr><td colspan='5'>Seleccione un requerimiento con postulantes registrados.</td></tr>"
         indumentaria_css = '''<style>
 .datos-kpi.ind-kpis{display:grid!important;grid-template-columns:repeat(6,minmax(145px,1fr))!important;gap:14px!important;margin:14px 0 18px!important}.datos-kpi.ind-kpis .pz-kpi{display:flex!important;align-items:center!important;gap:12px!important;background:linear-gradient(135deg,#ffffff,#f7fffb)!important;border:1px solid #dce8e5!important;border-radius:20px!important;padding:16px!important;min-height:98px!important;box-shadow:0 14px 32px rgba(15,23,42,.08)!important;border-bottom:4px solid #10b981!important}.datos-kpi.ind-kpis .pz-kpi i{width:48px!important;height:48px!important;min-width:48px!important;border-radius:16px!important;background:#008a47!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:center!important;font-style:normal!important;font-size:23px!important;box-shadow:0 12px 22px rgba(0,138,71,.18)!important}.datos-kpi.ind-kpis .pz-kpi.warn{border-bottom-color:#f59e0b!important}.datos-kpi.ind-kpis .pz-kpi.warn i{background:#f59e0b!important}.datos-kpi.ind-kpis .pz-kpi.danger{border-bottom-color:#ef4444!important}.datos-kpi.ind-kpis .pz-kpi.danger i{background:#ef4444!important}.datos-kpi.ind-kpis .pz-kpi span{display:block!important;color:#0f513f!important;font-size:11px!important;font-weight:950!important;text-transform:uppercase!important;letter-spacing:.05em!important}.datos-kpi.ind-kpis .pz-kpi b{display:block!important;color:#071b34!important;font-size:30px!important;line-height:1.05!important;font-weight:1000!important}
 .ind-progress{background:#e5edf3;border-radius:999px;height:18px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(15,23,42,.08);margin:0 0 18px}.ind-progress span{display:block;height:100%;background:linear-gradient(90deg,#10b981,#047857);border-radius:999px;color:#fff;font-size:11px;font-weight:1000;text-align:center;line-height:18px}
-.req-first-card{display:flex;gap:16px;align-items:end;justify-content:space-between;margin-bottom:14px;padding:18px!important;background:linear-gradient(135deg,#ecfdf5,#fff)!important;border:1px solid #bbf7d0!important}.req-first-card>div{flex:1}.req-first-card label{display:block;font-weight:1000;color:#0f172a;margin-bottom:8px}.req-first-card select{width:100%;border-radius:16px;padding:14px 16px;border:1px solid #dbe5ee;font-weight:900}.req-selected-ok,.req-selected-warn{display:flex;gap:12px;align-items:center;border-radius:18px;padding:15px 18px;margin-bottom:16px;font-weight:900}.req-selected-ok{background:#dcfce7;color:#065f46;border:1px solid #86efac}.req-selected-warn{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}.req-selected-ok i,.req-selected-warn i{font-size:24px}.req-selected-ok span,.req-selected-warn span{display:block;font-weight:700;color:#334155}.ind-layout{display:grid;grid-template-columns:minmax(320px,.9fr) minmax(560px,1.5fr);gap:18px;align-items:start}.ind-left{max-height:760px;overflow:auto}.ind-left table tr{cursor:pointer}.ind-left table tr:hover td{background:#ecfdf5!important}.filter-input{width:100%;padding:12px 14px;border:1px solid #dbe5ee;border-radius:14px;margin-bottom:10px}.indumentaria-pro{padding:20px!important}.indumentaria-pro .span-12,.ind-alert.span-12{grid-column:1/-1}.ind-alert{display:flex;gap:18px;align-items:center;justify-content:space-between;border:1px solid rgba(16,185,129,.25);background:linear-gradient(135deg,rgba(16,185,129,.14),rgba(15,23,42,.03));border-radius:18px;padding:16px;margin-bottom:8px}.ind-alert small{display:block;color:#64748b;font-weight:900;letter-spacing:.08em}.ind-alert select{font-size:16px;font-weight:900;border-radius:12px;padding:10px 12px}#ind_estado_msg{font-weight:800;color:#0f172a}.ind-kpis{margin-bottom:18px!important}@media(max-width:1100px){.ind-layout{grid-template-columns:1fr}.req-first-card{flex-direction:column;align-items:stretch}
+.req-first-card{display:flex;gap:16px;align-items:end;justify-content:space-between;margin-bottom:14px;padding:18px!important;background:linear-gradient(135deg,#ecfdf5,#fff)!important;border:1px solid #bbf7d0!important}.req-first-card>div{flex:1}.req-first-card label{display:block;font-weight:1000;color:#0f172a;margin-bottom:8px}.req-first-card select{width:100%;border-radius:16px;padding:14px 16px;border:1px solid #dbe5ee;font-weight:900}.req-selected-ok,.req-selected-warn{display:flex;gap:12px;align-items:center;border-radius:18px;padding:15px 18px;margin-bottom:16px;font-weight:900}.req-selected-ok{background:#dcfce7;color:#065f46;border:1px solid #86efac}.req-selected-warn{background:#fff7ed;color:#9a3412;border:1px solid #fed7aa}.req-selected-ok i,.req-selected-warn i{font-size:24px}.req-selected-ok span,.req-selected-warn span{display:block;font-weight:700;color:#334155}.ind-layout{display:grid;grid-template-columns:minmax(320px,.9fr) minmax(560px,1.5fr);gap:18px;align-items:start}.ind-left{max-height:760px;overflow:auto}.ind-left table tr{cursor:pointer}.ind-left table tr:hover td{background:#ecfdf5!important}.filter-input{width:100%;padding:12px 14px;border:1px solid #dbe5ee;border-radius:14px;margin-bottom:10px}.indumentaria-pro{padding:20px!important}.indumentaria-pro .span-12,.ind-alert.span-12{grid-column:1/-1}.ind-alert{display:flex;gap:18px;align-items:center;justify-content:space-between;border:1px solid rgba(16,185,129,.25);background:linear-gradient(135deg,rgba(16,185,129,.14),rgba(15,23,42,.03));border-radius:18px;padding:16px;margin-bottom:8px}.ind-alert small{display:block;color:#64748b;font-weight:900;letter-spacing:.08em}.ind-alert select{font-size:16px;font-weight:900;border-radius:12px;padding:10px 12px}#ind_estado_msg{font-weight:800;color:#0f172a}.ind-kpis{margin-bottom:18px!important}@media(max-width:1100px){.ind-layout{grid-template-columns:1fr}.req-first-card{flex-direction:column;align-items:stretch}}
 </style>'''
         content=wrap(f"""
         <h2 class='c-title'>Entrega de indumentaria</h2>
@@ -10346,20 +10346,20 @@ html,body{overflow-x:hidden!important;}
             rows = []
             for r in lista:
                 foto = (r['foto_ruta'] if 'foto_ruta' in r.keys() else '')
-                foto_html = f"<img class='foto-mini' src='/foto/{h(r['dni'])}'>" if foto else "<span class='photo-dot photo-no'>SIN FOTO</span>"
+                foto_html = f"<img class='foto-mini' src='/foto/{h(row_get(r,'dni'))}'>" if foto else "<span class='photo-dot photo-no'>SIN FOTO</span>"
                 rows.append(f"""<tr>
-                  <td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td>
+                  <td><input type='checkbox' name='ingreso_ids' value='{row_get(r,'id')}'></td>
                   <td>{foto_html}</td>
-                  <td class='sticky-col'><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'><b>{h(r['dni'])}</b></a></td>
-                  <td class='sticky-col-2'><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>{h(r['trabajador']) or 'PENDIENTE COMPLETAR'}</a></td>
-                  <td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['cargo'])}</td><td>{h(r['empresa'])}</td>
+                  <td class='sticky-col'><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={row_get(r,'id')}'><b>{h(row_get(r,'dni'))}</b></a></td>
+                  <td class='sticky-col-2'><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={row_get(r,'id')}'>{h(row_get(r,'trabajador')) or 'PENDIENTE COMPLETAR'}</a></td>
+                  <td>{h(r['requerimiento'])}</td><td>{h(row_get(r,'actividad'))}</td><td>{h(r['cargo'])}</td><td>{h(r['empresa'])}</td>
                   <td>{_pill_state(r['estado_medico'] if 'estado_medico' in r.keys() else 'PENDIENTE')}</td>
                   <td>{_pill_state(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</td>
                   <td>{_pill_state(r['estado_indumentaria'] if 'estado_indumentaria' in r.keys() else 'PENDIENTE')}</td>
                   <td>{_pill_state(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</td>
                   <td>{_pill_state(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE')}</td>
-                  <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver detalle</a></td>
-                  <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='anular_ingreso_admin'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='hidden' name='motivo_anulacion' value='Anulado desde Datos Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td>
+                  <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={row_get(r,'id')}'>Ver detalle</a></td>
+                  <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='anular_ingreso_admin'><input type='hidden' name='ingreso_id' value='{row_get(r,'id')}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='hidden' name='motivo_anulacion' value='Anulado desde Datos Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td>
                 </tr>""")
             tabla_rows = ''.join(rows) or "<tr><td colspan='15' style='padding:28px;text-align:center;color:#64748b;font-weight:900'>Seleccione un requerimiento para visualizar los postulantes vinculados al ticket.</td></tr>"
             content=wrap(f"""
@@ -10440,12 +10440,12 @@ html,body{overflow-x:hidden!important;}
             for r in lista_foto:
                 foto = r['foto_ruta'] if 'foto_ruta' in r.keys() else ''
                 estado_fc = r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE'
-                foto_html = f"<img class='foto-mini' src='/foto/{h(r['dni'])}'>" if foto else "<span class='photo-dot photo-no'>SIN FOTO</span>"
+                foto_html = f"<img class='foto-mini' src='/foto/{h(row_get(r,'dni'))}'>" if foto else "<span class='photo-dot photo-no'>SIN FOTO</span>"
                 foto_rows.append(f"""<tr>
-                    <td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td>
+                    <td><input type='checkbox' name='ingreso_ids' value='{row_get(r,'id')}'></td>
                     <td>{foto_html}</td>
-                    <td><b>{h(r['dni'])}</b></td>
-                    <td><b>{h(r['trabajador']) or 'PENDIENTE COMPLETAR'}</b></td>
+                    <td><b>{h(row_get(r,'dni'))}</b></td>
+                    <td><b>{h(row_get(r,'trabajador')) or 'PENDIENTE COMPLETAR'}</b></td>
                     <td>{h(r['empresa'])}</td>
                     <td>{h(r['area'])}</td>
                     <td>{h(r['cargo'])}</td>
@@ -10453,7 +10453,7 @@ html,body{overflow-x:hidden!important;}
                     <td>{h(r['fecha_ingreso'])}</td>
                     <td>{'<span class="photo-dot photo-ok">FOTO APROBADA</span>' if foto else '<span class="photo-dot photo-no">SIN FOTO</span>'}</td>
                     <td>{_ft_estado(estado_fc, foto)}</td>
-                    <td><div style='display:flex;gap:6px;flex-wrap:wrap'><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver ficha</a><a class='c-btn mini-btn' target='_blank' href='/admin/contratacion/fotocheck/{r['id']}/preview'>Vista previa</a></div></td>
+                    <td><div style='display:flex;gap:6px;flex-wrap:wrap'><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={row_get(r,'id')}'>Ver ficha</a><a class='c-btn mini-btn' target='_blank' href='/admin/contratacion/fotocheck/{row_get(r,'id')}/preview'>Vista previa</a></div></td>
                 </tr>""")
             foto_rows_html=''.join(foto_rows) or "<tr><td colspan='12'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
             with db() as con_cfg_ui:
@@ -10864,7 +10864,7 @@ html,body{overflow-x:hidden!important;}
         rel_rows=''
         for r in relaciones_laborales:
             estado = 'ACTIVO' if int(r['activo'] or 0)==1 else 'INACTIVO'
-            rel_rows += f"""<tr><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td><b>{h(r['cargo'])}</b></td><td>{h(r['actividad'])}</td><td>{h(r['regimen_laboral'])}</td><td>{h(r['tipo_contrato'])}</td><td>{h(r['modalidad'])}</td><td>{h(r['centro_costo'])}</td><td><span class='status-pill {'ok' if estado=='ACTIVO' else ''}'>{estado}</span></td><td><form method='post' style='display:inline'><input type='hidden' name='accion' value='estado_relacion_laboral'><input type='hidden' name='relacion_id' value='{r['id']}'><button class='icon-btn' type='submit'>Activar/Inactivar</button></form> <form method='post' style='display:inline' onsubmit="return confirm('¿Eliminar relación laboral?')"><input type='hidden' name='accion' value='eliminar_relacion_laboral'><input type='hidden' name='relacion_id' value='{r['id']}'><button class='delete-mini' type='submit'>Eliminar</button></form></td></tr>"""
+            rel_rows += f"""<tr><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td><b>{h(r['cargo'])}</b></td><td>{h(row_get(r,'actividad'))}</td><td>{h(r['regimen_laboral'])}</td><td>{h(r['tipo_contrato'])}</td><td>{h(r['modalidad'])}</td><td>{h(r['centro_costo'])}</td><td><span class='status-pill {'ok' if estado=='ACTIVO' else ''}'>{estado}</span></td><td><form method='post' style='display:inline'><input type='hidden' name='accion' value='estado_relacion_laboral'><input type='hidden' name='relacion_id' value='{row_get(r,'id')}'><button class='icon-btn' type='submit'>Activar/Inactivar</button></form> <form method='post' style='display:inline' onsubmit="return confirm('¿Eliminar relación laboral?')"><input type='hidden' name='accion' value='eliminar_relacion_laboral'><input type='hidden' name='relacion_id' value='{row_get(r,'id')}'><button class='delete-mini' type='submit'>Eliminar</button></form></td></tr>"""
         opt_emp=''.join([f"<option value='{h(x)}'></option>" for x in _empresas])
         opt_area=''.join([f"<option value='{h(x)}'></option>" for x in _areas])
         opt_cargo=''.join([f"<option value='{h(x)}'></option>" for x in _cargos[:700]])
@@ -11087,16 +11087,16 @@ html,body{overflow-x:hidden!important;}
             estado_cls = 'ok' if 'FIRM' in estado_firma.upper() or 'APROB' in estado_firma.upper() else ('warn' if 'CAPTURA' in estado_firma.upper() or 'PEND' in estado_firma.upper() else 'pend')
             rows_firma_ren += f"""
             <tr>
-              <td>{h(r['dni'])}</td>
-              <td><b>{h(r['trabajador'])}</b><br><small>{h(r['tipo_doc'] or 'Renovación / Adenda')}</small></td>
+              <td>{h(row_get(r,'dni'))}</td>
+              <td><b>{h(row_get(r,'trabajador'))}</b><br><small>{h(r['tipo_doc'] or 'Renovación / Adenda')}</small></td>
               <td><span class='ren-status {estado_cls}'>{h(estado_firma)}</span></td>
               <td>{h(r['fecha_envio'] or '')}</td>
               <td>{h(r['fecha_firma'] or '')}</td>
               <td>
                 <div class='ren-row-actions'>
                   {('<a class="mini-action" target="_blank" title="Abrir enlace de firma" href="'+h(link)+'">🔗</a>') if link else '<span class="mini-action disabled">🔗</span>'}
-                  <a class='mini-action' title='Ver ficha única' href='/admin/contratacion?sec=ficha&dni={h(r['dni'])}'>🔍</a>
-                  <a class='mini-action' title='Ver documento' href='/admin/contratacion?sec=docs_renovacion&dni={h(r['dni'])}'>📄</a>
+                  <a class='mini-action' title='Ver ficha única' href='/admin/contratacion?sec=ficha&dni={h(row_get(r,'dni'))}'>🔍</a>
+                  <a class='mini-action' title='Ver documento' href='/admin/contratacion?sec=docs_renovacion&dni={h(row_get(r,'dni'))}'>📄</a>
                 </div>
               </td>
             </tr>"""
@@ -11322,7 +11322,7 @@ html,body{overflow-x:hidden!important;}
             vac_periodos = con.execute("""SELECT periodo_inicio,periodo_fin,fecha_ingreso,saldo,dias_ganados FROM vacaciones_saldos
                                        WHERE dni=? ORDER BY periodo_inicio DESC, periodo_fin DESC""", (dni_sel,)).fetchall() if dni_sel else []
 
-        opt_trab_buscar=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['nombre'])}</option>" for r in trabajadores])
+        opt_trab_buscar=''.join([f"<option value='{h(row_get(r,'dni'))}'>{h(row_get(r,'dni'))} - {h(r['nombre'])}</option>" for r in trabajadores])
         nombre = h(rv(trabajador_sel,'nombre','SIN TRABAJADOR'))
         correo = h(rv(trabajador_sel,'correo',''))
         celular = h(rv(trabajador_sel,'telefono', rv(trabajador_sel,'celular','')))
@@ -11430,7 +11430,7 @@ html,body{overflow-x:hidden!important;}
         f_esquema_v = html.escape(clean(request.args.get('f_esquema')))
         f_cond_v = html.escape(clean(request.args.get('f_condicion')))
         f_proceso_v = html.escape(clean(request.args.get('f_proceso')))
-        base_excel_rows = ''.join([f"<tr><td>{h(r['dni'])}</td><td><b>{h(r['trabajador'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in trabajadores_proceso_mostrar[:12]]) or "<tr><td colspan='7'>Aún no hay base Excel cargada desde este módulo.</td></tr>"
+        base_excel_rows = ''.join([f"<tr><td>{h(row_get(r,'dni'))}</td><td><b>{h(row_get(r,'trabajador'))}</b></td><td>{h(r['empresa'])}</td><td>{h(r['requerimiento'])}</td><td>{h(r['cargo'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(row_get(r,'estado'))}</span></td></tr>" for r in trabajadores_proceso_mostrar[:12]]) or "<tr><td colspan='7'>Aún no hay base Excel cargada desde este módulo.</td></tr>"
         content=wrap(f"""
         <style>.config-contratos-grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin:10px 0 18px}}.config-contract-card{{padding:20px!important;min-height:210px}}.config-contract-card h2{{margin:4px 0 8px;color:#0f2b46}}.config-icon{{width:54px;height:54px;border-radius:16px;background:#ecfdf5;display:grid;place-items:center;font-size:28px;margin-bottom:10px}}.base-excel-form{{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;gap:10px;align-items:center;margin:12px 0}}.quick-grid{{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}}.quick-grid a{{background:#ecfdf5;border:1px solid #bbf7d0;border-radius:999px;padding:9px 13px;color:#047857!important;font-weight:800;text-decoration:none}}@media(max-width:900px){{.config-contratos-grid{{grid-template-columns:1fr}}.base-excel-form{{grid-template-columns:1fr}}.base-excel-form .c-btn{{width:100%}}}}</style>
         <div class='plantilla-top'>
@@ -11585,8 +11585,8 @@ html,body{overflow-x:hidden!important;}
             evidencia = r['evidencia_ref'] if 'evidencia_ref' in r.keys() and r['evidencia_ref'] else ''
             estado_val = r['validacion_estado'] if 'validacion_estado' in r.keys() and r['validacion_estado'] else ''
             rows_firma += f"""<tr>
-              <td>{r['id']}</td><td>{h(r['dni'])}</td><td>{h(r['trabajador'])}</td><td>{h(r['metodo'])}</td>
-              <td><span class='estado-pill'>{h(r['estado'])}</span><br><small>{h(estado_val)}</small></td>
+              <td>{row_get(r,'id')}</td><td>{h(row_get(r,'dni'))}</td><td>{h(row_get(r,'trabajador'))}</td><td>{h(r['metodo'])}</td>
+              <td><span class='estado-pill'>{h(row_get(r,'estado'))}</span><br><small>{h(estado_val)}</small></td>
               <td>{h(r['fecha_envio'])}</td><td>{h(r['fecha_firma'] or '')}</td>
               <td>{'<a class="c-btn gray mini-btn" href="'+h(link)+'" target="_blank">Abrir móvil/web</a>' if link else '-'}</td>
               <td>{'<span class="ok-chip">Con evidencia</span>' if evidencia else '<span class="pend-chip">Pendiente</span>'}</td>
@@ -12160,7 +12160,7 @@ def admin_modo_prueba_limpiar():
     borrados = 0
     with db() as con:
         rows = con.execute("SELECT id,ruta_archivo FROM documentos WHERE uploaded_by LIKE '%MODO PRUEBA%'").fetchall()
-        ids = [r['id'] for r in rows]
+        ids = [row_get(r,'id') for r in rows]
         for r in rows:
             try:
                 p = Path(r['ruta_archivo'])
@@ -12530,8 +12530,8 @@ def admin_ia_hr():
         legal = con.execute('SELECT * FROM ia_legislacion_peru WHERE activo=1 ORDER BY tema, id DESC').fetchall()
         logs = con.execute('SELECT * FROM ia_hr_log ORDER BY id DESC LIMIT 30').fetchall()
         actualizaciones = con.execute('SELECT * FROM ia_actualizaciones_hr ORDER BY id DESC LIMIT 30').fetchall()
-    rows_s = ''.join([f"<tr><td>{h(r['modulo'])}</td><td>{h(r['rol_destino'])}</td><td><b>{h(r['pregunta_clave'])}</b><br><small>{h(r['palabras_clave'])}</small></td><td>{h(r['ruta'])}</td><td><a class='btn-red mini-btn' href='/admin/ia_hr/eliminar/sistema/{r['id']}'>Eliminar</a></td></tr>" for r in sistema]) or "<tr><td colspan='5'>Sin respuestas.</td></tr>"
-    rows_l = ''.join([f"<tr><td>{h(r['tema'])}</td><td><b>{h(r['pregunta_clave'])}</b><br><small>{h(r['base_legal'])}</small></td><td>{h(r['fecha_actualizacion'])}</td><td><a class='btn-red mini-btn' href='/admin/ia_hr/eliminar/legal/{r['id']}'>Eliminar</a></td></tr>" for r in legal]) or "<tr><td colspan='4'>Sin base legal.</td></tr>"
+    rows_s = ''.join([f"<tr><td>{h(r['modulo'])}</td><td>{h(r['rol_destino'])}</td><td><b>{h(r['pregunta_clave'])}</b><br><small>{h(r['palabras_clave'])}</small></td><td>{h(r['ruta'])}</td><td><a class='btn-red mini-btn' href='/admin/ia_hr/eliminar/sistema/{row_get(r,'id')}'>Eliminar</a></td></tr>" for r in sistema]) or "<tr><td colspan='5'>Sin respuestas.</td></tr>"
+    rows_l = ''.join([f"<tr><td>{h(r['tema'])}</td><td><b>{h(r['pregunta_clave'])}</b><br><small>{h(r['base_legal'])}</small></td><td>{h(r['fecha_actualizacion'])}</td><td><a class='btn-red mini-btn' href='/admin/ia_hr/eliminar/legal/{row_get(r,'id')}'>Eliminar</a></td></tr>" for r in legal]) or "<tr><td colspan='4'>Sin base legal.</td></tr>"
     rows_log = ''.join([f"<tr><td>{h(r['fecha'])}</td><td>{h(r['rol'])}</td><td>{h(r['modulo'])}</td><td>{h(r['pregunta'])}</td><td>{h(r['respuesta_tipo'])}</td></tr>" for r in logs]) or "<tr><td colspan='5'>Sin consultas.</td></tr>"
     rows_act = ''.join([f"<tr><td>{h(r['fecha'])}</td><td>{h(r['tipo'])}</td><td>{h(r['fuente'])}</td><td>{h(r['registros'])}</td><td>{h(r['usuario'])}</td></tr>" for r in actualizaciones]) or "<tr><td colspan='5'>Sin actualizaciones.</td></tr>"
     content=f"""
