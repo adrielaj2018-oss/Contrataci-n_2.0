@@ -317,6 +317,55 @@ def h(v):
 
 
 
+def fotocheck_qr_svg(data, size=180):
+    """Genera un QR visual para el fotocheck. Si existe librería qrcode genera QR real; si no, usa matriz local de respaldo."""
+    data = clean(data) or 'PRIZE-FOTOCHECK'
+    try:
+        import qrcode
+        from qrcode.image.svg import SvgPathImage
+        qr = qrcode.QRCode(version=2, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=2)
+        qr.add_data(data)
+        qr.make(fit=True)
+        img = qr.make_image(image_factory=SvgPathImage)
+        import io
+        buff = io.BytesIO()
+        img.save(buff)
+        svg = buff.getvalue().decode('utf-8', errors='ignore')
+        return svg.replace('<svg ', f'<svg width="{size}" height="{size}" ')
+    except Exception:
+        digest = hashlib.sha256(data.encode('utf-8')).hexdigest()
+        n = 25
+        cell = size / n
+        rects = [f"<rect width='{size}' height='{size}' fill='white'/>"]
+        def add_finder(x,y):
+            rects.append(f"<rect x='{x*cell}' y='{y*cell}' width='{7*cell}' height='{7*cell}' fill='black'/>")
+            rects.append(f"<rect x='{(x+1)*cell}' y='{(y+1)*cell}' width='{5*cell}' height='{5*cell}' fill='white'/>")
+            rects.append(f"<rect x='{(x+2)*cell}' y='{(y+2)*cell}' width='{3*cell}' height='{3*cell}' fill='black'/>")
+        add_finder(1,1); add_finder(17,1); add_finder(1,17)
+        bits = ''.join(bin(int(c,16))[2:].zfill(4) for c in digest)
+        k = 0
+        protected = set()
+        for fx,fy in [(1,1),(17,1),(1,17)]:
+            for xx in range(fx,fx+7):
+                for yy in range(fy,fy+7): protected.add((xx,yy))
+        for y in range(n):
+            for x in range(n):
+                if (x,y) in protected or x==0 or y==0 or x==n-1 or y==n-1:
+                    continue
+                if bits[k % len(bits)] == '1':
+                    rects.append(f"<rect x='{x*cell:.2f}' y='{y*cell:.2f}' width='{cell:.2f}' height='{cell:.2f}' fill='black'/>")
+                k += 1
+        return f"<svg xmlns='http://www.w3.org/2000/svg' width='{size}' height='{size}' viewBox='0 0 {size} {size}'>" + ''.join(rects) + '</svg>'
+
+
+def fotocheck_codigo_unico(row):
+    dni = row['dni'] if row and 'dni' in row.keys() else ''
+    req = row['requerimiento'] if row and 'requerimiento' in row.keys() else ''
+    base = f"PRIZE|DNI:{dni}|REQ:{req}|ID:{row['id'] if row and 'id' in row.keys() else ''}"
+    return 'FC-' + hashlib.sha1(base.encode('utf-8')).hexdigest()[:10].upper()
+
+
+
 def fecha_sin_hora(v):
     """Muestra fechas sin 00:00:00, aceptando Excel datetime, ISO y texto dd/mm/aaaa."""
     if v is None:
@@ -2190,7 +2239,7 @@ def init_db():
             orientacion TEXT DEFAULT 'Horizontal',
             caras TEXT DEFAULT 'Frente',
             copias INTEGER DEFAULT 1,
-            plantilla_diseno TEXT DEFAULT 'PRIZE - FOTOCHECK ESTÁNDAR',
+            plantilla_diseno TEXT DEFAULT 'PRIZE - ANVERSO/REVERSO QR',
             ruta_salida TEXT,
             estado_conexion TEXT DEFAULT 'NO PROBADA',
             observacion TEXT,
@@ -2217,7 +2266,7 @@ def init_db():
             if not existe_cfg_zebra:
                 con.execute('''INSERT INTO fotocheck_zebra_config(impresora_nombre,tipo_conexion,bluetooth_nombre,bluetooth_mac,ip_impresora,puerto,tamano_tarjeta,orientacion,caras,copias,plantilla_diseno,ruta_salida,estado_conexion,observacion,fecha_actualizacion,actualizado_por)
                                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                            ('Zebra ZC300','COLA WINDOWS / USB','','','','','CR80','Horizontal','Frente',1,'PRIZE - FOTOCHECK ESTÁNDAR',str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),'NO CONFIGURADA','Configurar según la PC donde esté instalada la impresora. No se permite impresión hasta validar conexión real.',now_txt(),'SISTEMA'))
+                            ('Zebra ZC300','COLA WINDOWS / USB','','','','','CR80','Horizontal','Frente',1,'PRIZE - ANVERSO/REVERSO QR',str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),'NO CONFIGURADA','Configurar según la PC donde esté instalada la impresora. No se permite impresión hasta validar conexión real.',now_txt(),'SISTEMA'))
         except Exception:
             pass
 
@@ -10171,7 +10220,7 @@ html,body{overflow-x:hidden!important;}
                     <td>{h(r['fecha_ingreso'])}</td>
                     <td>{'<span class="photo-dot photo-ok">FOTO APROBADA</span>' if foto else '<span class="photo-dot photo-no">SIN FOTO</span>'}</td>
                     <td>{_ft_estado(estado_fc, foto)}</td>
-                    <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver ficha</a></td>
+                    <td><div style='display:flex;gap:6px;flex-wrap:wrap'><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver ficha</a><a class='c-btn mini-btn' target='_blank' href='/admin/contratacion/fotocheck/{r['id']}/preview'>Vista diseño</a></div></td>
                 </tr>""")
             foto_rows_html=''.join(foto_rows) or "<tr><td colspan='12'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
             with db() as con_cfg_ui:
@@ -10220,6 +10269,12 @@ html,body{overflow-x:hidden!important;}
             .zebra-status{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}}
             .status-pill.warn{{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}}
             .status-pill.bad{{background:#fee2e2!important;color:#991b1b!important;border:1px solid #fecaca!important}}
+            .foto-design-panel{{display:grid;grid-template-columns:minmax(260px,1fr) 140px 140px;gap:16px;align-items:center;background:linear-gradient(135deg,#ffffff,#eef7ff);border:1px solid #cfe8ff;border-radius:22px;padding:18px;margin:0 0 16px;box-shadow:0 14px 32px rgba(15,23,42,.08)}}
+            .design-copy h3{{margin:0 0 6px;color:#08213e;font-size:22px}}.design-copy p{{margin:0;color:#536579;font-weight:700;line-height:1.45}}.design-checks{{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}}.design-checks span{{background:#ecfdf5;color:#047857;border:1px solid #86efac;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:950}}
+            .mini-fc{{height:205px;border-radius:12px;background:#fff;border:1px solid #cbd5e1;box-shadow:0 10px 22px rgba(15,23,42,.12);position:relative;overflow:hidden;text-align:center;padding:14px;color:#1d2a7b;font-weight:950}}
+            .front-mini:before{{content:'';position:absolute;left:-25px;top:-20px;width:150px;height:55px;background:linear-gradient(135deg,#084f9f,#0d7ee8);border-bottom-right-radius:80px}}.front-mini:after,.back-mini:after{{content:'';position:absolute;right:-25px;bottom:-20px;width:160px;height:55px;background:linear-gradient(135deg,#4461e9,#3127a6);border-top-left-radius:80px}}
+            .mini-fc b{{position:relative;z-index:2;display:block;color:#fff;text-align:left;font-style:italic;font-size:18px;margin-bottom:28px}}.mini-fc small{{display:block;position:relative;z-index:2;font-size:10px;text-transform:uppercase}}.mini-photo{{width:70px;height:78px;margin:10px auto;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px}}.mini-fc em{{display:block;margin-top:10px;font-style:normal;font-size:10px;text-transform:uppercase}}
+            .back-mini:before{{content:'';position:absolute;right:-28px;top:-20px;width:150px;height:58px;background:linear-gradient(135deg,#0d7ee8,#084f9f);border-bottom-left-radius:80px}}.mini-qr{{width:76px;height:76px;margin:26px auto 8px;border:8px solid #111;display:flex;align-items:center;justify-content:center;font-size:30px;color:#111;background:#fff}}.back-mini em{{font-size:9px;margin-top:8px}}
             @media(max-width:1000px){{.foto-kpis,.foto-flow,.zebra-grid{{grid-template-columns:1fr 1fr}}.foto-actions{{display:grid}}}}
             </style>
             <h2 class='c-title'>{tit}</h2>
@@ -10230,7 +10285,12 @@ html,body{overflow-x:hidden!important;}
               </div>
               <span class='status-pill {cfg_estado_class}'>Zebra: {h(cfg_estado)}</span>
             </div>
-            <div class='foto-flow'><div>1. Ticket</div><div>2. Postulantes</div><div>3. Foto</div><div>4. Validación</div><div>5. Zebra ZC300</div><div>6. Cargo firma</div></div>
+            <div class='foto-design-panel'>
+              <div class='design-copy'><h3>Diseño PRIZE implementado</h3><p>Anverso con logo, nombre, DNI, foto centrada y cargo. Reverso con QR/código único, valores corporativos y web. Usa <b>Vista diseño</b> en cada trabajador para imprimir o guardar PDF.</p><div class='design-checks'><span>✅ Foto obligatoria</span><span>✅ DNI y nombre</span><span>✅ Cargo</span><span>✅ QR/código único</span></div></div>
+              <div class='mini-fc front-mini'><b>Prize</b><small>NOMBRE TRABAJADOR</small><div class='mini-photo'>FOTO</div><em>CARGO</em></div>
+              <div class='mini-fc back-mini'><div class='mini-qr'>▦</div><small>Código Único de Acceso y Control</small><em>www.prizesuperfruits.com</em></div>
+            </div>
+            <div class='foto-flow'><div>1. Ticket</div><div>2. Postulantes</div><div>3. Foto</div><div>4. Validación</div><div>5. Vista diseño</div><div>6. Zebra/PDF</div></div>
             <form method='post' class='zebra-config'>
               <input type='hidden' name='req_return' value='{h(req_actual)}'>
               <div class='zebra-status'><h3 style='margin:0'>Configuración Zebra ZC300</h3><span class='status-pill {cfg_estado_class}'>{h(cfg_estado)}</span><small class='muted2'>Soporta cola Windows/USB, red y Bluetooth emparejado.</small></div>
@@ -10293,7 +10353,7 @@ html,body{overflow-x:hidden!important;}
             </form>
             <div class='c-card' style='padding:18px;margin-top:16px'>
               <h3>Reglas automáticas</h3>
-              <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto o si la Zebra no está en estado LISTA PARA IMPRIMIR. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
+              <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto, DNI, nombre, cargo o si la Zebra no está en estado LISTA PARA IMPRIMIR. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
               <h3>Historial Zebra</h3><div class='table-wrap'><table class='c-table'><tr><th>Fecha</th><th>Acción</th><th>Impresora</th><th>Conexión</th><th>Estado</th><th>Detalle</th></tr>{hist_rows}</table></div>
             </div>
             """)
@@ -11843,6 +11903,63 @@ def admin_desbloquear_usuarios():
     flash('Usuarios desbloqueados. Los intentos fallidos fueron reiniciados.', 'ok')
     return redirect(url_for('admin'))
 
+
+
+@app.route('/admin/contratacion/fotocheck/<int:ingreso_id>/preview')
+@admin_required
+def contratacion_fotocheck_preview(ingreso_id):
+    with db() as con:
+        r = con.execute('SELECT * FROM contratacion_ingresos WHERE id=?', (ingreso_id,)).fetchone()
+    if not r:
+        abort(404)
+    dni = h(r['dni'] if 'dni' in r.keys() else '')
+    trabajador = h(r['trabajador'] if 'trabajador' in r.keys() else 'PENDIENTE COMPLETAR')
+    cargo = h(r['cargo'] if 'cargo' in r.keys() else '')
+    req = h(r['requerimiento'] if 'requerimiento' in r.keys() else '')
+    empresa = h(r['empresa'] if 'empresa' in r.keys() else 'PRIZE')
+    codigo = fotocheck_codigo_unico(r)
+    qr_data = f"{codigo}|DNI:{dni}|TRABAJADOR:{trabajador}|REQ:{req}|EMPRESA:{empresa}"
+    qr_svg = fotocheck_qr_svg(qr_data, 168)
+    foto_src = url_for('foto_trabajador', dni=r['dni']) if ('foto_ruta' in r.keys() and r['foto_ruta']) else ''
+    foto_html = f"<img src='{foto_src}' class='fc-photo'>" if foto_src else "<div class='fc-photo no'>SIN<br>FOTO</div>"
+    html_out = f"""
+    <!doctype html><html><head><meta charset='utf-8'><title>Fotocheck {dni}</title>
+    <style>
+    *{{box-sizing:border-box}}body{{margin:0;background:#eef4f8;font-family:Arial,Helvetica,sans-serif;color:#08213e}}
+    .page{{padding:22px;display:flex;gap:24px;align-items:flex-start;justify-content:center;flex-wrap:wrap}}
+    .toolbar{{width:100%;max-width:760px;margin:0 auto 10px;display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:12px 16px;box-shadow:0 8px 22px rgba(15,23,42,.08)}}
+    .btn{{border:0;border-radius:12px;background:#008a47;color:#fff;font-weight:900;padding:10px 16px;cursor:pointer;text-decoration:none}}.btn.gray{{background:#e8eef5;color:#08213e}}
+    .card{{width:54mm;height:86mm;background:#fff;border:1px solid #cbd5e1;border-radius:10px;position:relative;overflow:hidden;box-shadow:0 16px 34px rgba(15,23,42,.16)}}
+    .front:before{{content:'';position:absolute;left:-16mm;top:-14mm;width:80mm;height:27mm;background:linear-gradient(135deg,#084f9f,#0d7ee8);border-bottom-right-radius:65% 100%;transform:rotate(-2deg)}}
+    .front:after{{content:'';position:absolute;right:-16mm;bottom:-10mm;width:80mm;height:24mm;background:linear-gradient(135deg,#4461e9,#3127a6);border-top-left-radius:70% 100%;opacity:.9}}
+    .back:before{{content:'';position:absolute;right:-18mm;top:-13mm;width:70mm;height:30mm;background:linear-gradient(135deg,#0d7ee8,#084f9f);border-bottom-left-radius:65% 100%}}
+    .back:after{{content:'';position:absolute;left:-20mm;bottom:-13mm;width:76mm;height:25mm;background:linear-gradient(135deg,#0ea5e9,#3226a7);border-top-right-radius:70% 100%;opacity:.9}}
+    .logo{{position:absolute;top:6mm;left:6mm;color:#fff;font-style:italic;font-size:22px;font-weight:900;letter-spacing:.4px;z-index:2;text-shadow:0 2px 4px rgba(0,0,0,.2)}}
+    .logo small{{display:block;font-size:5px;letter-spacing:1px;font-style:normal;margin-top:-2px}}
+    .front-body{{position:absolute;inset:26mm 5mm 12mm;z-index:3;text-align:center}}
+    .fc-name{{font-size:11px;line-height:1.15;color:#1d2a7b;font-weight:950;text-transform:uppercase;min-height:26px;display:flex;align-items:center;justify-content:center}}
+    .fc-dni{{font-size:11px;color:#1d2a7b;font-weight:950;margin:2mm 0 3mm}}
+    .fc-photo{{width:26mm;height:31mm;object-fit:cover;border-radius:3px;margin:auto;display:block;background:#e5edf5}}
+    .fc-photo.no{{display:flex;align-items:center;justify-content:center;color:#991b1b;font-weight:950;background:#fee2e2;border:1px solid #fecaca}}
+    .fc-cargo{{margin-top:5mm;color:#1d2a7b;font-size:10px;font-weight:950;text-transform:uppercase}}
+    .back-body{{position:absolute;inset:17mm 5mm 13mm;z-index:3;text-align:center}}
+    .qrbox{{display:flex;justify-content:center;margin:1mm 0 3mm}}.qrbox svg{{width:35mm!important;height:35mm!important}}
+    .code{{font-size:7px;color:#1d2a7b;font-weight:950;font-style:italic;margin-bottom:4mm}}
+    .values{{display:grid;grid-template-columns:1fr 1fr;gap:3mm 2mm;margin:0 1mm 3mm}}
+    .value{{display:flex;align-items:center;gap:2mm;font-size:6.5px;color:#1d2a7b;font-weight:900;text-transform:uppercase;justify-content:center}}
+    .value i{{width:7mm;height:7mm;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-size:10px;background:#10b981}}.value:nth-child(2) i{{background:#f59e0b}}.value:nth-child(3) i{{background:#1d4ed8}}.value:nth-child(4) i{{background:#ef4444}}
+    .web{{font-size:7px;color:#1d2a7b;font-weight:900}}.back-logo{{position:absolute;right:6mm;bottom:6mm;color:#fff;font-style:italic;font-size:18px;font-weight:900;z-index:4}}
+    .meta{{width:100%;max-width:760px;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:14px;color:#475569;font-size:13px}}
+    @page{{size:A4;margin:10mm}}@media print{{body{{background:#fff}}.toolbar,.meta{{display:none}}.page{{padding:0;gap:8mm;justify-content:flex-start}}.card{{box-shadow:none;break-inside:avoid}}}}
+    </style></head><body>
+    <div class='toolbar'><b>Vista previa de fotocheck: {trabajador}</b><div><a class='btn gray' href='/admin/contratacion?sec=fotocheck&req={req}'>Volver</a> <button class='btn' onclick='window.print()'>Imprimir / guardar PDF</button></div></div>
+    <div class='page'>
+      <div class='card front'><div class='logo'>Prize<small>SUPERFRUITS</small></div><div class='front-body'><div class='fc-name'>{trabajador}</div><div class='fc-dni'>{dni}</div>{foto_html}<div class='fc-cargo'>{cargo or 'CARGO PENDIENTE'}</div></div></div>
+      <div class='card back'><div class='back-body'><div class='qrbox'>{qr_svg}</div><div class='code'>Código Único de Acceso y Control</div><div class='values'><div class='value'><i>✓</i>Visión de futuro</div><div class='value'><i>◎</i>Cercanía</div><div class='value'><i>◉</i>Transparencia</div><div class='value'><i>♥</i>Pasión</div></div><div class='web'>www.prizesuperfruits.com</div></div><div class='back-logo'>Prize</div></div>
+      <div class='meta'><b>Código:</b> {h(codigo)} &nbsp; <b>Requerimiento:</b> {req} &nbsp; <b>Empresa:</b> {empresa}<br>Validación: no imprimir si falta foto, DNI, nombre o cargo.</div>
+    </div></body></html>
+    """
+    return html_out
 
 @app.route('/admin/contratacion/doc/<int:doc_id>/archivo')
 @admin_required
