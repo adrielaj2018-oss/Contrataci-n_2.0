@@ -4818,6 +4818,21 @@ except Exception:
     pass
 # ======================= FIN TEMA GLOBAL POSTULANTES PRO 2026 =======================
 
+# ======================= FIX RENDER/JINJA BASE 2026-06-04 =======================
+# El BASE contiene CSS agregado con llaves dobles {{ }} (propias de f-string),
+# pero BASE se procesa con Jinja. Si no se normaliza, Jinja lanza:
+# TemplateSyntaxError: unexpected '.' y la app devuelve Internal Server Error.
+try:
+    _BASE_TITLE_TOKEN = '___PRIZE_BASE_TITLE_TOKEN___'
+    _BASE_BODY_TOKEN = '___PRIZE_BASE_BODY_TOKEN___'
+    BASE = BASE.replace('{{ title }}', _BASE_TITLE_TOKEN).replace('{{ body|safe }}', _BASE_BODY_TOKEN)
+    BASE = BASE.replace('{{', '{').replace('}}', '}')
+    BASE = BASE.replace(_BASE_TITLE_TOKEN, '{{ title }}').replace(_BASE_BODY_TOKEN, '{{ body|safe }}')
+except Exception as _e:
+    print('No se pudo normalizar BASE/Jinja:', _e)
+# ======================= FIN FIX RENDER/JINJA BASE =======================
+
+
 def safe_ia_widget_hr(active):
     try:
         return ia_widget_hr(active) if 'ia_widget_hr' in globals() else ''
