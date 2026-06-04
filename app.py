@@ -12233,6 +12233,125 @@ def admin_ia_hr_eliminar(tipo, item_id):
 # FIN RUTAS IA HR
 # ============================================================
 
+
+
+# ============================================================
+# PARCHE PRO ESTABLE: evita pantalla "Internal Server Error"
+# en Gestión Contratación y muestra un módulo seguro si alguna
+# sección falla por datos/columnas antiguas en Render.
+# ============================================================
+def _safe_row_value(row, key, default=''):
+    try:
+        if hasattr(row, 'keys') and key in row.keys():
+            return row[key]
+    except Exception:
+        pass
+    try:
+        return row.get(key, default)
+    except Exception:
+        return default
+
+def _safe_admin_contratacion_fallback(error):
+    sec_actual = clean(request.args.get('sec','dashboard'))
+    req_actual = clean(request.args.get('req'))
+    try:
+        with db() as con:
+            reqs = con.execute("SELECT * FROM contratacion_requerimientos ORDER BY id DESC LIMIT 300").fetchall()
+            sql = "SELECT * FROM contratacion_ingresos WHERE COALESCE(estado,'') NOT IN ('ANULADO','CANCELADO')"
+            params = []
+            if req_actual:
+                sql += " AND requerimiento=?"
+                params.append(req_actual)
+            sql += " ORDER BY id DESC LIMIT 500"
+            postulantes = con.execute(sql, params).fetchall()
+    except Exception:
+        reqs, postulantes = [], []
+
+    opts = "<option value=''>Seleccione requerimiento</option>" + ''.join(
+        f"<option value='{h(_safe_row_value(r,'ticket'))}' {'selected' if req_actual==clean(_safe_row_value(r,'ticket')) else ''}>{h(_safe_row_value(r,'ticket'))} - {h(_safe_row_value(r,'empresa'))} - {h(_safe_row_value(r,'area'))} - {h(_safe_row_value(r,'actividad'))}</option>"
+        for r in reqs
+    )
+
+    def pill(v):
+        vv = clean(v or 'PENDIENTE').upper()
+        ok = vv in ('APTO','OK','COMPLETO','COMPLETADO','REGISTRADO','INDUCIDO','ENTREGADO','IMPRESO','EMITIDO','GENERADO','ENVIADO','FIRMADO','ARCHIVADO')
+        return f"<span class='safe-pill {'ok' if ok else 'pend'}'>{h(vv)}</span>"
+
+    rows = []
+    for r in postulantes:
+        dni = h(_safe_row_value(r,'dni'))
+        foto = _safe_row_value(r,'foto_ruta')
+        rows.append(f"""
+        <tr>
+          <td><b>{dni}</b></td>
+          <td>{h(_safe_row_value(r,'trabajador')) or 'PENDIENTE COMPLETAR'}</td>
+          <td>{h(_safe_row_value(r,'requerimiento'))}</td>
+          <td>{h(_safe_row_value(r,'actividad'))}</td>
+          <td>{h(_safe_row_value(r,'cargo'))}</td>
+          <td>{h(_safe_row_value(r,'empresa'))}</td>
+          <td>{pill(_safe_row_value(r,'estado_medico','PENDIENTE'))}</td>
+          <td>{pill(_safe_row_value(r,'estado_capacitacion','PENDIENTE'))}</td>
+          <td>{pill(_safe_row_value(r,'estado_indumentaria','PENDIENTE'))}</td>
+          <td>{pill(_safe_row_value(r,'fotocheck_estado','PENDIENTE'))}</td>
+          <td>{pill(_safe_row_value(r,'estado_documentos','PENDIENTE'))}</td>
+          <td>{pill('CAPTURADA' if foto else 'PENDIENTE')}</td>
+          <td><a class='safe-btn dark' href='/admin/contratacion?sec=detalle_postulante&id={h(_safe_row_value(r,'id'))}'>Ver detalle</a></td>
+        </tr>
+        """)
+    if not rows:
+        rows.append("<tr><td colspan='13' class='empty'>Seleccione un requerimiento o registre postulantes vinculados al ticket.</td></tr>")
+
+    total = len(postulantes)
+    pend_med = sum(1 for r in postulantes if clean(_safe_row_value(r,'estado_medico','PENDIENTE')).upper() not in ('APTO','OK','COMPLETO','COMPLETADO','REGISTRADO'))
+    pend_ind = sum(1 for r in postulantes if clean(_safe_row_value(r,'estado_capacitacion','PENDIENTE')).upper() not in ('INDUCIDO','OK','COMPLETO','COMPLETADO','REGISTRADO'))
+    pend_indum = sum(1 for r in postulantes if clean(_safe_row_value(r,'estado_indumentaria','PENDIENTE')).upper() not in ('ENTREGADO','OK','COMPLETO','COMPLETADO'))
+    pend_foto = sum(1 for r in postulantes if clean(_safe_row_value(r,'fotocheck_estado','PENDIENTE')).upper() not in ('IMPRESO','ENTREGADO','EMITIDO','OK'))
+    pend_cont = sum(1 for r in postulantes if clean(_safe_row_value(r,'estado_documentos','PENDIENTE')).upper() not in ('FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO'))
+
+    debug_msg = h(str(error))[:500]
+    return render_template_string(f"""
+    <!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'>
+    <title>Gestión Contratación - Modo seguro</title>
+    <style>
+      body{{margin:0;background:#eef7f5;font-family:Inter,Segoe UI,Arial,sans-serif;color:#071b34}}
+      .page{{padding:28px 34px}}
+      .hero{{background:white;border:1px solid #dbeafe;border-radius:26px;padding:28px 34px;box-shadow:0 15px 35px rgba(15,23,42,.08);display:flex;justify-content:space-between;gap:20px;align-items:center}}
+      h1{{margin:0;font-size:38px;line-height:1;font-weight:950;color:#071b34}} p{{color:#52637b;font-size:16px}}
+      .safe-btn{{display:inline-flex;align-items:center;justify-content:center;border-radius:14px;padding:12px 18px;text-decoration:none;font-weight:950;background:#009b57;color:white;border:0}}
+      .safe-btn.dark{{background:#172131;color:white;padding:10px 14px}}
+      .card{{background:white;border:1px solid #dbeafe;border-radius:22px;padding:18px;margin-top:18px;box-shadow:0 10px 26px rgba(15,23,42,.06)}}
+      .filter{{display:grid;grid-template-columns:220px minmax(280px,1fr) 180px minmax(240px,1fr);gap:14px;align-items:center}}
+      .filter b{{background:#eef6f7;border-radius:14px;padding:14px 16px;text-align:center}}
+      select,input{{height:48px;border:1px solid #cfe0ef;border-radius:14px;padding:0 16px;font-weight:800;background:white;color:#071b34}}
+      .kpis{{display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:14px;margin-top:18px}}
+      .kpi{{background:white;border:1px solid #dce8e5;border-radius:18px;padding:16px;box-shadow:0 8px 22px rgba(15,23,42,.06)}} .kpi span{{display:block;color:#0f513f;font-weight:950;font-size:12px;text-transform:uppercase}} .kpi b{{font-size:30px}}
+      .wrap{{overflow-x:auto;margin-top:18px;border-radius:18px}} table{{min-width:1450px;width:100%;border-collapse:separate;border-spacing:0;background:white}} th{{background:#008142;color:white;text-align:left;padding:14px;white-space:nowrap}} td{{padding:14px;border-bottom:1px solid #e2edf2;white-space:nowrap;font-weight:800}} .safe-pill{{display:inline-flex;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:950;border:1px solid #fecaca;background:#fff7ed;color:#9a3412}} .safe-pill.ok{{background:#dcfce7;color:#047857;border-color:#86efac}} .empty{{text-align:center;color:#64748b;padding:30px!important}}
+      .warn{{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:16px;padding:12px 16px;margin-top:14px;font-weight:800}}
+      @media(max-width:900px){{.filter,.kpis{{grid-template-columns:1fr}}h1{{font-size:28px}}.page{{padding:16px}}}}
+    </style></head><body><div class='page'>
+      <div class='hero'><div><h1>{'Registro de postulante' if sec_actual=='nuevos' else 'Datos Postulantes por Requerimiento'}</h1><p>Vista segura restaurada. Flujo oficial: Evaluación médica → Inducción → Indumentaria → Fotocheck → Contratos.</p></div><a class='safe-btn' href='/admin/contratacion?sec=requerimientos'>Ir a Requerimiento</a></div>
+      <div class='warn'>Se evitó el error 500. Detalle técnico controlado: {debug_msg}</div>
+      <div class='card filter'><b>Requerimiento / Ticket</b><select onchange="location.href='/admin/contratacion?sec=datos_completos&req='+encodeURIComponent(this.value)">{opts}</select><b>Buscar postulante</b><input oninput="const q=this.value.toLowerCase();document.querySelectorAll('#safeTable tbody tr').forEach(tr=>tr.style.display=tr.innerText.toLowerCase().includes(q)?'':'none')" placeholder='DNI, trabajador, cargo, estado...'></div>
+      <div class='kpis'><div class='kpi'><span>Total</span><b>{total}</b></div><div class='kpi'><span>Pend. médica</span><b>{pend_med}</b></div><div class='kpi'><span>Pend. inducción</span><b>{pend_ind}</b></div><div class='kpi'><span>Pend. indumentaria</span><b>{pend_indum}</b></div><div class='kpi'><span>Pend. fotocheck</span><b>{pend_foto}</b></div><div class='kpi'><span>Pend. contratos</span><b>{pend_cont}</b></div></div>
+      <div class='wrap'><table id='safeTable'><thead><tr><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Contratos</th><th>Foto</th><th>Detalle</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div>
+    </div></body></html>
+    """)
+
+# Reemplaza la vista original por una vista protegida. Si todo está bien,
+# se muestra el módulo normal. Si algo falla, se activa el modo seguro arriba.
+try:
+    _admin_contratacion_original_view = app.view_functions.get('admin_contratacion')
+    if _admin_contratacion_original_view:
+        def admin_contratacion_safe_view(*args, **kwargs):
+            try:
+                return _admin_contratacion_original_view(*args, **kwargs)
+            except Exception as _e:
+                return _safe_admin_contratacion_fallback(_e)
+        app.view_functions['admin_contratacion'] = admin_contratacion_safe_view
+except Exception:
+    pass
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
     host = os.getenv('HOST', '0.0.0.0')
