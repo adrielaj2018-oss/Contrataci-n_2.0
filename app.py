@@ -10051,10 +10051,16 @@ html,body{overflow-x:hidden!important;}
             pend_contrato = sum(1 for r in lista if str(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE').upper() not in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO'])
             pend_foto = sum(1 for r in lista if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
             pend_fotocheck = sum(1 for r in lista if str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE').upper() not in ['IMPRESO','ENTREGADO','GENERADO'])
+            pend_medica = sum(1 for r in lista if str(r['estado_medico'] if 'estado_medico' in r.keys() else 'PENDIENTE').upper() not in ['APTO','APROBADO','COMPLETO','COMPLETADO'])
+            pend_induccion = sum(1 for r in lista if str(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE').upper() not in ['INDUCIDO','APROBADO','COMPLETO','COMPLETADO','OK'])
+            pend_indumentaria = sum(1 for r in lista if str(r['estado_indumentaria'] if 'estado_indumentaria' in r.keys() else 'PENDIENTE').upper() not in ['ENTREGADO','COMPLETO','COMPLETADO','OK'])
+            completos_flujo = sum(1 for r in lista if str(r['estado_medico'] if 'estado_medico' in r.keys() else '').upper() in ['APTO','APROBADO','COMPLETO','COMPLETADO'] and str(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else '').upper() in ['INDUCIDO','APROBADO','COMPLETO','COMPLETADO','OK'] and str(r['estado_indumentaria'] if 'estado_indumentaria' in r.keys() else '').upper() in ['ENTREGADO','COMPLETO','COMPLETADO','OK'] and str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else '').upper() in ['IMPRESO','ENTREGADO','GENERADO'] and str(r['estado_documentos'] if 'estado_documentos' in r.keys() else '').upper() in ['FIRMADO','ARCHIVADO','COMPLETO','COMPLETADO'])
             def _pill_state(v):
                 vv = str(v or 'PENDIENTE').upper()
-                ok = vv in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO','CAPTURADA','IMPRESO','ENTREGADO','APTO','REGISTRADO']
-                return f"<span class='status-pill {'ok' if ok else ''}'>{h(vv)}</span>"
+                ok = vv in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO','CAPTURADA','IMPRESO','ENTREGADO','APTO','APROBADO','INDUCIDO','OK','REGISTRADO']
+                warn = vv in ['PENDIENTE','PENDIENTE FOTO','EN PROCESO','PARCIAL']
+                css = 'ok' if ok else ('warn' if warn else 'danger')
+                return f"<span class='status-pill {css}'>{h(vv)}</span>"
             rows = []
             for r in lista:
                 foto = (r['foto_ruta'] if 'foto_ruta' in r.keys() else '')
@@ -10065,14 +10071,15 @@ html,body{overflow-x:hidden!important;}
                   <td class='sticky-col'><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'><b>{h(r['dni'])}</b></a></td>
                   <td class='sticky-col-2'><a class='link-clean' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>{h(r['trabajador']) or 'PENDIENTE COMPLETAR'}</a></td>
                   <td>{h(r['requerimiento'])}</td><td>{h(r['actividad'])}</td><td>{h(r['cargo'])}</td><td>{h(r['empresa'])}</td>
-                  <td>{_pill_state(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE')}</td>
-                  <td>{_pill_state(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</td>
-                  <td>{_pill_state('CAPTURADA' if foto else 'PENDIENTE FOTO')}</td>
+                  <td>{_pill_state(r['estado_medico'] if 'estado_medico' in r.keys() else 'PENDIENTE')}</td>
+                  <td>{_pill_state(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</td>
                   <td>{_pill_state(r['estado_indumentaria'] if 'estado_indumentaria' in r.keys() else 'PENDIENTE')}</td>
+                  <td>{_pill_state(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE')}</td>
+                  <td>{_pill_state(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE')}</td>
                   <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver detalle</a></td>
                   <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='anular_ingreso_admin'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='hidden' name='motivo_anulacion' value='Anulado desde Datos Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td>
                 </tr>""")
-            tabla_rows = ''.join(rows) or "<tr><td colspan='14' style='padding:28px;text-align:center;color:#64748b;font-weight:900'>Seleccione un requerimiento para visualizar los postulantes vinculados al ticket.</td></tr>"
+            tabla_rows = ''.join(rows) or "<tr><td colspan='15' style='padding:28px;text-align:center;color:#64748b;font-weight:900'>Seleccione un requerimiento para visualizar los postulantes vinculados al ticket.</td></tr>"
             content=wrap(f"""
             <style>
             .datos-kpi{{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin:14px 0 18px}}
@@ -10083,7 +10090,7 @@ html,body{overflow-x:hidden!important;}
             .datos-postulantes-pro .ticket-first{{display:grid;grid-template-columns:210px minmax(280px,1fr) 190px minmax(260px,1fr);gap:14px;align-items:center;background:#fff;border:1px solid #dbeafe;border-radius:22px;box-shadow:0 12px 30px rgba(15,23,42,.06)}}
             .datos-postulantes-pro .ticket-first b{{background:#eef6f7;border-radius:14px;padding:14px 16px;text-align:center;color:#071b34;font-weight:950}}
             .datos-postulantes-pro .table-wrap{{overflow-x:auto!important;overflow-y:visible!important;border-radius:18px;padding:0!important}}
-            .datos-postulantes-pro table.c-table{{min-width:1680px;width:max-content}}
+            .datos-postulantes-pro table.c-table{{min-width:1840px;width:max-content}}
             .datos-postulantes-pro table.c-table th{{background:#007a3d!important;color:#fff!important;white-space:nowrap}}
             .datos-postulantes-pro table.c-table td{{white-space:nowrap;vertical-align:middle}}
             .datos-postulantes-pro .sticky-col{{position:sticky;left:0;background:#fff;z-index:2}}
@@ -10101,13 +10108,36 @@ html,body{overflow-x:hidden!important;}
             .inline-del{{display:flex;gap:6px;align-items:center;min-width:210px}}
             .inline-del input{{width:105px!important;padding:7px!important;border:1px solid #cbd5e1;border-radius:8px}}
             .icon-btn.danger{{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}}
-            @media(max-width:900px){{.datos-kpi{{grid-template-columns:1fr 1fr}}.inline-del{{min-width:160px;flex-wrap:wrap}}}}
+            .flujo-doc{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:14px;margin:14px 0 18px}}
+            .flow-card{{position:relative;background:linear-gradient(135deg,#ffffff,#f0fdf4);border:1px solid #b7ead0;border-radius:20px;padding:16px 14px;box-shadow:0 12px 28px rgba(4,120,87,.10);min-height:118px;overflow:hidden}}
+            .flow-card:after{{content:'';position:absolute;right:-22px;top:38%;width:44px;height:44px;border-top:3px solid #10b981;border-right:3px solid #10b981;transform:rotate(45deg);opacity:.25}}
+            .flow-card:last-child:after{{display:none}}
+            .flow-icon{{width:48px;height:48px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:#008a47;color:#fff;font-size:24px;box-shadow:0 12px 24px rgba(0,138,71,.22);margin-bottom:10px}}
+            .flow-card b{{display:block;color:#071b34;font-size:14px}}
+            .flow-card small{{display:block;color:#64748b;font-weight:800;margin-top:4px}}
+            .flow-card span{{display:inline-flex;margin-top:8px;background:#ecfdf5;color:#047857;border:1px solid #86efac;border-radius:999px;padding:5px 10px;font-weight:950;font-size:12px}}
+            .datos-kpi.pro-360{{grid-template-columns:repeat(6,minmax(140px,1fr))}}
+            .datos-kpi .pz-kpi.iconic{{display:flex;gap:12px;align-items:center;min-height:104px;background:linear-gradient(135deg,#fff,#f8fffb)}}
+            .datos-kpi .pz-kpi.iconic i{{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#008a47;color:#fff;font-size:22px;box-shadow:0 14px 24px rgba(0,138,71,.18)}}
+            .datos-kpi .pz-kpi.iconic.warn i{{background:#f59e0b}}
+            .datos-kpi .pz-kpi.iconic.danger i{{background:#ef4444}}
+            .datos-kpi .pz-kpi.iconic.ok i{{background:#10b981}}
+            .status-pill.warn{{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}}
+            .status-pill.danger{{background:#fee2e2!important;color:#991b1b!important;border:1px solid #fecaca!important}}
+            @media(max-width:900px){{.datos-kpi,.datos-kpi.pro-360,.flujo-doc{{grid-template-columns:1fr 1fr}}.inline-del{{min-width:160px;flex-wrap:wrap}}}}
             </style>
             <div class='datos-postulantes-pro'><h2 class='c-title'>Datos Postulantes</h2>
-            <div class='dash-hero' style='margin-bottom:18px'><div><h1>Datos Postulantes por Requerimiento</h1><p class='muted2'>Primero elige el requerimiento. El sistema jala automáticamente todos los postulantes registrados y muestra contrato, fotocheck, foto, indumentaria y avance.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Completar ficha</a></div>
+            <div class='dash-hero' style='margin-bottom:18px'><div><h1>Datos Postulantes por Requerimiento</h1><p class='muted2'>Primero elige el requerimiento. El sistema jala automáticamente todos los postulantes registrados y muestra el flujo correcto: evaluación, inducción, indumentaria, fotocheck y contrato firmado.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Completar ficha</a></div>
             <div class='c-card c-form ticket-first' style='padding:18px;margin-bottom:18px'><b>Requerimiento / Ticket</b><select onchange="location.href='/admin/contratacion?sec=datos_completos&req='+encodeURIComponent(this.value)">{req_select_opts}</select><b>Buscar postulante</b><input oninput="filtrarTabla(this,'tabla_datos_postulantes')" placeholder='DNI, trabajador, cargo, estado...'></div>
-            <div class='datos-kpi'><div class='pz-kpi'><span>Total postulantes</span><b>{total}</b></div><div class='pz-kpi'><span>Pendiente contrato</span><b>{pend_contrato}</b></div><div class='pz-kpi'><span>Sin foto</span><b>{pend_foto}</b></div><div class='pz-kpi'><span>Pendiente fotocheck</span><b>{pend_fotocheck}</b></div></div>
-            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_documentos'>Firma de contrato / documentos</option><option value='fotocheck_estado'>Fotocheck</option><option value='estado_indumentaria'>Indumentaria</option><option value='estado_medico'>Evaluación médica</option><option value='estado_capacitacion'>Inducción / capacitación</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>GENERADO</option><option>ENVIADO</option><option>FIRMADO</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th class='sticky-col'>DNI</th><th class='sticky-col-2'>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>Contrato / Docs</th><th>Fotocheck</th><th>Foto</th><th>Indumentaria</th><th>Detalle</th><th>Anular</th></tr>{tabla_rows}</table></div></form></div>
+            <div class='flujo-doc'>
+              <div class='flow-card'><div class='flow-icon'>🩺</div><b>1. Evaluación médica</b><small>Debe quedar APTO/APROBADO.</small><span>Pendientes: {pend_medica}</span></div>
+              <div class='flow-card'><div class='flow-icon'>🎓</div><b>2. Inducción</b><small>Capacitación de ingreso.</small><span>Pendientes: {pend_induccion}</span></div>
+              <div class='flow-card'><div class='flow-icon'>🦺</div><b>3. Indumentaria</b><small>EPP, uniforme y cargo.</small><span>Pendientes: {pend_indumentaria}</span></div>
+              <div class='flow-card'><div class='flow-icon'>🪪</div><b>4. Fotocheck</b><small>Foto validada e impresión.</small><span>Pendientes: {pend_fotocheck}</span></div>
+              <div class='flow-card'><div class='flow-icon'>✍️</div><b>5. Contrato firmado</b><small>Documento final firmado.</small><span>Pendientes: {pend_contrato}</span></div>
+            </div>
+            <div class='datos-kpi pro-360'><div class='pz-kpi iconic'><i>👥</i><div><span>Total postulantes</span><b>{total}</b></div></div><div class='pz-kpi iconic danger'><i>🩺</i><div><span>Pend. evaluación</span><b>{pend_medica}</b></div></div><div class='pz-kpi iconic warn'><i>🎓</i><div><span>Pend. inducción</span><b>{pend_induccion}</b></div></div><div class='pz-kpi iconic warn'><i>🦺</i><div><span>Pend. indumentaria</span><b>{pend_indumentaria}</b></div></div><div class='pz-kpi iconic warn'><i>🪪</i><div><span>Pend. fotocheck</span><b>{pend_fotocheck}</b></div></div><div class='pz-kpi iconic ok'><i>✅</i><div><span>Flujo completo</span><b>{completos_flujo}</b></div></div></div>
+            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_medico'>1. Evaluación médica</option><option value='estado_capacitacion'>2. Inducción / capacitación</option><option value='estado_indumentaria'>3. Indumentaria</option><option value='fotocheck_estado'>4. Fotocheck</option><option value='estado_documentos'>5. Contrato firmado / documentos</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>APTO</option><option>APROBADO</option><option>INDUCIDO</option><option>ENTREGADO</option><option>IMPRESO</option><option>FIRMADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th class='sticky-col'>DNI</th><th class='sticky-col-2'>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>1. Evaluación</th><th>2. Inducción</th><th>3. Indumentaria</th><th>4. Fotocheck</th><th>5. Contrato firmado</th><th>Detalle</th><th>Anular</th></tr>{tabla_rows}</table></div></form></div>
             """)
         else:
             tit='Centro de Fotocheck'
