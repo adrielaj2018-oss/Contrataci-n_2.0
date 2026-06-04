@@ -10048,9 +10048,12 @@ html,body{overflow-x:hidden!important;}
             req_select_opts = "<option value=''>Seleccione requerimiento para ver todos</option>" + opt_req
             lista = trabajadores_proceso_mostrar[:500]
             total = len(lista)
+            pend_medica = sum(1 for r in lista if str(r['estado_medico'] if 'estado_medico' in r.keys() else 'PENDIENTE').upper() not in ['APTO','OK','COMPLETO','COMPLETADO','REGISTRADO'])
+            pend_induccion = sum(1 for r in lista if str(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE').upper() not in ['INDUCIDO','OK','COMPLETO','COMPLETADO','REGISTRADO'])
+            pend_indumentaria = sum(1 for r in lista if str(r['estado_indumentaria'] if 'estado_indumentaria' in r.keys() else 'PENDIENTE').upper() not in ['ENTREGADO','OK','COMPLETO','COMPLETADO'])
+            pend_fotocheck = sum(1 for r in lista if str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE').upper() not in ['IMPRESO','ENTREGADO','GENERADO','EMITIDO','OK'])
             pend_contrato = sum(1 for r in lista if str(r['estado_documentos'] if 'estado_documentos' in r.keys() else 'PENDIENTE').upper() not in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO'])
             pend_foto = sum(1 for r in lista if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
-            pend_fotocheck = sum(1 for r in lista if str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else 'PENDIENTE').upper() not in ['IMPRESO','ENTREGADO','GENERADO'])
             def _pill_state(v):
                 vv = str(v or 'PENDIENTE').upper()
                 ok = vv in ['FIRMADO','ARCHIVADO','GENERADO','ENVIADO','COMPLETO','COMPLETADO','CAPTURADA','IMPRESO','ENTREGADO','APTO','REGISTRADO']
@@ -10074,7 +10077,7 @@ html,body{overflow-x:hidden!important;}
                   <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver detalle</a></td>
                   <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='anular_ingreso_admin'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='hidden' name='motivo_anulacion' value='Anulado desde Datos Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td>
                 </tr>""")
-            tabla_rows = ''.join(rows) or "<tr><td colspan='15' style='padding:28px;text-align:center;color:#64748b;font-weight:900'>Seleccione un requerimiento para visualizar los postulantes vinculados al ticket.</td></tr>"
+            tabla_rows = ''.join(rows) or "<tr><td colspan='16' style='padding:28px;text-align:center;color:#64748b;font-weight:900'>Seleccione un requerimiento para visualizar los postulantes vinculados al ticket.</td></tr>"
             content=wrap(f"""
             <style>
             .datos-kpi{{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin:14px 0 18px}}
