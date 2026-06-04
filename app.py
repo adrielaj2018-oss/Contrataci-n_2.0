@@ -597,17 +597,22 @@ def fotocheck_get(row, key, default=''):
 
 
 def fotocheck_preview_html(row=None, dni_override=''):
-    """Vista previa profesional del fotocheck con logo/curvas oficiales y QR = DNI."""
+    """Vista previa profesional del fotocheck con diseño similar al formato real PRIZE y QR = DNI."""
     dni_raw = clean(dni_override) or clean(fotocheck_get(row, 'dni')) or '7432403'
     dni_qr = re.sub(r'\D', '', dni_raw) or dni_raw
-    trabajador = h(fotocheck_get(row, 'trabajador', 'POSTULANTE DE PRUEBA') or 'POSTULANTE DE PRUEBA')
+    trabajador_raw = clean(fotocheck_get(row, 'trabajador', 'POSTULANTE DE PRUEBA') or 'POSTULANTE DE PRUEBA')
+    partes_nombre = trabajador_raw.upper().split()
+    if len(partes_nombre) >= 4:
+        nombre_lineas = ' '.join(partes_nombre[:2]) + '<br>' + ' '.join(partes_nombre[2:])
+    else:
+        nombre_lineas = h(trabajador_raw.upper())
     cargo = h(fotocheck_get(row, 'cargo', 'CARGO PENDIENTE') or 'CARGO PENDIENTE')
     area = h(fotocheck_get(row, 'area', 'ÁREA PENDIENTE') or 'ÁREA PENDIENTE')
     req = h(fotocheck_get(row, 'requerimiento', 'DEMO-FOTOCHECK') or 'DEMO-FOTOCHECK')
     empresa = h(fotocheck_get(row, 'empresa', 'PRIZE SUPERFRUITS') or 'PRIZE SUPERFRUITS')
     actividad = h(fotocheck_get(row, 'actividad', '') or '')
     fecha_ingreso = h(fecha_sin_hora(fotocheck_get(row, 'fecha_ingreso', '')) or '')
-    qr_svg = fotocheck_qr_svg(dni_qr, 176)
+    qr_svg = fotocheck_qr_svg(dni_qr, 158)
     foto_src = ''
     try:
         row_dni = clean(fotocheck_get(row, 'dni'))
@@ -624,45 +629,47 @@ def fotocheck_preview_html(row=None, dni_override=''):
     <style>
     *{{box-sizing:border-box}}body{{margin:0;background:#eef4f8;font-family:Arial,Helvetica,sans-serif;color:#08213e}}
     .page{{padding:22px;display:flex;gap:24px;align-items:flex-start;justify-content:center;flex-wrap:wrap}}
-    .toolbar{{width:100%;max-width:860px;margin:0 auto 10px;display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:12px 16px;box-shadow:0 8px 22px rgba(15,23,42,.08)}}
+    .toolbar{{width:100%;max-width:920px;margin:0 auto 10px;display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:12px 16px;box-shadow:0 8px 22px rgba(15,23,42,.08)}}
     .btn{{border:0;border-radius:12px;background:#0b66b2;color:#fff;font-weight:900;padding:10px 16px;cursor:pointer;text-decoration:none}}.btn.gray{{background:#e8eef5;color:#08213e}}
-    .card{{width:54mm;height:86mm;background:#fff;border:1.2px solid #d7dee8;border-radius:5px;position:relative;overflow:hidden;box-shadow:0 16px 34px rgba(15,23,42,.16)}}
-    .brand-logo{{position:absolute;left:5mm;top:4mm;width:31mm;height:auto;z-index:4}}
-    .curve-top{{position:absolute;left:0;top:0;width:100%;height:22mm;object-fit:cover;object-position:left top;z-index:1;opacity:.96}}
-    .curve-bottom{{position:absolute;left:0;bottom:0;width:100%;height:24mm;object-fit:cover;object-position:center bottom;z-index:1;opacity:.98}}
-    .front-body{{position:absolute;inset:21mm 5mm 12mm;z-index:3;text-align:center}}
-    .fc-name{{font-size:10.8px;line-height:1.15;color:#18346b;font-weight:950;text-transform:uppercase;min-height:25px;display:flex;align-items:center;justify-content:center}}
-    .fc-dni{{font-size:11px;color:#0b66b2;font-weight:950;margin:1.8mm 0 2.8mm}}
-    .fc-photo{{width:28mm;height:33mm;object-fit:cover;border-radius:3px;margin:auto;display:block;background:#e5edf5;border:1px solid #dbe3ef}}
-    .fc-photo.no{{display:flex;align-items:center;justify-content:center;color:#991b1b;font-weight:950;background:#fee2e2;border:1px solid #fecaca}}
-    .fc-cargo{{margin-top:4.5mm;color:#18346b;font-size:9px;font-weight:950;text-transform:uppercase}}
+    .card{{width:54mm;height:86mm;background:#fff;border:1.2px solid #9aa7b8;border-radius:4px;position:relative;overflow:hidden;box-shadow:0 16px 34px rgba(15,23,42,.16)}}
+    .card:after{{content:'';position:absolute;inset:1.8mm;border:1px dashed rgba(15,23,42,.35);border-radius:3px;pointer-events:none;z-index:8}}
+    .front .brand-logo{{position:absolute;left:4.8mm;top:3.2mm;width:28mm;height:auto;z-index:5}}
+    .front .curve-top{{position:absolute;left:0;top:0;width:100%;height:18mm;object-fit:cover;object-position:left top;z-index:1;opacity:.98}}
+    .front .curve-bottom{{position:absolute;left:0;bottom:0;width:100%;height:20mm;object-fit:cover;object-position:center bottom;z-index:1;opacity:.98}}
+    .front-body{{position:absolute;inset:20mm 5mm 10mm;z-index:4;text-align:center}}
+    .fc-name{{font-size:10.8px;line-height:1.22;color:#18346b;font-weight:950;text-transform:uppercase;min-height:25px;display:flex;align-items:center;justify-content:center}}
+    .fc-dni{{font-size:11.2px;color:#18346b;font-weight:950;margin:1.5mm 0 2.5mm}}
+    .fc-photo{{width:30mm;height:37mm;object-fit:cover;border-radius:2px;margin:auto;display:block;background:#e5edf5;border:1px solid #cfd8e3}}
+    .fc-photo.no{{display:flex;align-items:center;justify-content:center;color:#991b1b;font-weight:950;background:#fff1f2;border:1px solid #fecaca;font-size:15px;line-height:1.25}}
+    .fc-cargo{{margin-top:4.2mm;color:#18346b;font-size:9px;font-weight:950;text-transform:uppercase}}
     .fc-area{{margin-top:1mm;color:#4b6280;font-size:7px;font-weight:900;text-transform:uppercase}}
-    .footer-strip{{position:absolute;left:5mm;right:5mm;bottom:4mm;z-index:4;color:#fff;font-weight:900;font-size:6.2px;text-align:center;letter-spacing:.3px}}
-    .back-body{{position:absolute;inset:18mm 5mm 12mm;z-index:3;text-align:center}}
-    .qrbox{{display:flex;justify-content:center;margin:0 0 2mm}}.qrbox svg{{width:35mm!important;height:35mm!important}}
-    .code{{font-size:7px;color:#18346b;font-weight:950;font-style:italic;margin-bottom:3mm}}
-    .dni-note{{font-size:6px;color:#64748b;font-weight:800;margin-top:-2mm;margin-bottom:2mm}}
-    .values{{display:grid;grid-template-columns:1fr 1fr;gap:2.4mm 2mm;margin:0 1mm 3mm}}
-    .value{{display:flex;align-items:center;gap:1.8mm;font-size:6.2px;color:#18346b;font-weight:900;text-transform:uppercase;justify-content:center}}
-    .value i{{width:6.4mm;height:6.4mm;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-size:9px;background:#35a853}}.value:nth-child(2) i{{background:#f59e0b}}.value:nth-child(3) i{{background:#0b66b2}}.value:nth-child(4) i{{background:#d7481f}}
-    .web{{font-size:6.7px;color:#18346b;font-weight:900}}.back-logo{{position:absolute;right:5mm;bottom:5mm;width:24mm;z-index:4;filter:drop-shadow(0 2px 2px rgba(0,0,0,.2))}}
-    .meta{{width:100%;max-width:860px;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:14px;color:#475569;font-size:13px}}
+    .back .curve-top{{position:absolute;right:0;top:0;width:100%;height:20mm;object-fit:cover;object-position:right top;z-index:1;opacity:.98;transform:scaleX(-1)}}
+    .back .curve-bottom{{position:absolute;left:0;bottom:0;width:100%;height:24mm;object-fit:cover;object-position:center bottom;z-index:1;opacity:.98}}
+    .back-body{{position:absolute;inset:12mm 5mm 16mm;z-index:4;text-align:center}}
+    .qrbox{{display:flex;justify-content:center;margin:5mm 0 2.5mm}}.qrbox svg{{width:34mm!important;height:34mm!important}}
+    .code{{font-size:7.2px;color:#18346b;font-weight:950;font-style:italic;margin:0 0 2mm}}
+    .dni-note{{font-size:6.1px;color:#64748b;font-weight:800;margin-bottom:2mm}}
+    .values{{display:grid;grid-template-columns:1fr 1fr;gap:2.2mm 2mm;margin:0 0 2mm}}
+    .value{{display:flex;align-items:center;gap:1.2mm;font-size:5.9px;color:#18346b;font-weight:900;text-transform:uppercase;justify-content:center;white-space:nowrap}}
+    .value i{{width:5.5mm;height:5.5mm;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-size:8px;background:#35a853}}.value:nth-child(2) i{{background:#f59e0b}}.value:nth-child(3) i{{background:#0b66b2}}.value:nth-child(4) i{{background:#d7481f}}
+    .web{{font-size:6.8px;color:#18346b;font-weight:900}}.back-logo{{position:absolute;right:4mm;bottom:4.5mm;width:28mm;z-index:5;filter:drop-shadow(0 2px 2px rgba(0,0,0,.15))}}
+    .meta{{width:100%;max-width:920px;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:14px;color:#475569;font-size:13px}}
     .print-sheet{{width:100%;display:flex;gap:12mm;justify-content:center;flex-wrap:wrap}}
+    .warn{{color:#991b1b;font-weight:900}}
     @page{{size:A4;margin:10mm}}@media print{{body{{background:#fff}}.toolbar,.meta{{display:none}}.page{{padding:0;gap:8mm;justify-content:flex-start}}.card{{box-shadow:none;break-inside:avoid}}.print-sheet{{justify-content:flex-start}}}}
     </style></head><body>
-    <div class='toolbar'><b>Vista previa de fotocheck: {trabajador}</b><div><a class='btn gray' href='/admin/contratacion?sec=fotocheck&req={req}'>Volver</a> <button class='btn' onclick='window.print()'>Imprimir / guardar PDF</button></div></div>
+    <div class='toolbar'><b>Vista previa de fotocheck: {h(trabajador_raw.upper())}</b><div><a class='btn gray' href='/admin/contratacion?sec=fotocheck&req={req}'>Volver</a> <button class='btn' onclick='window.print()'>Imprimir / guardar PDF</button></div></div>
     <div class='page'>
       <div class='print-sheet'>
         <div class='card front'>
           <img src='{curva1}' class='curve-top'><img src='{curva2}' class='curve-bottom'><img src='{logo}' class='brand-logo'>
-          <div class='front-body'><div class='fc-name'>{trabajador}</div><div class='fc-dni'>DNI {h(dni_qr)}</div>{foto_html}<div class='fc-cargo'>{cargo}</div><div class='fc-area'>{area}</div></div>
-          <div class='footer-strip'>{empresa}</div>
+          <div class='front-body'><div class='fc-name'>{nombre_lineas}</div><div class='fc-dni'>{h(dni_qr)}</div>{foto_html}<div class='fc-cargo'>{cargo}</div><div class='fc-area'>{area}</div></div>
         </div>
         <div class='card back'>
-          <img src='{curva1}' class='curve-top'><img src='{curva2}' class='curve-bottom'><div class='back-body'><div class='qrbox'>{qr_svg}</div><div class='code'>Código QR de identificación</div><div class='dni-note'>QR = DNI: {h(dni_qr)}</div><div class='values'><div class='value'><i>✓</i>Visión de futuro</div><div class='value'><i>◎</i>Cercanía</div><div class='value'><i>◉</i>Transparencia</div><div class='value'><i>♥</i>Pasión</div></div><div class='web'>www.prizesuperfruits.com</div></div><img src='{logo}' class='back-logo'>
+          <img src='{curva1}' class='curve-top'><img src='{curva2}' class='curve-bottom'><div class='back-body'><div class='qrbox'>{qr_svg}</div><div class='code'>Código Único de Acceso y Control</div><div class='dni-note'>QR = DNI: {h(dni_qr)}</div><div class='values'><div class='value'><i>✓</i>Visión de futuro</div><div class='value'><i>◎</i>Cercanía</div><div class='value'><i>◉</i>Transparencia</div><div class='value'><i>♥</i>Pasión</div></div><div class='web'>www.prizesuperfruits.com</div></div><img src='{logo}' class='back-logo'>
         </div>
       </div>
-      <div class='meta'><b>QR/DNI:</b> {h(dni_qr)} &nbsp; <b>Requerimiento:</b> {req} &nbsp; <b>Empresa:</b> {empresa} &nbsp; <b>Ingreso:</b> {fecha_ingreso or '-'}<br><b>Actividad:</b> {actividad or '-'}. Validación: no imprimir si falta foto, DNI, nombre o cargo.</div>
+      <div class='meta'><b>QR/DNI:</b> {h(dni_qr)} &nbsp; <b>Requerimiento:</b> {req} &nbsp; <b>Empresa:</b> {empresa} &nbsp; <b>Ingreso:</b> {fecha_ingreso or '-'}<br><b>Actividad:</b> {actividad or '-'}. <span class='warn'>Regla:</span> no imprimir si falta foto, DNI, nombre o cargo.</div>
     </div></body></html>
     """
     return html_out
@@ -1606,7 +1613,7 @@ def zebra_validar_campos_config(cfg):
     faltan = []
     if not impresora:
         faltan.append('nombre exacto de impresora')
-    if 'RED' in tipo:
+    if 'RED' in tipo or 'WIFI' in tipo or '/ IP' in tipo:
         if not ip: faltan.append('IP de impresora')
         if not puerto: faltan.append('puerto de red')
     elif 'BLUETOOTH' in tipo:
@@ -1635,8 +1642,8 @@ def zebra_probar_conexion_real(cfg):
     ip = get('ip_impresora')
     puerto = get('puerto')
     if es_entorno_render():
-        return 'PRUEBA LÓGICA / REQUIERE PC LOCAL', 'Render no puede detectar tu Zebra física. Esta prueba solo valida campos y genera archivo; la impresión real queda bloqueada hasta ejecutar el sistema en la PC local o usar un servicio local de impresión.', False
-    if 'RED' in tipo:
+        return 'PRUEBA LÓGICA / REQUIERE PC LOCAL', 'Render no puede detectar impresoras físicas conectadas a tu PC. Esta prueba solo valida campos y genera archivo; la impresión real queda bloqueada hasta ejecutar el sistema en la PC local o usar un servicio local de impresión.', False
+    if 'RED' in tipo or 'WIFI' in tipo or '/ IP' in tipo:
         try:
             import socket
             with socket.create_connection((ip, int(puerto)), timeout=3):
@@ -1668,6 +1675,83 @@ def zebra_probar_conexion_real(cfg):
 
 def zebra_permite_impresion(estado):
     return clean(estado).upper() == 'LISTA PARA IMPRIMIR'
+
+
+
+def fotocheck_cfg_tipo_normalizado(cfg):
+    try:
+        return clean(cfg['tipo_conexion']).upper()
+    except Exception:
+        return clean(getattr(cfg, 'tipo_conexion', '')).upper()
+
+
+def fotocheck_generar_lote_html(seleccionados, cfg=None, lote=''):
+    """Genera un HTML imprimible en A4 con anverso/reverso. Sirve para impresora de papel, PDF y cola local."""
+    salida = None
+    try:
+        ruta = cfg['ruta_salida'] if cfg and 'ruta_salida' in cfg.keys() else ''
+    except Exception:
+        ruta = ''
+    salida = Path(ruta or (UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'))
+    salida.mkdir(parents=True, exist_ok=True)
+    lote = clean(lote) or ('FOTO-' + now_file())
+    cards=[]
+    for r in seleccionados:
+        cards.append(fotocheck_preview_html(r))
+    # Extrae solo los bloques de tarjetas de cada preview para formar lote.
+    body_cards=[]
+    for html_card in cards:
+        m = re.search(r"<div class='print-sheet'>(.*?)</div>\s*<div class='meta'", html_card, re.S)
+        body_cards.append(m.group(1) if m else html_card)
+    html_lote = f"""<!doctype html><html><head><meta charset='utf-8'><title>Lote Fotocheck {h(lote)}</title>
+    <style>body{{font-family:Arial,Helvetica,sans-serif;background:#fff;margin:0;padding:10mm}}.sheet{{display:flex;gap:8mm;flex-wrap:wrap;align-items:flex-start}}.break{{break-after:page;width:100%;height:1px}}@page{{size:A4;margin:10mm}}</style></head>
+    <body><h3 style='margin:0 0 8mm;color:#18346b'>Lote fotocheck {h(lote)}</h3><div class='sheet'>{''.join(body_cards)}</div><script>window.onload=function(){{setTimeout(function(){{window.print()}},500)}}</script></body></html>"""
+    path = salida / secure_filename(f'LOTE_FOTOCHECK_{lote}_{now_file()}.html')
+    path.write_text(html_lote, encoding='utf-8')
+    return path
+
+
+def fotocheck_enviar_prueba_impresora(cfg, contenido='PRUEBA FOTOCHECK PRIZE'):
+    """Prueba de salida: Windows/USB, RED-IP/WIFI y Bluetooth COM. En servidor cloud solo genera archivo."""
+    estado, detalle, permite = zebra_probar_conexion_real(cfg)
+    if not permite:
+        return estado, detalle, False
+    tipo = fotocheck_cfg_tipo_normalizado(cfg)
+    impresora = clean(cfg['impresora_nombre']) if 'impresora_nombre' in cfg.keys() else 'Zebra ZC300'
+    ip = clean(cfg['ip_impresora']) if 'ip_impresora' in cfg.keys() else ''
+    puerto = clean(cfg['puerto']) if 'puerto' in cfg.keys() else ''
+    data = (contenido + '\nFecha: ' + now_txt() + '\n').encode('utf-8', errors='ignore')
+    if 'RED' in tipo or 'WIFI' in tipo or '/ IP' in tipo:
+        try:
+            import socket
+            with socket.create_connection((ip, int(puerto or 9100)), timeout=4) as s:
+                s.sendall(data)
+            return 'LISTA PARA IMPRIMIR', f'Prueba enviada por red/WiFi a {ip}:{puerto or 9100}.', True
+        except Exception as e:
+            return 'ERROR DE ENVÍO', f'Conexión válida, pero falló el envío a {ip}:{puerto or 9100}: {e}', False
+    if 'BLUETOOTH' in tipo:
+        try:
+            import serial  # type: ignore
+            ser = serial.Serial(puerto, timeout=2)
+            ser.write(data)
+            ser.close()
+            return 'LISTA PARA IMPRIMIR', f'Prueba enviada por Bluetooth/COM a {puerto}.', True
+        except Exception as e:
+            return 'ERROR DE ENVÍO', f'No se pudo enviar por Bluetooth/COM {puerto}: {e}', False
+    try:
+        import win32print  # type: ignore
+        hprinter = win32print.OpenPrinter(impresora)
+        try:
+            job = win32print.StartDocPrinter(hprinter, 1, ('PRUEBA FOTOCHECK PRIZE', None, 'RAW'))
+            win32print.StartPagePrinter(hprinter)
+            win32print.WritePrinter(hprinter, data)
+            win32print.EndPagePrinter(hprinter)
+            win32print.EndDocPrinter(hprinter)
+        finally:
+            win32print.ClosePrinter(hprinter)
+        return 'LISTA PARA IMPRIMIR', f'Prueba enviada a la cola Windows: {impresora}.', True
+    except Exception as e:
+        return 'ERROR DE ENVÍO', f'No se pudo enviar a cola Windows {impresora}: {e}', False
 
 
 
@@ -2360,7 +2444,7 @@ def init_db():
             if not existe_cfg_zebra:
                 con.execute('''INSERT INTO fotocheck_zebra_config(impresora_nombre,tipo_conexion,bluetooth_nombre,bluetooth_mac,ip_impresora,puerto,tamano_tarjeta,orientacion,caras,copias,plantilla_diseno,ruta_salida,estado_conexion,observacion,fecha_actualizacion,actualizado_por)
                                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                            ('Zebra ZC300','COLA WINDOWS / USB','','','','','CR80','Horizontal','Frente',1,'PRIZE - ANVERSO/REVERSO QR',str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),'NO CONFIGURADA','Configurar según la PC donde esté instalada la impresora. No se permite impresión hasta validar conexión real.',now_txt(),'SISTEMA'))
+                            ('Zebra ZC300','IMPRESORA PAPEL - NAVEGADOR/PDF','','','','','CR80','Horizontal','Frente',1,'PRIZE - ANVERSO/REVERSO QR',str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion'),'NO CONFIGURADA','Configurar según la PC donde esté instalada la impresora. No se permite impresión hasta validar conexión real.',now_txt(),'SISTEMA'))
         except Exception:
             pass
 
@@ -7648,7 +7732,7 @@ def admin_contratacion():
             req_return = clean(request.form.get('req_return'))
             cfg = {
                 'impresora_nombre': clean(request.form.get('impresora_nombre')) or 'Zebra ZC300',
-                'tipo_conexion': clean(request.form.get('tipo_conexion')) or 'COLA WINDOWS / USB',
+                'tipo_conexion': clean(request.form.get('tipo_conexion')) or 'IMPRESORA PAPEL - NAVEGADOR/PDF',
                 'bluetooth_nombre': clean(request.form.get('bluetooth_nombre')),
                 'bluetooth_mac': clean(request.form.get('bluetooth_mac')),
                 'ip_impresora': clean(request.form.get('ip_impresora')),
@@ -7707,11 +7791,11 @@ def admin_contratacion():
             with db() as con_cfg:
                 cfg_zebra_actual = con_cfg.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
             impresora = clean(request.form.get('impresora')) or (cfg_zebra_actual['impresora_nombre'] if cfg_zebra_actual else 'Zebra ZC300')
-            tipo_conexion_actual = cfg_zebra_actual['tipo_conexion'] if cfg_zebra_actual else 'COLA WINDOWS / USB'
+            tipo_conexion_actual = cfg_zebra_actual['tipo_conexion'] if cfg_zebra_actual else 'IMPRESORA PAPEL - NAVEGADOR/PDF'
             estado_conexion_actual = (cfg_zebra_actual['estado_conexion'] if cfg_zebra_actual else 'NO CONFIGURADA')
             lote = clean(request.form.get('lote_impresion')) or ('FOTO-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
             if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO'] and not zebra_permite_impresion(estado_conexion_actual):
-                flash('Impresión bloqueada: la Zebra debe estar en estado LISTA PARA IMPRIMIR. En Render no se puede validar una impresora física; ejecute en la PC local o use un servicio local de impresión.', 'error')
+                flash('Impresión bloqueada: la impresora debe estar en estado LISTA PARA IMPRIMIR. Para papel también puede usar Vista previa > Imprimir/guardar PDF desde el navegador. En Render no se puede validar una impresora física; ejecute en la PC local o use un servicio local de impresión.', 'error')
                 return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
             if not ids:
                 flash('Seleccione trabajadores para actualizar Fotocheck.', 'error')
@@ -7719,6 +7803,12 @@ def admin_contratacion():
             with db() as con:
                 q = ','.join(['?'] * len(ids))
                 seleccionados = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q})', ids).fetchall()
+                lote_html_path = ''
+                if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO']:
+                    try:
+                        lote_html_path = str(fotocheck_generar_lote_html(seleccionados, cfg_zebra_actual, lote))
+                    except Exception as e:
+                        lote_html_path = 'No se pudo generar lote HTML: ' + str(e)
                 actualizados = 0
                 bloqueados = 0
                 for r in seleccionados:
@@ -7746,7 +7836,7 @@ def admin_contratacion():
                          session.get('admin_user','admin')))
                     if nuevo_estado in ['ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO']:
                         con.execute('''INSERT INTO fotocheck_zebra_historial(dni,trabajador,requerimiento,accion,impresora,tipo_conexion,lote_impresion,estado,detalle,fecha,usuario) VALUES(?,?,?,?,?,?,?,?,?,?,?)''',
-                                    (r['dni'], r['trabajador'], r['requerimiento'], nuevo_estado, impresora, tipo_conexion_actual, lote, nuevo_estado, clean(request.form.get('observacion')), now_txt(), session.get('admin_user','admin')))
+                                    (r['dni'], r['trabajador'], r['requerimiento'], nuevo_estado, impresora, tipo_conexion_actual, lote, nuevo_estado, (clean(request.form.get('observacion')) + (' | Lote imprimible: ' + lote_html_path if lote_html_path else '')), now_txt(), session.get('admin_user','admin')))
                     actualizados += 1
                 con.commit()
             msg = f'Fotocheck actualizado: {actualizados} trabajador(es).'
@@ -10341,7 +10431,7 @@ html,body{overflow-x:hidden!important;}
                     cfg_obs = detalle_minimo_zebra
                 elif es_entorno_render() and cfg_estado in ['DETECTADA / LISTA','CONFIGURADA','LISTA PARA IMPRIMIR']:
                     cfg_estado = 'PRUEBA LÓGICA / REQUIERE PC LOCAL'
-                    cfg_obs = 'Render no puede detectar ni usar la Zebra física. La impresión real permanece bloqueada.'
+                    cfg_obs = 'Render no puede detectar ni usar la impresora física. La impresión real permanece bloqueada.'
             def _sel(a,b): return 'selected' if str(a).upper()==str(b).upper() else ''
             cfg_estado_class = 'ok' if zebra_permite_impresion(cfg_estado) else ('warn' if cfg_estado in ['PENDIENTE DE PRUEBA LOCAL','PENDIENTE DE PRUEBA REAL','PRUEBA LÓGICA / REQUIERE PC LOCAL'] else 'bad')
             hist_rows = ''.join([f"<tr><td>{h(x['fecha'])}</td><td>{h(x['accion'])}</td><td>{h(x['impresora'])}</td><td>{h(x['tipo_conexion'])}</td><td>{h(x['estado'])}</td><td>{h(x['detalle'])}</td></tr>" for x in hist_zebra]) or "<tr><td colspan='6'>Sin pruebas ni impresiones registradas.</td></tr>"
@@ -10379,9 +10469,9 @@ html,body{overflow-x:hidden!important;}
             <div class='dash-hero' style='margin-bottom:18px'>
               <div>
                 <h1>Fotocheck por Requerimiento</h1>
-                <p class='muted2'>Flujo conectado: Requerimiento → Postulantes → Foto → Validación → Impresión Zebra ZC300 → Cargo firmado → Entregado.</p>
+                <p class='muted2'>Flujo conectado: Requerimiento → Postulantes → Foto → Validación → Vista previa → Impresión papel/PDF o Zebra ZC300 → Cargo firmado → Entregado.</p>
               </div>
-              <span class='status-pill {cfg_estado_class}'>Zebra: {h(cfg_estado)}</span>
+              <span class='status-pill {cfg_estado_class}'>Impresión: {h(cfg_estado)}</span>
             </div>
             <div class='foto-design-panel'>
               <div class='design-copy'>
@@ -10395,10 +10485,17 @@ html,body{overflow-x:hidden!important;}
             <div class='foto-flow'><div>1. Ticket</div><div>2. Postulantes</div><div>3. Foto</div><div>4. Validación</div><div>5. Vista previa</div><div>6. Zebra/PDF</div></div>
             <form method='post' class='zebra-config'>
               <input type='hidden' name='req_return' value='{h(req_actual)}'>
-              <div class='zebra-status'><h3 style='margin:0'>Configuración Zebra ZC300</h3><span class='status-pill {cfg_estado_class}'>{h(cfg_estado)}</span><small class='muted2'>Soporta cola Windows/USB, red y Bluetooth emparejado.</small></div>
+              <div class='zebra-status'><h3 style='margin:0'>Configuración de impresión Fotocheck</h3><span class='status-pill {cfg_estado_class}'>{h(cfg_estado)}</span><small class='muted2'>Soporta papel por navegador/PDF, papel por Windows/USB, papel por red/WiFi, Zebra ZC300 por Windows/USB, WiFi/IP o Bluetooth emparejado.</small></div>
               <div class='zebra-grid'>
                 <label>Nombre exacto impresora Windows<input name='impresora_nombre' value='{h(cfg_impresora)}' placeholder='Ej. Zebra ZC300'></label>
-                <label>Tipo conexión<select name='tipo_conexion'><option {_sel(cfg_tipo,'COLA WINDOWS / USB')}>COLA WINDOWS / USB</option><option {_sel(cfg_tipo,'RED / IP')}>RED / IP</option><option {_sel(cfg_tipo,'BLUETOOTH')}>BLUETOOTH</option></select></label>
+                <label>Tipo conexión<select name='tipo_conexion'>
+                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL - NAVEGADOR/PDF')}>IMPRESORA PAPEL - NAVEGADOR/PDF</option>
+                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL WINDOWS/USB')}>IMPRESORA PAPEL WINDOWS/USB</option>
+                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL RED/IP - WIFI')}>IMPRESORA PAPEL RED/IP - WIFI</option>
+                  <option {_sel(cfg_tipo,'ZEBRA ZC300 WINDOWS/USB')}>ZEBRA ZC300 WINDOWS/USB</option>
+                  <option {_sel(cfg_tipo,'ZEBRA ZC300 WIFI/IP')}>ZEBRA ZC300 WIFI/IP</option>
+                  <option {_sel(cfg_tipo,'ZEBRA ZC300 BLUETOOTH')}>ZEBRA ZC300 BLUETOOTH</option>
+                </select></label>
                 <label>Bluetooth nombre<input name='bluetooth_nombre' value='{h(cfg_bt_nombre)}' placeholder='Ej. ZC300-BT'></label>
                 <label>Bluetooth MAC / ID<input name='bluetooth_mac' value='{h(cfg_bt_mac)}' placeholder='Ej. 00:11:22:AA:BB:CC'></label>
                 <label>IP impresora<input name='ip_impresora' value='{h(cfg_ip)}' placeholder='Solo si es red'></label>
