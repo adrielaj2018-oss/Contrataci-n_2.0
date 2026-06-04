@@ -1799,6 +1799,28 @@ def sincronizar_jefes_vacaciones(con):
     except Exception:
         pass
 
+
+# =============================
+# HELPERS GLOBALES TEMPRANOS
+# =============================
+def row_get(row, key, default=''):
+    """Lectura segura de sqlite3.Row/dict.
+    Debe existir antes de init_db(), porque init_db lo usa durante el arranque en Render.
+    """
+    try:
+        if row is None:
+            return default
+        if hasattr(row, 'keys') and key in row.keys():
+            val = row[key]
+            return val if val is not None else default
+        if isinstance(row, dict):
+            val = row.get(key, default)
+            return val if val is not None else default
+    except Exception:
+        pass
+    return default
+
+
 def init_db():
     with db() as con:
         con.execute("""
@@ -5323,7 +5345,7 @@ def admin_login():
             user = con.execute("SELECT * FROM usuarios_admin WHERE usuario=? AND activo=1", (u,)).fetchone()
         if not user or not check_password_hash(user['clave_hash'], c):
             return login_template(True, 'Usuario o clave incorrecta.')
-        session.clear(); session['admin_id']=userow_get(r,'id'); session['admin_user']=user['usuario']; session['admin_nombre']=user['nombre']
+        session.clear(); session['admin_id']=row_get(user,'id'); session['admin_user']=user['usuario']; session['admin_nombre']=user['nombre']
         return redirect(url_for('admin'))
     return login_template(True)
 
