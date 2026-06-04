@@ -597,8 +597,8 @@ def fotocheck_get(row, key, default=''):
 
 
 def fotocheck_preview_html(row=None, dni_override=''):
-    """Vista previa profesional del fotocheck PRIZE: formato real, QR = DNI y listo para PDF/impresión."""
-    dni_raw = clean(dni_override) or clean(fotocheck_get(row, 'dni')) or '7432403'
+    """Vista previa profesional del fotocheck PRIZE: diseño vertical CR80, QR = DNI y listo para PDF/impresión."""
+    dni_raw = clean(dni_override) or clean(fotocheck_get(row, 'dni')) or '74324033'
     dni_qr = re.sub(r'\D', '', dni_raw) or dni_raw
     trabajador_raw = clean(fotocheck_get(row, 'trabajador', 'POSTULANTE DE PRUEBA') or 'POSTULANTE DE PRUEBA')
     partes = trabajador_raw.upper().split()
@@ -629,33 +629,33 @@ def fotocheck_preview_html(row=None, dni_override=''):
     html_out = f"""
     <!doctype html><html><head><meta charset='utf-8'><title>Fotocheck {h(dni_qr)}</title>
     <style>
-    *{{box-sizing:border-box}}body{{margin:0;background:#edf6f4;font-family:Arial,Helvetica,sans-serif;color:#08213e}}
+    *{{box-sizing:border-box}}body{{margin:0;background:#eef6f7;font-family:Arial,Helvetica,sans-serif;color:#08213e}}
     .page{{padding:24px;display:flex;gap:24px;align-items:flex-start;justify-content:center;flex-wrap:wrap}}
     .toolbar{{width:100%;max-width:980px;margin:0 auto 14px;display:flex;justify-content:space-between;gap:10px;align-items:center;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:12px 16px;box-shadow:0 8px 22px rgba(15,23,42,.08)}}
     .btn{{border:0;border-radius:12px;background:#0b66b2;color:#fff;font-weight:900;padding:10px 16px;cursor:pointer;text-decoration:none}}.btn.gray{{background:#e8eef5;color:#08213e}}
     .print-sheet{{width:100%;display:flex;gap:14mm;justify-content:center;flex-wrap:wrap}}
-    .card{{width:54mm;height:86mm;background:#fff;border:1.1px solid #7d8ca5;border-radius:4.5mm;position:relative;overflow:hidden;box-shadow:0 16px 34px rgba(15,23,42,.16)}}
-    .card:after{{content:'';position:absolute;inset:2mm;border:1px dashed rgba(15,23,42,.34);border-radius:3.6mm;pointer-events:none;z-index:20}}
-    .curve-top{{position:absolute;left:0;top:0;width:100%;height:18mm;object-fit:cover;object-position:center top;z-index:1;opacity:.92}}
-    .curve-bottom{{position:absolute;left:0;bottom:0;width:100%;height:19mm;object-fit:cover;object-position:center bottom;z-index:1;opacity:.98}}
-    .front .brand-logo{{position:absolute;left:5.4mm;top:6.6mm;width:31mm;height:auto;z-index:5}}
-    .front-body{{position:absolute;left:4.8mm;right:4.8mm;top:27mm;bottom:8mm;z-index:6;text-align:center}}
-    .fc-name{{font-size:10.3px;line-height:1.22;color:#18266f;font-weight:950;text-transform:uppercase;min-height:26px;display:flex;align-items:center;justify-content:center;letter-spacing:.15px}}
-    .fc-dni{{font-size:11.6px;color:#0e2b7b;font-weight:950;margin:1.6mm 0 2.6mm;letter-spacing:.25px}}
-    .fc-photo{{width:31.5mm;height:39mm;object-fit:cover;object-position:center top;border-radius:2px;margin:auto;display:block;background:#eef2f7;border:1px solid #c8d2df}}
-    .fc-photo.no{{display:flex;align-items:center;justify-content:center;color:#64748b;font-weight:950;background:#f8fafc;border:1px solid #d8e1ec;font-size:12px;line-height:1.25}}
-    .fc-cargo{{margin-top:4mm;color:#18266f;font-size:8.4px;font-weight:950;text-transform:uppercase;letter-spacing:.15px}}
-    .fc-area{{margin-top:1mm;color:#4b6280;font-size:6.8px;font-weight:900;text-transform:uppercase}}
-    .back .curve-top{{position:absolute;right:0;top:0;width:100%;height:20mm;object-fit:cover;object-position:right top;z-index:1;opacity:.95;transform:scaleX(-1)}}
-    .back .curve-bottom{{height:23mm}}
-    .back-body{{position:absolute;left:5mm;right:5mm;top:11mm;bottom:19mm;z-index:6;text-align:center}}
-    .qrbox{{display:flex;justify-content:center;margin:4.5mm 0 3mm}}.qrbox svg{{width:34mm!important;height:34mm!important}}
-    .code{{font-size:7.4px;color:#18346b;font-weight:950;font-style:italic;margin:0 0 3mm}}
-    .dni-note{{font-size:6.2px;color:#64748b;font-weight:800;margin-bottom:2.5mm}}
-    .values{{display:grid;grid-template-columns:1fr 1fr;gap:2.2mm 2.5mm;margin:0 0 2.5mm}}
-    .value{{display:flex;align-items:center;gap:1.1mm;font-size:5.6px;color:#18346b;font-weight:950;text-transform:uppercase;justify-content:center;white-space:nowrap}}
-    .value i{{width:5.2mm;height:5.2mm;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-size:7.2px;background:#35a853}}.value:nth-child(2) i{{background:#f59e0b}}.value:nth-child(3) i{{background:#0b66b2}}.value:nth-child(4) i{{background:#d7481f}}
-    .web{{font-size:6.7px;color:#18346b;font-weight:950}}.back-logo{{position:absolute;right:4.2mm;bottom:5mm;width:24mm;z-index:7;filter:drop-shadow(0 2px 2px rgba(0,0,0,.12))}}
+    .card{{width:54mm;height:86mm;background:#fff;border:1px solid #91a2bc;border-radius:3.8mm;position:relative;overflow:hidden;box-shadow:0 18px 34px rgba(15,23,42,.18)}}
+    .card:after{{content:'';position:absolute;inset:1.7mm;border:1px dashed rgba(15,23,42,.22);border-radius:3.0mm;pointer-events:none;z-index:30}}
+    .curve-top{{position:absolute;left:0;top:0;width:100%;height:20.5mm;object-fit:cover;object-position:left top;z-index:1;opacity:1}}
+    .curve-bottom{{position:absolute;left:0;bottom:0;width:100%;height:21.5mm;object-fit:cover;object-position:right bottom;z-index:1;opacity:1}}
+    .front .brand-logo{{position:absolute;left:4.6mm;top:4.2mm;width:27mm;height:auto;z-index:6;filter:drop-shadow(0 1px 1px rgba(0,0,0,.10))}}
+    .front-body{{position:absolute;left:4.8mm;right:4.8mm;top:22.5mm;bottom:9mm;z-index:7;text-align:center}}
+    .fc-name{{font-size:9.6px;line-height:1.22;color:#192574;font-weight:950;text-transform:uppercase;min-height:23px;display:flex;align-items:center;justify-content:center;letter-spacing:.05px}}
+    .fc-dni{{font-size:10.7px;color:#0e2b7b;font-weight:950;margin:1.5mm 0 2.6mm;letter-spacing:.25px}}
+    .fc-photo{{width:29.5mm;height:35.5mm;object-fit:cover;object-position:center top;border-radius:1.4mm;margin:auto;display:block;background:#eef2f7;border:1px solid #c8d2df}}
+    .fc-photo.no{{display:flex;align-items:center;justify-content:center;color:#5c6f8a;font-weight:950;background:#f8fafc;border:1px solid #d8e1ec;font-size:11px;line-height:1.25}}
+    .fc-cargo{{margin-top:4mm;color:#192574;font-size:8.2px;font-weight:950;text-transform:uppercase;letter-spacing:.12px}}
+    .fc-area{{margin-top:1mm;color:#52657e;font-size:6.8px;font-weight:900;text-transform:uppercase}}
+    .back .curve-top{{right:0;left:auto;top:0;width:100%;height:20mm;object-position:right top;transform:scaleX(-1)}}
+    .back .curve-bottom{{height:24mm;object-position:right bottom}}
+    .back-body{{position:absolute;left:4.6mm;right:4.6mm;top:11.5mm;bottom:18mm;z-index:7;text-align:center}}
+    .qrbox{{display:flex;justify-content:center;margin:1.5mm 0 3mm}}.qrbox svg{{width:34mm!important;height:34mm!important}}
+    .code{{font-size:7.2px;color:#18346b;font-weight:950;font-style:italic;margin:0 0 2.8mm}}
+    .dni-note{{font-size:6px;color:#64748b;font-weight:800;margin-bottom:2.2mm}}
+    .values{{display:grid;grid-template-columns:1fr 1fr;gap:2mm 2.2mm;margin:0 0 2.4mm}}
+    .value{{display:flex;align-items:center;gap:1mm;font-size:5.15px;color:#18346b;font-weight:950;text-transform:uppercase;justify-content:center;white-space:nowrap}}
+    .value i{{width:5mm;height:5mm;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-style:normal;font-size:6.8px;background:#35a853}}.value:nth-child(2) i{{background:#f59e0b}}.value:nth-child(3) i{{background:#0b66b2}}.value:nth-child(4) i{{background:#d7481f}}
+    .web{{font-size:6.5px;color:#18346b;font-weight:950}}.back-logo{{position:absolute;right:3.8mm;bottom:3.3mm;width:25.5mm;z-index:8;filter:drop-shadow(0 2px 2px rgba(0,0,0,.12))}}
     .meta{{width:100%;max-width:980px;background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:14px;color:#475569;font-size:13px}}
     .warn{{color:#991b1b;font-weight:900}}
     @page{{size:A4;margin:10mm}}@media print{{body{{background:#fff}}.toolbar,.meta{{display:none}}.page{{padding:0;gap:8mm;justify-content:flex-start}}.card{{box-shadow:none;break-inside:avoid}}.print-sheet{{justify-content:flex-start}}}}
