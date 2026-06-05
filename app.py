@@ -11974,18 +11974,77 @@ html,body{overflow-x:hidden!important;}
         # Archivos Trabajador queda como expediente documental central del trabajador.
         # No pertenece solo a Contratación: recibe documentos de contratación, renovación,
         # firma, fotocheck, indumentaria, evaluación médica e inducción.
-        total_docs_arch = 0
-        docs_firmados_arch = 0
+        def _safe_count_arch(sql, params=()):
+            # Evita Internal Server Error cuando una BD antigua no tiene aún una tabla/columna nueva.
+            try:
+                with db() as con_arch:
+                    row = con_arch.execute(sql, params).fetchone()
+                    return int(row[0] or 0) if row else 0
+            except Exception as e:
+                try:
+                    print('ARCHIVOS TRABAJADOR - consulta omitida:', e)
+                except Exception:
+                    pass
+                return 0
+
+        def _tabla_existe_arch(nombre_tabla):
+            try:
+                with db() as con_arch:
+                    return bool(con_arch.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (nombre_tabla,)).fetchone())
+            except Exception:
+                return False
+
+        def _columnas_arch(nombre_tabla):
+            try:
+                with db() as con_arch:
+                    return {r[1] for r in con_arch.execute(f"PRAGMA table_info({nombre_tabla})").fetchall()}
+            except Exception:
+                return set()
+
+        total_docs_arch = _safe_count_arch("SELECT COUNT(*) FROM contratacion_docs") if _tabla_existe_arch('contratacion_docs') else 0
+        docs_firmados_arch = _safe_count_arch("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(estado,'')) LIKE '%FIRM%'") if _tabla_existe_arch('contratacion_docs') else 0
         docs_renov_arch = 0
+        if _tabla_existe_arch('contratacion_docs'):
+            cols_docs_arch = _columnas_arch('contratacion_docs')
+            conds_arch = []
+            if 'etapa' in cols_docs_arch:
+                conds_arch.append("UPPER(COALESCE(etapa,'')) LIKE '%RENOV%'")
+            if 'tipo_doc' in cols_docs_arch:
+                conds_arch.append("UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'")
+            if conds_arch:
+                docs_renov_arch = _safe_count_arch("SELECT COUNT(*) FROM contratacion_docs WHERE " + " OR ".join(conds_arch))
         docs_med_arch = 0
+        if _tabla_existe_arch('contratacion_medica'):
+            cols_med_arch = _columnas_arch('contratacion_medica')
+            conds_med_arch = []
+            if 'ruta_archivo' in cols_med_arch:
+                conds_med_arch.append("COALESCE(ruta_archivo,'')<>''")
+            if 'archivo_nombre' in cols_med_arch:
+                conds_med_arch.append("COALESCE(archivo_nombre,'')<>''")
+            docs_med_arch = _safe_count_arch("SELECT COUNT(*) FROM contratacion_medica" + (" WHERE " + " OR ".join(conds_med_arch) if conds_med_arch else ""))
+
+        docs_rows_arch = docs_rows
         try:
-            with db() as con_arch:
-                total_docs_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs").fetchone()[0]
-                docs_firmados_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(estado,'')) LIKE '%FIRM%'").fetchone()[0]
-                docs_renov_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_docs WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%'").fetchone()[0]
-                docs_med_arch = con_arch.execute("SELECT COUNT(*) FROM contratacion_medica WHERE COALESCE(ruta_archivo,'')<>'' OR COALESCE(archivo_nombre,'')<>''").fetchone()[0]
-        except Exception:
-            pass
+            if _tabla_existe_arch('contratacion_docs'):
+                cols_docs_arch = _columnas_arch('contratacion_docs')
+                sel_dni = 'dni' if 'dni' in cols_docs_arch else "'' AS dni"
+                sel_trab = 'trabajador' if 'trabajador' in cols_docs_arch else "'' AS trabajador"
+                sel_etapa = 'etapa' if 'etapa' in cols_docs_arch else "'' AS etapa"
+                sel_tipo = 'tipo_doc' if 'tipo_doc' in cols_docs_arch else ("tipo_documento" if 'tipo_documento' in cols_docs_arch else "'' AS tipo_doc")
+                sel_estado = 'estado' if 'estado' in cols_docs_arch else "'' AS estado"
+                sel_fecha = 'fecha_registro' if 'fecha_registro' in cols_docs_arch else ("fecha_subida" if 'fecha_subida' in cols_docs_arch else "'' AS fecha_registro")
+                with db() as con_arch:
+                    _arch_rows = con_arch.execute(f"SELECT id, {sel_dni}, {sel_trab}, {sel_etapa}, {sel_tipo}, {sel_estado}, {sel_fecha} FROM contratacion_docs ORDER BY id DESC LIMIT 300").fetchall()
+                tmp_rows = []
+                for rr in _arch_rows:
+                    tmp_rows.append(f"<tr><td><input type='checkbox'></td><td>📄</td><td>{h(row_get(rr,'dni'))}</td><td>{h(row_get(rr,'trabajador'))}</td><td>{h(row_get(rr,'etapa'))}</td><td>{h(row_get(rr,'tipo_doc') or row_get(rr,'tipo_documento'))}</td><td>{h(row_get(rr,'estado') or 'REGISTRADO')}</td><td>{h(fecha_sin_hora(row_get(rr,'fecha_registro') or row_get(rr,'fecha_subida')))}</td></tr>")
+                docs_rows_arch = ''.join(tmp_rows)
+        except Exception as e:
+            try:
+                print('ARCHIVOS TRABAJADOR - repositorio omitido:', e)
+            except Exception:
+                pass
+            docs_rows_arch = ''
         content=wrap(f"""
         <style>
           .archivo-hero{{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}}
@@ -11993,12 +12052,12 @@ html,body{overflow-x:hidden!important;}
           .archivo-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:18px;padding:18px;box-shadow:0 10px 24px #0f172a0d}}
           .archivo-kpi small{{color:#64748b;font-weight:800}}
           .archivo-kpi b{{display:block;font-size:30px;color:#0b2742;margin-top:8px}}
-          .archivo-layout{{display:grid;grid-template-columns:1.05fr 1.4fr;gap:18px;align-items:start}}
+          .archivo-layout{{display:grid;grid-template-columns:minmax(330px,420px) minmax(0,1fr);gap:18px;align-items:start}}
           .archivo-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:20px;box-shadow:0 14px 32px #0f172a0d}}
           .archivo-card h3{{margin:0 0 12px;color:#0b2742;font-size:22px}}
-          .archivo-grid{{display:grid;grid-template-columns:180px 1fr;gap:12px;align-items:center}}
-          .archivo-grid b{{background:#edf3f7;border-radius:12px;padding:12px;text-align:right}}
-          .archivo-grid input,.archivo-grid select{{width:100%;border:1px solid #d6e3ef;border-radius:12px;padding:12px;font-weight:800}}
+          .archivo-grid{{display:grid;grid-template-columns:1fr;gap:10px;align-items:center}}
+          .archivo-grid b{{background:#edf3f7;border-radius:12px;padding:12px;text-align:left}}
+          .archivo-grid input,.archivo-grid select{{width:100%;box-sizing:border-box;border:1px solid #d6e3ef;border-radius:12px;padding:12px;font-weight:800;min-width:0}} .archivo-grid input[type=file]{{padding:10px;background:#fff;white-space:normal}}
           .archivo-actions{{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}}
           .archivo-note{{background:#f1f5f9;border-radius:16px;padding:14px;color:#475569;margin-top:14px;line-height:1.45}}
           .archivo-scroll{{max-height:480px;overflow:auto;border-radius:18px;border:1px solid #dbe7ef}}
@@ -12069,7 +12128,7 @@ html,body{overflow-x:hidden!important;}
                 <tr>
                   <th></th><th></th><th>Código/DNI</th><th>Trabajador</th><th>Etapa</th><th>Tipo Documento</th><th>Estado Doc</th><th>Fecha Envío</th>
                 </tr>
-                {docs_rows or '<tr><td colspan=8>No hay archivos.</td></tr>'}
+                {docs_rows_arch or '<tr><td colspan=8>No hay archivos.</td></tr>'}
               </table>
             </div>
           </div>
