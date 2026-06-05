@@ -7896,10 +7896,20 @@ def admin_contratacion():
             flash(f'Requerimiento registrado correctamente con {cantidad} cupo(s) solicitado(s).', 'ok')
             return redirect(url_for('admin_contratacion', sec='requerimientos'))
         if accion == 'guardar_medica':
-            dni = normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni)
+            dni = normalizar_dni(request.form.get('dni'))
+            req_medica = clean(request.form.get('requerimiento'))
+            trab=get_trabajador(dni)
             if not dni:
                 flash('Digite DNI obligatorio para evaluación médica.', 'error')
+                return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
+            if not req_medica:
+                flash('Primero seleccione/valide un postulante del requerimiento.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica'))
+            with db() as con_val:
+                pertenece = con_val.execute('SELECT id, trabajador FROM contratacion_ingresos WHERE dni=? AND TRIM(requerimiento)=TRIM(?) LIMIT 1', (dni, req_medica)).fetchone()
+            if not pertenece:
+                flash('El DNI no pertenece al requerimiento seleccionado. No se guardó la evaluación médica.', 'error')
+                return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
             f=request.files.get('archivo')
             ruta=''; nombre_arch=''
             if f and f.filename:
@@ -7907,16 +7917,16 @@ def admin_contratacion():
                 nombre_arch=now_file()+'_'+secure_filename(f.filename); path=carpeta/nombre_arch; f.save(path); ruta=str(path)
             obs_base = clean(request.form.get('observacion'))
             obs_extra = []
-            for etiqueta, campo in [('Tipo examen','tipo_examen'),('Protocolo','protocolo'),('Riesgo puesto','riesgo_puesto'),('Aptitud','aptitud'),('Restricciones','restricciones'),('Recomendaciones','recomendaciones'),('Vence','fecha_vencimiento'),('Seguimiento','responsable_seguimiento'),('Contacto proveedor','proveedor_contacto'),('Costo','costo')]:
+            for etiqueta, campo in [('Tipo examen','tipo_examen'),('Protocolo','protocolo'),('Riesgo puesto','riesgo_puesto'),('Aptitud','aptitud'),('Restricciones','restricciones'),('Recomendaciones','recomendaciones'),('Vence','fecha_vencimiento'),('Seguimiento','responsable_seguimiento')]:
                 val = clean(request.form.get(campo))
                 if val: obs_extra.append(f'{etiqueta}: {val}')
             obs_final = (obs_base + (' | ' if obs_base and obs_extra else '') + ' | '.join(obs_extra)).strip()
             with db() as con:
-                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por,tipo_examen,protocolo,riesgo_puesto,aptitud,restricciones,recomendaciones,fecha_vencimiento,responsable_seguimiento,proveedor_contacto,costo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('requerimiento')), clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), clean(request.form.get('clinica')), nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_examen')), clean(request.form.get('protocolo')), clean(request.form.get('riesgo_puesto')), clean(request.form.get('aptitud')), clean(request.form.get('restricciones')), clean(request.form.get('recomendaciones')), fecha_sin_hora(request.form.get('fecha_vencimiento')), clean(request.form.get('responsable_seguimiento')), clean(request.form.get('proveedor_contacto')), clean(request.form.get('costo'))))
-                con.execute('UPDATE contratacion_ingresos SET estado_medico=? WHERE dni=?', (clean(request.form.get('estado')) or 'PENDIENTE', dni))
+                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por,tipo_examen,protocolo,riesgo_puesto,aptitud,restricciones,recomendaciones,fecha_vencimiento,responsable_seguimiento,proveedor_contacto,costo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), req_medica, clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), '', nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_examen')), clean(request.form.get('protocolo')), clean(request.form.get('riesgo_puesto')), clean(request.form.get('aptitud')), clean(request.form.get('restricciones')), clean(request.form.get('recomendaciones')), fecha_sin_hora(request.form.get('fecha_vencimiento')), clean(request.form.get('responsable_seguimiento')), '', ''))
+                con.execute('UPDATE contratacion_ingresos SET estado_medico=? WHERE dni=? AND TRIM(requerimiento)=TRIM(?)', (clean(request.form.get('estado')) or 'PENDIENTE', dni, req_medica))
                 con.commit()
             flash('Evaluación médica registrada.', 'ok')
-            return redirect(url_for('admin_contratacion', sec='medica'))
+            return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
         if accion == 'marcar_visto_masivo':
             ids=[]
             for x in request.form.getlist('cap_ids'):
@@ -10256,7 +10266,6 @@ html,body{overflow-x:hidden!important;}
                 <td>{h(req_r)}</td>
                 <td><span class='med-pill {cls_apt}'>{h(apt)}</span></td>
                 <td><span class='med-pill {clase_medica(est)}'>{h(est)}</span></td>
-                <td>{h(med.get('clinica') if med else '')}</td>
                 <td>{h(med.get('fecha_resultado') if med else '')}</td>
                 <td>{h(med.get('fecha_vencimiento') if med else '')}</td>
                 <td><button type='button' class='mini-btn med-select-btn' onclick="event.stopPropagation();seleccionarMedico('{h(dni_r)}');abrirModalMedica()">Registrar</button></td>
@@ -10265,11 +10274,11 @@ html,body{overflow-x:hidden!important;}
 
         medica_json = json.dumps(medica_data, ensure_ascii=False)
         if req_actual:
-            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='12'>No hay postulantes registrados para este requerimiento.</td></tr>"
+            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='11'>No hay postulantes registrados para este requerimiento.</td></tr>"
         else:
-            med_table_html = "<tr><td colspan='12'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
+            med_table_html = "<tr><td colspan='11'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
 
-        med_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'requerimiento'))}</td><td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td><td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'fecha_resultado'))}</td><td>{h(row_get(r,'fecha_vencimiento'))}</td><td>{h(row_get(r,'clinica'))}</td><td>{h(row_get(r,'restricciones'))}</td><td>{h(row_get(r,'observacion'))}</td></tr>" for r in medicas]) or "<tr><td colspan='12'>Sin evaluaciones médicas.</td></tr>"
+        med_rows=''.join([f"<tr><td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'requerimiento'))}</td><td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td><td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'fecha_resultado'))}</td><td>{h(row_get(r,'fecha_vencimiento'))}</td><td>{h(row_get(r,'restricciones'))}</td><td>{h(row_get(r,'observacion'))}</td></tr>" for r in medicas]) or "<tr><td colspan='11'>Sin evaluaciones médicas.</td></tr>"
 
         content=wrap(f"""
         <style>
@@ -10295,14 +10304,18 @@ html,body{overflow-x:hidden!important;}
           .med-table-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}}
           .med-table-head h3{{margin:0;color:#007a3d;font-size:19px;font-weight:1000}}
           .med-scroll{{overflow:auto;border-radius:14px;border:1px solid #dbe7ef;max-width:100%;background:#fff}}
-          .med-grid-table{{width:max-content;min-width:100%;border-collapse:separate;border-spacing:0;background:#fff;font-size:13px}}
-          .med-grid-table th{{background:linear-gradient(180deg,#008a48,#006f3a);color:#fff;padding:13px 14px;text-align:center;font-size:12px;font-weight:1000;border-right:1px solid rgba(255,255,255,.28);white-space:nowrap;position:sticky;top:0;z-index:1}}
-          .med-grid-table td{{padding:12px 14px;border-right:1px solid #e1ebf3;border-bottom:1px solid #e1ebf3;text-align:center;color:#0b2742;font-weight:750;vertical-align:middle;background:#fff}}
+          .med-grid-table{{width:100%;min-width:1180px;border-collapse:separate;border-spacing:0;background:#fff;font-size:12px;table-layout:fixed}}
+          .med-grid-table th{{background:linear-gradient(180deg,#008a48,#006f3a);color:#fff;padding:10px 8px;text-align:center;font-size:11px;font-weight:1000;border-right:1px solid rgba(255,255,255,.28);white-space:nowrap;position:sticky;top:0;z-index:1}}
+          .med-grid-table td{{padding:8px 8px;border-right:1px solid #e1ebf3;border-bottom:1px solid #e1ebf3;text-align:center;color:#0b2742;font-weight:800;vertical-align:middle;background:#fff;line-height:1.18}}
+          .med-grid-table tr{{height:72px;max-height:72px}}
           .med-grid-table tr:hover td{{background:#f0fff7}}
-          .med-grid-table td:nth-child(2),.med-grid-table th:nth-child(2){{position:sticky;left:0;background:inherit;z-index:2}}
-          .med-grid-table th:nth-child(2){{background:linear-gradient(180deg,#008a48,#006f3a);z-index:3}}
-          .med-photo-mini{{width:46px;height:54px;border-radius:12px;object-fit:cover;border:2px solid #b8f0d2;background:#fff;display:block;margin:auto}}
-          .med-photo-empty{{width:54px;height:54px;border-radius:14px;background:#ffe0e0;color:#b00020;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:1000;margin:auto;border:1px solid #ffc5c5}}
+          .med-grid-table th:nth-child(1),.med-grid-table td:nth-child(1){{width:76px;min-width:76px;max-width:76px}}
+          .med-grid-table th:nth-child(2),.med-grid-table td:nth-child(2){{width:88px;min-width:88px;max-width:88px}}
+          .med-grid-table th:nth-child(3),.med-grid-table td:nth-child(3){{width:180px;min-width:180px;max-width:180px}}
+          .med-grid-table th:nth-child(4),.med-grid-table td:nth-child(4){{width:110px;min-width:110px;max-width:110px}}
+          .med-grid-table th:nth-child(7),.med-grid-table td:nth-child(7),.med-grid-table th:nth-child(8),.med-grid-table td:nth-child(8){{width:120px;min-width:120px;max-width:120px}}
+          .med-photo,.med-photo-mini{{width:56px!important;height:56px!important;border-radius:14px;object-fit:cover;border:2px solid #b8f0d2;background:#fff;display:block;margin:auto;max-width:56px!important;max-height:56px!important}}
+          .med-no-photo,.med-photo-empty{{width:56px;height:56px;border-radius:14px;background:#ffe0e0;color:#b00020;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:1000;margin:auto;border:1px solid #ffc5c5}}
           .med-pill{{display:inline-flex;align-items:center;justify-content:center;min-width:96px;border-radius:999px;padding:7px 10px;font-weight:1000;font-size:12px}}
           .med-pill.ok{{background:#e6fff0;color:#007a3d;border:1px solid #9be7bc}}
           .med-pill.warn{{background:#fff7dd;color:#9a6500;border:1px solid #ffd36e}}
@@ -10368,7 +10381,7 @@ html,body{overflow-x:hidden!important;}
             <div class='med-table-head'><h3>Lista médica de postulantes del requerimiento</h3><div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap'><span class='status-pill ok'>Seleccione un trabajador para completar ficha</span><label for='modal_medica_registro' class='c-btn'>🩺 Registrar evaluación</label></div></div>
             <div class='med-scroll'>
               <table id='tabla_medica_postulantes' class='med-grid-table'>
-                <tr><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Empresa</th><th>Requerimiento</th><th>Aptitud</th><th>Estado operativo</th><th>Clínica</th><th>Resultado</th><th>Vencimiento</th><th>Acción</th></tr>
+                <tr><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Empresa</th><th>Requerimiento</th><th>Aptitud</th><th>Estado operativo</th><th>Resultado</th><th>Vencimiento</th><th>Acción</th></tr>
                 {med_table_html}
               </table>
             </div>
@@ -10391,10 +10404,9 @@ html,body{overflow-x:hidden!important;}
 
           <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid'>
             <input type='hidden' name='accion' value='guardar_medica'>
-            <input type='hidden' id='med_dni_lookup' name='dni' required>
             <input type='hidden' id='med_trabajador_hidden' name='trabajador'>
-            <b>Requerimiento</b><input id='med_req_input' name='requerimiento' readonly placeholder='Seleccione un postulante de la tabla'>
-            <b>Clínica / proveedor</b><input id='med_clinica' name='clinica' placeholder='Centro médico autorizado'>
+            <b>DNI del postulante</b><input id='med_dni_lookup' name='dni' maxlength='8' required placeholder='Digite DNI del ticket' oninput='buscarMedicaPorDni(this.value)' autocomplete='off'>
+            <b>Requerimiento</b><input id='med_req_input' name='requerimiento' readonly placeholder='Se completa automáticamente según el DNI'>
 
             <b>Aptitud médica</b><select id='med_aptitud_select' name='aptitud'><option>PENDIENTE</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option></select>
             <b>Estado operativo</b><select id='med_estado_select' name='estado'><option>PENDIENTE</option><option>HABILITADO</option><option>OBSERVADO</option><option>BLOQUEADO</option><option>PROGRAMADO</option></select>
@@ -10412,9 +10424,6 @@ html,body{overflow-x:hidden!important;}
             <b>Recomendaciones</b><input id='med_recomendaciones' class='full' name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'>
 
             <b>Responsable seguimiento</b><input name='responsable_seguimiento' placeholder='RRHH / SST / Médico ocupacional'>
-            <b>Contacto proveedor</b><input name='proveedor_contacto' placeholder='Correo / teléfono'>
-
-            <b>Costo</b><input name='costo' placeholder='S/ 0.00'>
             <b>Resultado PDF/imagen</b><input type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'>
 
             <b>Observación</b><textarea id='med_observacion' class='full' name='observacion' rows='2' placeholder='Detalle libre'></textarea>
@@ -10425,10 +10434,10 @@ html,body{overflow-x:hidden!important;}
           </div></div>
 
           <div class='med-table-card'>
-            <div class='med-table-head'><h3>Historial médico registrado</h3><input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, clínica, aptitud, estado, observación' style='border:1px solid #d6e3ef;border-radius:12px;padding:10px;font-weight:900'></div>
+            <div class='med-table-head'><h3>Historial médico registrado</h3><input oninput="filtrarTabla(this,'tabla_medica')" placeholder='Filtrar DNI, aptitud, estado, observación' style='border:1px solid #d6e3ef;border-radius:12px;padding:10px;font-weight:900'></div>
             <div class='med-scroll'>
               <table id='tabla_medica' class='med-grid-table'>
-                <tr><th>Anular</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Aptitud</th><th>Estado Operativo</th><th>Resultado</th><th>Vencimiento</th><th>Clínica</th><th>Restricciones</th><th>Observación</th></tr>
+                <tr><th>Anular</th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Aptitud</th><th>Estado Operativo</th><th>Resultado</th><th>Vencimiento</th><th>Restricciones</th><th>Observación</th></tr>
                 {med_rows}
               </table>
             </div>
@@ -10465,9 +10474,24 @@ html,body{overflow-x:hidden!important;}
             card.className = 'med-status-card ' + cls;
             valEl.textContent = value || 'PENDIENTE';
           }}
+          function limpiarSeleccionMedica(msg){{
+            medDniShow.textContent = '—';
+            medNombre.textContent = '—';
+            medReq.textContent = '—';
+            medEmpresa.textContent = '—';
+            medAreaCargo.textContent = '—';
+            medReqInput.value = '';
+            medTrabHidden.value = '';
+            setMedCard(medAptitudCard, medAptitudVal, 'PENDIENTE');
+            setMedCard(medEstadoCard, medEstadoVal, 'PENDIENTE');
+            medFotoBox.innerHTML = `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`;
+            medDecisionMsg.textContent = msg || 'Digite un DNI que pertenezca al requerimiento seleccionado.';
+            medDecisionMsg.className = 'med-block-msg blocked';
+            document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
+          }}
           function seleccionarMedico(dni){{
             const row = MEDICA_POSTULANTES.find(x => (x.dni || '') === dni);
-            if(!row) return;
+            if(!row){{ limpiarSeleccionMedica('El DNI no pertenece al requerimiento seleccionado.'); return; }}
             medDni.value = row.dni || '';
             medDniShow.textContent = row.dni || '—';
             medNombre.textContent = row.trabajador || '—';
@@ -10485,7 +10509,6 @@ html,body{overflow-x:hidden!important;}
             if(row.medica){{
               if(row.medica.restricciones) document.getElementById('med_restricciones').value = row.medica.restricciones;
               if(row.medica.observacion) document.getElementById('med_observacion').value = row.medica.observacion;
-              if(row.medica.clinica) document.getElementById('med_clinica').value = row.medica.clinica;
             }}
             medFotoBox.innerHTML = row.foto ? `<img src='/foto/${{row.dni}}'><small>Foto real del postulante</small>` : `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`;
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
@@ -10495,9 +10518,20 @@ html,body{overflow-x:hidden!important;}
             medDecisionMsg.className = 'med-block-msg' + (blocked ? ' blocked' : '');
             document.getElementById('form_medica').scrollIntoView({{behavior:'smooth',block:'center'}});
           }}
-          function abrirModalMedica(){{ const chk=document.getElementById('modal_medica_registro'); if(chk) chk.checked=true; }}
+          function buscarMedicaPorDni(v){{
+            const dni=(v||'').replace(/\D/g,'').slice(0,8);
+            if(medDni.value !== dni) medDni.value = dni;
+            if(dni.length < 8){{ limpiarSeleccionMedica('Digite los 8 dígitos del DNI para validar contra el requerimiento.'); return; }}
+            const row = MEDICA_POSTULANTES.find(x => (x.dni || '') === dni);
+            if(!row){{ limpiarSeleccionMedica('DNI no pertenece al requerimiento seleccionado.'); return; }}
+            seleccionarMedico(dni);
+          }}
+          function abrirModalMedica(){{ const chk=document.getElementById('modal_medica_registro'); if(chk){{ chk.checked=true; if(window.forceSidebarForModal)window.forceSidebarForModal(true); }} }}
           function validarMedicaSeleccionada(){{
-            if(!medDni.value){{alert('Primero seleccione un postulante del requerimiento.'); return false;}}
+            const dni=(medDni.value||'').replace(/\D/g,'');
+            const row = MEDICA_POSTULANTES.find(x => (x.dni || '') === dni);
+            if(!row){{alert('El DNI no pertenece al requerimiento seleccionado.'); return false;}}
+            if(!medReqInput.value){{alert('Primero valide un postulante del requerimiento.'); return false;}}
             return true;
           }}
           medAptitudSelect.addEventListener('change', () => setMedCard(medAptitudCard, medAptitudVal, medAptitudSelect.value));
