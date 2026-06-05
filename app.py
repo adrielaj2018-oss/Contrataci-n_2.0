@@ -10202,7 +10202,7 @@ html,body{overflow-x:hidden!important;}
         </style>
         <div class='premium-hero'>
           <div class='premium-title'><div class='ico'>🎓</div><div><h1>Inducción laboral</h1><p>Flujo único: seleccione ticket, revise postulantes y controle video asignado, visto, avance y evidencia.</p></div></div>
-          <div class='ticket-box'><label>1) Requerimiento / Ticket</label><select onchange="location.href='/admin/contratacion?sec=induccion&req='+encodeURIComponent(this.value)"><option>Seleccione requerimiento</option>{opt_reqs}</select></div>
+          <div class='ticket-box'><label>1) Requerimiento / Ticket</label><select onchange="location.href='/admin/contratacion?sec=induccion&req='+encodeURIComponent(this.value)"><option>Seleccione requerimiento</option>{opt_req}</select></div>
         </div>
 
         <div class='filter-card'>
@@ -10293,7 +10293,7 @@ html,body{overflow-x:hidden!important;}
 
         <div class='premium-hero'>
           <div class='premium-title'><div class='ico'>🦺</div><div><h1>Indumentaria y EPP</h1><p>Flujo único: seleccione ticket, revise postulantes y registre prendas, EPP, cargo firmado y fotocheck.</p></div></div>
-          <div class='ticket-box'><label>1) Requerimiento / Ticket</label><select onchange="location.href='/admin/contratacion?sec=indumentaria&req='+encodeURIComponent(this.value)"><option>Seleccione requerimiento</option>{opt_reqs}</select></div>
+          <div class='ticket-box'><label>1) Requerimiento / Ticket</label><select onchange="location.href='/admin/contratacion?sec=indumentaria&req='+encodeURIComponent(this.value)"><option>Seleccione requerimiento</option>{opt_req}</select></div>
         </div>
 
         <div class='filter-card'>
