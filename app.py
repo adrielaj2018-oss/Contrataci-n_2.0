@@ -10162,202 +10162,72 @@ html,body{overflow-x:hidden!important;}
         if sec in ('capacitacion','cursos'):
             flash('El módulo Cursos / Capacitación fue retirado del menú. Usa Inducción para videos obligatorios.', 'ok')
             return redirect(url_for('admin_contratacion', sec='induccion'))
-
-        # ============================
-        # INDUCCIÓN LABORAL - UI limpia sin indicadores repetidos
-        # ============================
-        induccion_total = len(trabajadores_proceso)
-        induccion_ok = len([r for r in trabajadores_proceso if str(row_get(r,'estado_capacitacion','')).upper() in ('VIDEO VISTO','APROBADO','COMPLETADO','INDUCIDO')])
-        induccion_pend = max(induccion_total - induccion_ok, 0)
-        induccion_videos = len([r for r in capacitaciones if (row_get(r,'archivo_video_nombre','') or row_get(r,'video_url',''))])
-        induccion_obs = len([r for r in trabajadores_proceso if 'OBS' in str(row_get(r,'estado_capacitacion','')).upper()])
-        induccion_avance = int(round((induccion_ok / induccion_total) * 100, 0)) if induccion_total else 0
-
-        opciones_curso = "<option>Bienvenida corporativa</option><option>SST inducción</option><option>Reglamento interno</option><option>Uso de EPP</option><option>Buenas prácticas agrícolas</option><option>Código de conducta</option>"
-        video_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro',''))}</td><td><b>{h(row_get(r,'curso',''))}</b></td><td>{h(row_get(r,'tipo_video',''))}</td><td>{h(row_get(r,'archivo_video_nombre','') or row_get(r,'video_url',''))}</td><td>{h(row_get(r,'duracion_min',''))}</td><td><span class='status-pill ok'>{h(row_get(r,'estado',''))}</span></td></tr>" for r in capacitaciones if (row_get(r,'archivo_video_nombre','') or row_get(r,'video_url',''))]) or "<tr><td colspan='6'>Sin videos registrados todavía.</td></tr>"
-        induccion_rows = ''.join([
-            f"<tr><td>{i}</td><td><div class='mini-avatar'>{h((row_get(r,'trabajador','') or 'P')[:1]).upper()}</div></td><td><b>{h(row_get(r,'dni',''))}</b></td><td>{h(row_get(r,'trabajador','') or 'NUEVO - PENDIENTE COMPLETAR')}</td><td>{h(row_get(r,'cargo',''))}</td><td><span class='status-pill ok'>{h(row_get(r,'estado_capacitacion','PENDIENTE'))}</span></td><td>{induccion_avance if induccion_total else 0}%</td><td>Inducción general</td><td>{h(row_get(r,'actividad',''))}</td><td><input type='checkbox' name='ingreso_ids' value='{h(row_get(r,'id',''))}'></td></tr>"
-            for i, r in enumerate(trabajadores_proceso, 1)
-        ]) or "<tr><td colspan='10'>Seleccione un requerimiento para visualizar postulantes de inducción.</td></tr>"
-
-        content=wrap(f"""
+        es_ind = (sec=='induccion')
+        titulo_mod = 'Inducción laboral' if es_ind else 'Cursos y capacitación'
+        desc_mod = 'Carga temas de inducción por etapa y asigna videos obligatorios al trabajador.' if es_ind else 'Administra cursos, videos, evaluaciones, exámenes y estados por trabajador.'
+        opciones_curso = "<option>Bienvenida corporativa</option><option>SST inducción</option><option>Reglamento interno</option><option>Uso de EPP</option><option>Buenas prácticas agrícolas</option><option>Código de conducta</option>" if es_ind else "<option>Curso SST</option><option>Buenas prácticas agrícolas</option><option>Manipulación de alimentos</option><option>Bioseguridad</option><option>Calidad</option><option>Uso de herramientas</option><option>Curso personalizado</option>"
+        cap_rows=''.join([f"<tr><td><input type='checkbox' name='cap_ids' value='{r['id']}'></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['curso'])}</td><td>{h(r['archivo_video_nombre'] or r['video_url'])}</td><td>{h(r['nota'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar capacitación?&quot;)'><input type='hidden' name='accion' value='eliminar_capacitacion'><input type='hidden' name='capacitacion_id' value='{r['id']}'><button class='delete-mini'>Eliminar</button></form></td><td>{h(r['observacion'])}</td></tr>" for r in capacitaciones])
+        video_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['curso'])}</b></td><td>{h(r['tipo_video'])}</td><td>{h(r['archivo_video_nombre'] or r['video_url'])}</td><td>{h(r['duracion_min'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in capacitaciones if (r['archivo_video_nombre'] or r['video_url'])]) or "<tr><td colspan='6'>Sin videos registrados todavía.</td></tr>"
+        if not cap_rows:
+            cap_rows=''.join([f"<tr><td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{'Inducción general' if es_ind else 'Pendiente de curso'}</td><td></td><td></td><td><span class='status-pill ok'>{h(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</span></td><td class='col-delete'>—</td><td>Trabajador registrado en Postulantes pendiente de avance.</td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='10'>Sin registros.</td></tr>"
+        induccion_asig_rows = ''.join([f"<tr><td><input type='checkbox' name='ingreso_ids' value='{r['id']}'></td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador']) or 'NUEVO - PENDIENTE COMPLETAR'}</td><td>{h(r['requerimiento'])}</td><td>{h(r['sede'])}</td><td>{h(r['actividad'])}</td><td><span class='status-pill ok'>{h(r['estado_capacitacion'] if 'estado_capacitacion' in r.keys() else 'PENDIENTE')}</span></td></tr>" for r in trabajadores_proceso]) or "<tr><td colspan='7'>Sin trabajadores registrados desde Postulantes.</td></tr>"
+        asignacion_html = (f"""<h3 class='pro-section-title'>2) Asignación masiva a trabajadores</h3><div class='full table-wrap induccion-masiva-box'><table class='c-table clean-table' id='tabla_induccion_masiva'><tr><th><input type='checkbox' onclick=\"document.querySelectorAll('#tabla_induccion_masiva input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)\"></th><th>DNI</th><th>Trabajador</th><th>Requerimiento</th><th>Sede</th><th>Actividad</th><th>Estado inducción</th></tr>{induccion_asig_rows}</table></div><input type='hidden' name='volver' value='induccion'><input type='hidden' name='campo_estado' value='estado_capacitacion'><b>Estado masivo</b><select name='nuevo_estado'><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>PENDIENTE</option></select><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observación del administrador.'></textarea><div class='actions'><button type='submit' class='c-btn' onclick=\"this.form.accion.value='avance_masivo_ingresos'\">✅ Aplicar avance</button></div>""" if es_ind else f"""<h3 class='pro-section-title'>2) Asignación masiva a trabajadores</h3><b>DNI</b><input name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI y seleccione trabajador'><datalist id='lista_ingresos'>{opt_ingresos}</datalist><b>Estado</b><select name='estado' required><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>EVALUADO POR TRABAJADOR</option><option>APROBADO</option><option>DESAPROBADO</option></select><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observación del administrador.'></textarea><div class='actions'><button class='c-btn'>💾 Guardar curso/asignación</button></div>""")
+        content=wrap(f'''
         <style>
-          .premium-hero{{background:linear-gradient(135deg,#f8fffb,#ecfdf5);border:1px solid #bbf7d0;border-radius:28px;padding:26px 32px;margin-bottom:18px;display:grid;grid-template-columns:1.1fr .9fr;gap:28px;align-items:center;box-shadow:0 16px 38px rgba(15,23,42,.06)}}
-          .premium-title{{display:flex;gap:18px;align-items:center}} .premium-title .ico{{width:68px;height:68px;border-radius:22px;display:grid;place-items:center;background:#dcfce7;border:1px solid #86efac;font-size:30px;box-shadow:0 14px 28px rgba(16,185,129,.16)}}
-          .premium-title h1{{margin:0;color:#062044;font-size:34px;line-height:1.05}} .premium-title p{{margin:10px 0 0;color:#334155;font-size:16px;line-height:1.35}}
-          .ticket-box label,.filter-card label{{display:block;font-weight:1000;color:#062044;margin-bottom:8px;text-transform:uppercase;font-size:12px;letter-spacing:.02em}}
-          .ticket-box select,.filter-card input,.filter-card select,.premium-form input,.premium-form select,.premium-form textarea{{width:100%;border:1px solid #d6e3ef;border-radius:16px;background:#fff;padding:14px 16px;font-weight:900;color:#062044;min-height:54px}}
-          .filter-card{{background:#fff;border:1px solid #dbe7ef;border-radius:24px;padding:20px;margin-bottom:18px;display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end;box-shadow:0 12px 30px rgba(15,23,42,.05)}}
-          .premium-btn{{border:0;border-radius:16px;background:#0f172a;color:#fff;font-weight:1000;padding:15px 22px;box-shadow:0 16px 28px rgba(15,23,42,.18);text-decoration:none;display:inline-flex;align-items:center;gap:8px;justify-content:center;min-height:54px}}
-          .premium-btn.green{{background:#00a95c}} .premium-btn.light{{background:#fff;color:#062044;border:1px solid #dbe7ef;box-shadow:none}}
-          .control-card{{background:#fff;border:1px solid #dbe7ef;border-radius:24px;padding:24px;margin-bottom:18px;display:grid;grid-template-columns:270px repeat(5,1fr);gap:18px;box-shadow:0 12px 30px rgba(15,23,42,.05)}}
-          .control-title h2{{font-size:28px;line-height:1.05;margin:0 0 12px;color:#062044}} .control-title p{{color:#334155;margin:0 0 16px}}
-          .donut{{width:126px;height:126px;border-radius:50%;background:conic-gradient(#00a95c {induccion_avance}%, #e5e7eb 0);display:grid;place-items:center;margin:auto}} .donut span{{background:#fff;width:82px;height:82px;border-radius:50%;display:grid;place-items:center;font-weight:1000;color:#062044;text-align:center}}
-          .metric-tall{{border:1px solid #dbe7ef;border-bottom:4px solid #008f51;border-radius:18px;padding:22px 12px;text-align:center;background:linear-gradient(180deg,#fff,#fbfffd)}} .metric-tall .round{{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:#dcfce7;margin:0 auto 12px;font-size:25px}} .metric-tall b{{display:block;font-size:28px;color:#062044;margin:6px 0}} .metric-tall strong{{color:#062044}}
-          .premium-card{{background:#fff;border:1px solid #dbe7ef;border-radius:24px;padding:22px;margin-bottom:18px;box-shadow:0 12px 30px rgba(15,23,42,.05)}} .premium-card-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}} .premium-card h2{{margin:0;color:#062044}}
-          .premium-table-wrap{{overflow:auto;border-radius:16px;border:1px solid #e2edf5}} .premium-table{{width:100%;border-collapse:collapse;min-width:980px}} .premium-table th{{background:#008f51;color:white;text-align:left;padding:14px;font-size:13px}} .premium-table td{{padding:14px;border-bottom:1px solid #edf2f7;color:#062044;font-weight:800;background:#fff}} .premium-table tr:hover td{{background:#f8fffb}}
-          .mini-avatar{{width:34px;height:34px;border-radius:50%;background:#dcfce7;color:#008f51;display:grid;place-items:center;font-weight:1000}}
-          .library-grid{{display:grid;grid-template-columns:1fr 1fr;gap:18px}} .premium-form{{display:grid;grid-template-columns:150px minmax(180px,1fr) 150px minmax(180px,1fr);gap:14px;align-items:center}} .premium-form .span-all{{grid-column:1/-1}}
-          .premium-modal{{display:none;position:fixed;inset:0;background:rgba(15,23,42,.54);z-index:9999;padding:28px;overflow:auto}} .premium-modal.show{{display:flex;align-items:flex-start;justify-content:center}} .premium-modal-box{{width:min(1180px,96vw);background:#fff;border-radius:28px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.32);padding:24px}} .premium-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;border-bottom:1px solid #e2edf5;padding-bottom:14px}} .premium-modal-head h2{{margin:0;color:#062044}} .modal-library{{grid-template-columns:1fr 1fr}} .premium-modal .premium-card{{box-shadow:none;margin-bottom:0}} .premium-form input[type=file]{{padding:10px;font-size:13px;min-height:54px}}
-          @media(max-width:1200px){{.premium-hero,.filter-card,.control-card,.library-grid,.premium-form{{grid-template-columns:1fr}}}}
+        .induccion-premium-css + .dash-hero,.dash-hero.ind-premium-hero{{background:linear-gradient(135deg,#f6fffb,#ecfdf5)!important;border:1px solid #b7f7d0!important;border-radius:28px!important;padding:28px 34px!important;box-shadow:0 18px 45px rgba(4,120,87,.08)!important}}
+        .dash-hero.ind-premium-hero h1{{font-size:36px!important;line-height:1.08!important;color:#071b34!important}}
+        .learning-grid.solo-induccion{{display:grid!important;grid-template-columns:minmax(520px,1fr) minmax(360px,.8fr)!important;gap:18px!important;align-items:start!important}}
+        .learning-grid.solo-induccion .eval-side{{display:none!important}}
+        #form_capacitacion.pro-card{{display:grid!important;grid-template-columns:190px minmax(230px,1fr) 190px minmax(230px,1fr)!important;gap:14px 16px!important;border-radius:24px!important;border:1px solid #dbeafe!important;box-shadow:0 16px 38px rgba(15,23,42,.07)!important;background:#fff!important}}
+        #form_capacitacion .pro-section-title{{grid-column:1/-1!important;font-size:24px!important;color:#071b34!important;margin-bottom:4px!important}}
+        #form_capacitacion input,#form_capacitacion select,#form_capacitacion textarea{{border-radius:16px!important;border:1px solid #cfe1f3!important;min-height:50px!important;font-weight:850!important;background:#fff!important}}
+        #form_capacitacion b{{color:#071b34!important;font-weight:950!important}}
+        #form_capacitacion .induccion-masiva-box{{grid-column:1/-1!important;border-radius:18px!important;max-height:320px!important;overflow:auto!important}}
+        #form_capacitacion .actions{{grid-column:1/-1!important;text-align:center!important}}
+        .video-base-grid{{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:12px!important;margin:12px 0!important}}
+        .video-base-grid div{{background:#f8fffb!important;border:1px solid #dbeafe!important;border-radius:16px!important;padding:14px!important;text-align:center!important}}
+        .records-toolbar,.mass-actions{{border-radius:18px!important;background:#f8fffb!important;border:1px solid #dbeafe!important;padding:14px!important;margin-bottom:12px!important}}
+        @media(max-width:1100px){{.learning-grid.solo-induccion,#form_capacitacion.pro-card{{grid-template-columns:1fr!important}}}}
         </style>
-        <div class='premium-hero'>
-          <div class='premium-title'><div class='ico'>🎓</div><div><h1>Inducción laboral</h1><p>Flujo único: seleccione ticket, revise postulantes y controle video asignado, visto, avance y evidencia.</p></div></div>
-          <div class='ticket-box'><label>1) Requerimiento / Ticket</label><select onchange="location.href='/admin/contratacion?sec=induccion&req='+encodeURIComponent(this.value)"><option>Seleccione requerimiento</option>{opt_req}</select></div>
+        <h2 class='c-title'>{titulo_mod}</h2><div class='dash-hero ind-premium-hero' style='margin-bottom:18px'><div><h1>{titulo_mod}</h1><p class='muted2'>{desc_mod} La evaluación/respuesta queda preparada para el usuario trabajador desde celular.</p></div><a class='c-btn' href='/admin/contratacion?sec=firma'>Ir a firma</a></div>
+        <div class='learning-grid {'solo-induccion' if es_ind else 'con-evaluacion'}'>
+          <form id='form_capacitacion' method='post' enctype='multipart/form-data' class='pro-card nice-form'><input type='hidden' name='accion' value='guardar_capacitacion'><h3 class='pro-section-title'>Biblioteca de inducción</h3><b>{'Tema inducción' if es_ind else 'Curso'}</b><select name='curso' required>{opciones_curso}</select><b>Tipo video</b><select name='tipo_video' required><option>URL EXTERNA</option><option>ARCHIVO MP4</option><option>YOUTUBE / DRIVE</option><option>MICROLEARNING</option></select><b>URL video</b><input name='video_url' placeholder='https://...'><b>Cargar video MP4</b><input type='file' name='archivo_video' accept='.mp4,.webm,.mov'><b>Duración min.</b><input name='duracion_min' type='number' min='0' placeholder='0'><b>Fecha inicio</b><input type='date' name='fecha_inicio' value='{hoy_iso()}' required><b>Fecha fin</b><input type='date' name='fecha_fin' value='{hoy_iso()}'><b>Material adicional</b><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.xlsx,.docx'>{asignacion_html}</form>
+          <div class='pro-card eval-side'><h3>Evaluación del trabajador</h3><p class='muted2'>Campos preparados para el usuario trabajador: examen, nota, respuestas, intentos y confirmación de video visto.</p><div class='eval-grid'><b>Opción examen</b><select name='preguntas' form='form_capacitacion'><option>Sin examen</option><option>Formulario interno</option><option>Link Google Forms</option><option>Cuestionario en app</option></select><b>Nota / resultado</b><input name='nota' form='form_capacitacion' placeholder='Ej. 18/20'><b>Intentos permitidos</b><input name='intentos' form='form_capacitacion' type='number' min='1' value='1'><b>Confirmación</b><select disabled><option>Trabajador confirma desde su portal</option></select></div></div>
         </div>
-
-        <div class='filter-card'>
-          <div><label>Buscar postulantes del requerimiento</label><input oninput="filtrarTabla(this,'tabla_induccion_premium')" placeholder='DNI, trabajador, cargo, actividad...'></div>
-          <div><label>Filtrar por estado</label><select><option>Todos los estados</option><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>OBSERVADO</option></select></div>
-          <div><label>Acciones rápidas</label><button class='premium-btn' type='button' onclick="openPremiumModal('modal_biblioteca_induccion')">📚 Biblioteca</button></div>
-        </div>
-
-        <div class='control-card'>
-          <div class='control-title'><h2>Centro de Control<br>360°</h2><p>Avance general de inducción por requerimiento</p><div class='donut'><span>{induccion_avance}%<br><small>completo</small></span></div></div>
-          <div class='metric-tall'><div class='round'>🎫</div><strong>Postulantes</strong><b>{induccion_total}</b><small>Del ticket</small></div>
-          <div class='metric-tall'><div class='round'>🎓</div><strong>Inducidos</strong><b>{induccion_ok}</b><small>Realizados</small></div>
-          <div class='metric-tall'><div class='round'>⌛</div><strong>Pendientes</strong><b>{induccion_pend}</b><small>Por completar</small></div>
-          <div class='metric-tall'><div class='round'>▶️</div><strong>Videos</strong><b>{induccion_videos}</b><small>Materiales</small></div>
-          <div class='metric-tall'><div class='round'>⚠️</div><strong>Observados</strong><b>{induccion_obs}</b><small>Atención</small></div>
-        </div>
-
-        <form method='post' class='premium-card'>
-          <input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='induccion'><input type='hidden' name='campo_estado' value='estado_capacitacion'>
-          <div class='premium-card-head'><h2>Lista de postulantes del requerimiento - Inducción</h2><div style='display:flex;gap:10px;flex-wrap:wrap'><button type='button' class='premium-btn light' onclick="document.querySelectorAll('#tabla_induccion_premium input[type=checkbox]').forEach(x=>x.checked=true)">Seleccionar todo</button><button class='premium-btn green'>✅ Aplicar avance</button></div></div>
-          <div class='premium-table-wrap'><table id='tabla_induccion_premium' class='premium-table'><tr><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Inducción</th><th>Actividad</th><th>Acción</th></tr>{induccion_rows}</table></div>
-          <div class='filter-card' style='box-shadow:none;margin-top:18px;margin-bottom:0'>
-            <div><label>Estado masivo</label><select name='nuevo_estado'><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>PENDIENTE</option></select></div>
-            <div><label>Aprobador</label><input name='aprobador' placeholder='Responsable SST/RRHH'></div>
-            <div><label>Observación</label><input name='observacion' placeholder='Observación del administrador'></div>
-          </div>
-        </form>
-
-        <div id='modal_biblioteca_induccion' class='premium-modal'><div class='premium-modal-box'><div class='premium-modal-head'><h2>📚 Biblioteca de inducción</h2><button type='button' class='premium-btn light' onclick="closePremiumModal('modal_biblioteca_induccion')">Cerrar</button></div><div id='biblioteca_induccion' class='library-grid modal-library'>
-          <form id='form_capacitacion' method='post' enctype='multipart/form-data' class='premium-card premium-form'>
-            <input type='hidden' name='accion' value='guardar_capacitacion'>
-            <div class='span-all' style='font-weight:1000;color:#062044;font-size:18px'>Registro de video / material</div>
-            <b>Tema inducción</b><select name='curso' required>{opciones_curso}</select>
-            <b>Tipo video</b><select name='tipo_video' required><option>URL EXTERNA</option><option>ARCHIVO MP4</option><option>YOUTUBE / DRIVE</option><option>MICROLEARNING</option></select>
-            <b>URL video</b><input name='video_url' placeholder='https://...'>
-            <b>Cargar video MP4</b><input type='file' name='archivo_video' accept='.mp4,.webm,.mov'>
-            <b>Duración min.</b><input name='duracion_min' type='number' min='0' placeholder='0'>
-            <b>Fecha inicio</b><input type='date' name='fecha_inicio' value='{hoy_iso()}' required>
-            <b>Fecha fin</b><input type='date' name='fecha_fin' value='{hoy_iso()}'>
-            <b>Material adicional</b><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.xlsx,.docx'>
-            <div class='span-all' style='text-align:center'><button class='premium-btn green'>💾 Guardar video/material</button></div>
-          </form>
-          <div class='premium-card'>
-            <div class='premium-card-head'><h2>Base de videos y materiales</h2><button type='button' class='premium-btn light' onclick='window.print()'>🖨️ Imprimir</button></div>
-            <div class='premium-table-wrap'><table class='premium-table'><tr><th>Fecha</th><th>Tema</th><th>Tipo</th><th>Archivo / URL</th><th>Min.</th><th>Estado</th></tr>{video_rows}</table></div>
-          </div>
-        </div></div></div>
-        <script>
-        function openPremiumModal(id){{ const el=document.getElementById(id); if(el) el.classList.add('show'); }}
-        function closePremiumModal(id){{ const el=document.getElementById(id); if(el) el.classList.remove('show'); }}
-        document.addEventListener('keydown', e=>{{ if(e.key==='Escape') document.querySelectorAll('.premium-modal.show').forEach(x=>x.classList.remove('show')); }});
-        document.querySelectorAll('.premium-modal').forEach(m=>m.addEventListener('click',e=>{{ if(e.target===m)m.classList.remove('show'); }}));
-        </script>
-        """)
-
+        <div class='pro-card'><h3 class='pro-section-title'>Base de videos y materiales</h3><div class='video-base-grid'><div><small>Total videos</small><b>{len([r for r in capacitaciones if (r['archivo_video_nombre'] or r['video_url'])])}</b></div><div><small>Asignaciones</small><b>{len(capacitaciones)}</b></div><div><small>Vistos</small><b>{len([r for r in capacitaciones if (r['estado'] or '').upper()=='VIDEO VISTO'])}</b></div><div><small>Pendientes</small><b>{len([r for r in capacitaciones if (r['estado'] or '').upper()!='VIDEO VISTO'])}</b></div></div><div class='table-wrap'><table class='c-table clean-table'><tr><th>Fecha</th><th>Tema/Curso</th><th>Tipo</th><th>Archivo / URL</th><th>Min.</th><th>Estado</th></tr>{video_rows}</table></div></div>
+        <form method='post' class='pro-card'><input type='hidden' name='accion' value='marcar_visto_masivo'><input type='hidden' name='volver' value='{sec}'><h3 class='pro-section-title'>Lista de postulantes del requerimiento - Inducción</h3><div class='records-toolbar'><input oninput="filtrarTabla(this,'tabla_capacitacion')" placeholder='Filtrar DNI, trabajador, curso, estado...'><select><option>Todos los estados</option><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>DESAPROBADO</option></select><button type='button' class='c-btn gray' onclick="document.querySelectorAll('#tabla_capacitacion input[name=cap_ids]').forEach(x=>x.checked=true)">Seleccionar todo</button><button type='submit' form='form_capacitacion' class='c-btn'>Guardar</button></div><div class='mass-actions'><b>Cambio masivo / notificaciones:</b><select name='estado_masivo'><option>VIDEO VISTO</option><option>VIDEO ASIGNADO</option><option>APROBADO</option><option>PENDIENTE</option></select><button class='c-btn'>Cambiar seleccionados y notificar</button></div><div class='table-wrap'><table id='tabla_capacitacion' class='c-table clean-table'><tr><th></th><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>{'Tema' if es_ind else 'Curso'}</th><th>Video</th><th>Nota</th><th>Estado</th><th>Anular</th><th>Observación</th></tr>{cap_rows}</table></div></form>
+        ''')
     elif sec=='indumentaria':
-        # ============================
-        # INDUMENTARIA / EPP - UI limpia sin indicadores repetidos
-        # ============================
-        ind_total = len(trabajadores_proceso)
-        ind_ent = len([r for r in indumentarias if str(row_get(r,'estado','')).upper() == 'ENTREGADO'])
-        ind_par = len([r for r in indumentarias if str(row_get(r,'estado','')).upper() == 'PARCIAL'])
-        ind_obs = len([r for r in indumentarias if 'OBS' in str(row_get(r,'estado','')).upper()])
-        ind_pend = max(ind_total - ind_ent, 0)
-        ind_avance = int(round((ind_ent / ind_total) * 100, 0)) if ind_total else 0
-
-        ind_post_rows = ''.join([
-            f"<tr><td>{i}</td><td><div class='mini-avatar'>{h((row_get(r,'trabajador','') or 'P')[:1]).upper()}</div></td><td><b>{h(row_get(r,'dni',''))}</b></td><td>{h(row_get(r,'trabajador','') or 'NUEVO - PENDIENTE COMPLETAR')}</td><td>{h(row_get(r,'cargo',''))}</td><td><span class='status-pill ok'>{h(row_get(r,'estado_indumentaria','PENDIENTE'))}</span></td><td>{ind_avance if ind_total else 0}%</td><td>Indumentaria / EPP</td><td>{h(row_get(r,'actividad',''))}</td><td><button type='button' class='premium-btn light' onclick=\"prepararEntrega('{h(row_get(r,'dni',''))}')\">Entregar</button></td></tr>"
-            for i, r in enumerate(trabajadores_proceso, 1)
-        ]) or "<tr><td colspan='10'>Seleccione un requerimiento para visualizar postulantes de indumentaria.</td></tr>"
-
-        ind_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro',''))}</td><td><b>{h(row_get(r,'dni',''))}</b></td><td>{h(row_get(r,'trabajador',''))}</td><td>{h(row_get(r,'empresa',''))}</td><td>{h(row_get(r,'area',''))}</td><td>{h(row_get(r,'cargo',''))}</td><td>{h(row_get(r,'polo',''))}</td><td>{h(row_get(r,'pantalon',''))}</td><td>{h(row_get(r,'botas',''))}</td><td>{h(row_get(r,'fotocheck',''))}</td><td><span class='status-pill ok'>{h(row_get(r,'estado',''))}</span></td><td>{h(row_get(r,'responsable_entrega',''))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{h(row_get(r,'id',''))}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(row_get(r,'fecha_entrega',''))}</td></tr>" for r in indumentarias]) or "<tr><td colspan='14'>Seleccione un requerimiento o no hay entregas registradas para este ticket.</td></tr>"
-
+        ind_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(r['polo'])}</td><td>{h(r['pantalon'])}</td><td>{h(r['botas'])}</td><td>{h(r['fotocheck'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['fecha_entrega'])}</td></tr>" for r in indumentarias]) or "<tr><td colspan='14'>Sin entregas registradas.</td></tr>"
         content=wrap(f"""
-        <style>
-          .premium-hero{{background:linear-gradient(135deg,#f8fffb,#ecfdf5);border:1px solid #bbf7d0;border-radius:28px;padding:26px 32px;margin-bottom:18px;display:grid;grid-template-columns:1.1fr .9fr;gap:28px;align-items:center;box-shadow:0 16px 38px rgba(15,23,42,.06)}}
-          .premium-title{{display:flex;gap:18px;align-items:center}} .premium-title .ico{{width:68px;height:68px;border-radius:22px;display:grid;place-items:center;background:#dcfce7;border:1px solid #86efac;font-size:30px;box-shadow:0 14px 28px rgba(16,185,129,.16)}}
-          .premium-title h1{{margin:0;color:#062044;font-size:34px;line-height:1.05}} .premium-title p{{margin:10px 0 0;color:#334155;font-size:16px;line-height:1.35}}
-          .ticket-box label,.filter-card label{{display:block;font-weight:1000;color:#062044;margin-bottom:8px;text-transform:uppercase;font-size:12px;letter-spacing:.02em}}
-          .ticket-box select,.filter-card input,.filter-card select,.premium-form input,.premium-form select,.premium-form textarea{{width:100%;border:1px solid #d6e3ef;border-radius:16px;background:#fff;padding:14px 16px;font-weight:900;color:#062044;min-height:54px}}
-          .filter-card{{background:#fff;border:1px solid #dbe7ef;border-radius:24px;padding:20px;margin-bottom:18px;display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end;box-shadow:0 12px 30px rgba(15,23,42,.05)}}
-          .premium-btn{{border:0;border-radius:16px;background:#0f172a;color:#fff;font-weight:1000;padding:15px 22px;box-shadow:0 16px 28px rgba(15,23,42,.18);text-decoration:none;display:inline-flex;align-items:center;gap:8px;justify-content:center;min-height:54px}}
-          .premium-btn.green{{background:#00a95c}} .premium-btn.light{{background:#fff;color:#062044;border:1px solid #dbe7ef;box-shadow:none}}
-          .control-card{{background:#fff;border:1px solid #dbe7ef;border-radius:24px;padding:24px;margin-bottom:18px;display:grid;grid-template-columns:270px repeat(5,1fr);gap:18px;box-shadow:0 12px 30px rgba(15,23,42,.05)}}
-          .control-title h2{{font-size:28px;line-height:1.05;margin:0 0 12px;color:#062044}} .control-title p{{color:#334155;margin:0 0 16px}}
-          .donut{{width:126px;height:126px;border-radius:50%;background:conic-gradient(#00a95c {ind_avance}%, #e5e7eb 0);display:grid;place-items:center;margin:auto}} .donut span{{background:#fff;width:82px;height:82px;border-radius:50%;display:grid;place-items:center;font-weight:1000;color:#062044;text-align:center}}
-          .metric-tall{{border:1px solid #dbe7ef;border-bottom:4px solid #008f51;border-radius:18px;padding:22px 12px;text-align:center;background:linear-gradient(180deg,#fff,#fbfffd)}} .metric-tall .round{{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:#dcfce7;margin:0 auto 12px;font-size:25px}} .metric-tall b{{display:block;font-size:28px;color:#062044;margin:6px 0}} .metric-tall strong{{color:#062044}}
-          .premium-card{{background:#fff;border:1px solid #dbe7ef;border-radius:24px;padding:22px;margin-bottom:18px;box-shadow:0 12px 30px rgba(15,23,42,.05)}} .premium-card-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}} .premium-card h2{{margin:0;color:#062044}}
-          .premium-table-wrap{{overflow:auto;border-radius:16px;border:1px solid #e2edf5}} .premium-table{{width:100%;border-collapse:collapse;min-width:980px}} .premium-table th{{background:#008f51;color:white;text-align:left;padding:14px;font-size:13px}} .premium-table td{{padding:14px;border-bottom:1px solid #edf2f7;color:#062044;font-weight:800;background:#fff}} .premium-table tr:hover td{{background:#f8fffb}}
-          .mini-avatar{{width:34px;height:34px;border-radius:50%;background:#dcfce7;color:#008f51;display:grid;place-items:center;font-weight:1000}}
-          .premium-form{{display:grid;grid-template-columns:150px minmax(180px,1fr) 150px minmax(180px,1fr);gap:14px;align-items:center}} .premium-form .span-all{{grid-column:1/-1}} .soft-alert{{grid-column:1/-1;border:1px solid #bbf7d0;background:#ecfdf5;border-radius:18px;padding:14px 16px;font-weight:900;color:#062044;display:grid;grid-template-columns:140px 1fr 1.2fr;gap:12px;align-items:center}}
-          .premium-modal{{display:none;position:fixed;inset:0;background:rgba(15,23,42,.54);z-index:9999;padding:28px;overflow:auto}} .premium-modal.show{{display:flex;align-items:flex-start;justify-content:center}} .premium-modal-box{{width:min(1120px,96vw);background:#fff;border-radius:28px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.32);padding:24px}} .premium-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;border-bottom:1px solid #e2edf5;padding-bottom:14px}} .premium-modal-head h2{{margin:0;color:#062044}} .premium-modal .premium-card{{box-shadow:none;border:0;padding:0;margin:0}} .premium-form input[type=file]{{padding:10px;font-size:13px;min-height:54px}}
-          @media(max-width:1200px){{.premium-hero,.filter-card,.control-card,.premium-form{{grid-template-columns:1fr}}}}
-        </style>
-
-        <div class='premium-hero'>
-          <div class='premium-title'><div class='ico'>🦺</div><div><h1>Indumentaria y EPP</h1><p>Flujo único: seleccione ticket, revise postulantes y registre prendas, EPP, cargo firmado y fotocheck.</p></div></div>
-          <div class='ticket-box'><label>1) Requerimiento / Ticket</label><select onchange="location.href='/admin/contratacion?sec=indumentaria&req='+encodeURIComponent(this.value)"><option>Seleccione requerimiento</option>{opt_req}</select></div>
-        </div>
-
-        <div class='filter-card'>
-          <div><label>Buscar postulantes del requerimiento</label><input oninput="filtrarTabla(this,'tabla_ind_postulantes')" placeholder='DNI, trabajador, cargo, actividad...'></div>
-          <div><label>Filtrar por estado</label><select><option>Todos los estados</option><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select></div>
-          <div><label>Acciones rápidas</label><button class='premium-btn' type='button' onclick="openIndumentariaModal()">📦 Registrar entrega</button></div>
-        </div>
-
-        <div class='control-card'>
-          <div class='control-title'><h2>Centro de Control<br>360°</h2><p>Avance general de indumentaria por requerimiento</p><div class='donut'><span>{ind_avance}%<br><small>completo</small></span></div></div>
-          <div class='metric-tall'><div class='round'>🎫</div><strong>Postulantes</strong><b>{ind_total}</b><small>Del ticket</small></div>
-          <div class='metric-tall'><div class='round'>🦺</div><strong>Entregados</strong><b>{ind_ent}</b><small>Completos</small></div>
-          <div class='metric-tall'><div class='round'>🟡</div><strong>Parciales</strong><b>{ind_par}</b><small>En proceso</small></div>
-          <div class='metric-tall'><div class='round'>⌛</div><strong>Pendientes</strong><b>{ind_pend}</b><small>Por entregar</small></div>
-          <div class='metric-tall'><div class='round'>⚠️</div><strong>Observados</strong><b>{ind_obs}</b><small>Atención</small></div>
-        </div>
-
-        <div class='premium-card'>
-          <div class='premium-card-head'><h2>Lista de postulantes del requerimiento - Indumentaria</h2><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='premium-btn' type='button' onclick="openIndumentariaModal()">📦 Registrar entrega</button><button class='premium-btn light' type='button' onclick='window.print()'>🖨️ Imprimir</button></div></div>
-          <div class='premium-table-wrap'><table id='tabla_ind_postulantes' class='premium-table'><tr><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Indumentaria</th><th>Actividad</th><th>Acción</th></tr>{ind_post_rows}</table></div>
-        </div>
-
-        <div id='modal_indumentaria' class='premium-modal'><div class='premium-modal-box'><div class='premium-modal-head'><h2>📦 Registrar entrega de indumentaria / EPP</h2><button type='button' class='premium-btn light' onclick="closeIndumentariaModal()">Cerrar</button></div>
-        <form id='form_indumentaria' method='post' enctype='multipart/form-data' class='premium-card premium-form'>
-          <input type='hidden' name='accion' value='guardar_indumentaria'>
-          <div class='soft-alert'><div>Estado de entrega</div><select name='estado' id='ind_estado' onchange='actualizarEstadoIndumentaria()'><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select><div id='ind_estado_msg'>Pendiente: falta registrar entrega.</div></div>
-          <b>Requerimiento</b><input id='ind_requerimiento' name='requerimiento' placeholder='Se carga automático o puede editarse'>
-          <b>DNI</b><input id='ind_dni' name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI'><datalist id='lista_ingresos'>{opt_ingresos}</datalist>
-          <div class='span-all' style='text-align:center'><button type='button' class='premium-btn light' onclick='buscarIndumentariaDNI()'>🔎 Buscar DNI</button></div>
+        <h2 class='c-title'>Entrega de indumentaria</h2><div class='dash-hero ind-hero-premium' style='margin-bottom:18px'><div><h1>Indumentaria y EPP</h1><p class='muted2'>Flujo único: seleccione ticket, revise postulantes y registre prendas, EPP, cargo firmado y fotocheck.</p></div><div class='ind-hero-actions'><button type='button' class='c-btn ind-primary' onclick='abrirModalIndumentaria()'>📦 Registrar entrega</button><a class='c-btn gray' href='/admin/contratacion?sec=integracion_nisira'>Validar NISIRA</a></div></div>
+        <form id='form_indumentaria' method='post' enctype='multipart/form-data' class='c-card c-form pro-form indumentaria-pro ind-modal-form' style='padding:20px'><input type='hidden' name='accion' value='guardar_indumentaria'><div class='ind-modal-head span-12'><h2>Registrar entrega de indumentaria / EPP</h2><button type='button' class='ind-close' onclick='cerrarModalIndumentaria()'>Cerrar</button></div>
+          <div class='ind-alert span-12'><div><small>ESTADO DE ENTREGA</small><select name='estado' id='ind_estado' onchange='actualizarEstadoIndumentaria()'><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select></div><div id='ind_estado_msg'>Digite DNI para iniciar el control de entrega.</div></div>
+          <h3 class='pro-section-title span-12'>1) Buscar postulante / trabajador</h3>
+          <b>DNI</b><input id='ind_dni' name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI y presione buscar'><datalist id='lista_ingresos'>{opt_ingresos}</datalist><span></span><button type='button' class='c-btn gray' onclick='buscarIndumentariaDNI()'>🔎 Buscar DNI</button>
+          <h3 class='pro-section-title span-12'>2) Datos del trabajador</h3>
           <b>Trabajador</b><input id='ind_trabajador' name='trabajador' readonly placeholder='Se carga automático por DNI'>
           <b>Empresa</b><input id='ind_empresa' readonly placeholder='Empresa'>
           <b>Área</b><input id='ind_area' readonly placeholder='Área'>
           <b>Cargo</b><input id='ind_cargo' readonly placeholder='Cargo'>
+          <b>Requerimiento / ticket</b><input id='ind_requerimiento' name='requerimiento' placeholder='Se carga automático o puede editarse'>
           <b>Fecha ingreso</b><input id='ind_fecha_ingreso' readonly placeholder='Fecha ingreso'>
-          <b>Polo</b><select name='polo'><option></option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option><option>NO APLICA</option></select>
-          <b>Pantalón</b><select name='pantalon'><option></option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>44</option><option>NO APLICA</option></select>
-          <b>Botas</b><select name='botas'><option></option><option>35</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option><option>NO APLICA</option></select>
-          <b>Casaca</b><select name='casaca'><option></option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>NO APLICA</option></select>
-          <b>Gorro</b><select name='gorro'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select>
-          <b>Lentes</b><select name='lentes'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select>
-          <b>Guantes</b><select name='guantes'><option></option><option>7</option><option>8</option><option>9</option><option>10</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>NO APLICA</option></select>
-          <b>Fotocheck</b><select name='fotocheck'><option>PENDIENTE</option><option>IMPRESO</option><option>ENTREGADO</option><option>NO APLICA</option></select>
-          <b>Fecha entrega</b><input type='date' name='fecha_entrega' value='{hoy_iso()}'>
-          <b>Responsable entrega</b><input name='responsable_entrega' placeholder='Nombre del responsable'>
-          <b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'>
-          <b>Otros / cantidad</b><input name='otros' placeholder='Ej. 2 mascarillas, 1 chaleco'>
-          <b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle de entrega, faltantes, responsable o cargo firmado.'></textarea>
-          <div class='span-all' style='text-align:center'><button class='premium-btn green'>💾 Guardar entrega</button></div>
-        </form></div></div>
-
-        <div class='premium-card'>
-          <div class='premium-card-head'><h2>Historial de entregas registradas</h2><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar historial...' style='border:1px solid #d6e3ef;border-radius:14px;padding:12px;font-weight:900'></div>
-          <div class='premium-table-wrap'><table id='tabla_indumentaria' class='premium-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Responsable</th><th>Anular</th><th>Entrega</th></tr>{ind_rows}</table></div>
-        </div>
-
+          <h3 class='pro-section-title span-12'>3) Detalle de prendas / EPP</h3>
+          <b>Polo</b><select name='polo'><option></option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option><option>NO APLICA</option></select><b>Pantalón</b><select name='pantalon'><option></option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>44</option><option>NO APLICA</option></select><b>Botas</b><select name='botas'><option></option><option>35</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option><option>NO APLICA</option></select><b>Casaca</b><select name='casaca'><option></option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>NO APLICA</option></select><b>Gorro</b><select name='gorro'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Lentes</b><select name='lentes'><option>PENDIENTE</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Guantes</b><select name='guantes'><option></option><option>7</option><option>8</option><option>9</option><option>10</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>NO APLICA</option></select><b>Fotocheck</b><select name='fotocheck'><option>PENDIENTE</option><option>IMPRESO</option><option>ENTREGADO</option><option>NO APLICA</option></select><b>Otros / cantidad</b><input name='otros' placeholder='Ej. 2 mascarillas, 1 chaleco'>
+          <h3 class='pro-section-title span-12'>4) Cargo y trazabilidad</h3>
+          <b>Fecha entrega</b><input type='date' name='fecha_entrega' value='{hoy_iso()}'><b>Responsable entrega</b><input name='responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle de entrega, faltantes, responsable o cargo firmado.'></textarea><span></span><button class='c-btn'>💾 Registrar entrega</button>
+        </form>
+        {bandeja_operativa('tabla_embudo_indumentaria')}
+        <div class='module-tools'><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar DNI, trabajador, prenda o estado'><button type='button' class='c-btn gray'>Modificar</button><button type='submit' form='form_indumentaria' class='c-btn'>Guardar</button></div><div class='c-card table-wrap'><table id='tabla_indumentaria' class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Responsable</th><th>Anular</th><th>Entrega</th></tr>{ind_rows}</table></div>
         <script>
+        function abrirModalIndumentaria(){{
+          const f=document.getElementById('form_indumentaria');
+          if(f) f.classList.add('ind-modal-open');
+        }}
+        function cerrarModalIndumentaria(){{
+          const f=document.getElementById('form_indumentaria');
+          if(f) f.classList.remove('ind-modal-open');
+        }}
         async function buscarIndumentariaDNI(){{
           const dni=(document.getElementById('ind_dni')?.value||'').replace(/\D/g,'');
           if(dni.length!==8){{ alert('Digite un DNI válido de 8 dígitos.'); return; }}
@@ -10371,9 +10241,6 @@ html,body{overflow-x:hidden!important;}
             document.getElementById('ind_estado_msg').innerText='Datos cargados correctamente. Registre prendas, responsable y cargo firmado.';
           }}catch(e){{ alert('No se pudo consultar el DNI.'); }}
         }}
-        function openIndumentariaModal(){{ const m=document.getElementById('modal_indumentaria'); if(m) m.classList.add('show'); }}
-        function closeIndumentariaModal(){{ const m=document.getElementById('modal_indumentaria'); if(m) m.classList.remove('show'); }}
-        function prepararEntrega(dni){{ const el=document.getElementById('ind_dni'); openIndumentariaModal(); if(el){{el.value=dni; setTimeout(buscarIndumentariaDNI,80);}} }}
         function actualizarEstadoIndumentaria(){{
           const v=document.getElementById('ind_estado')?.value||'PENDIENTE';
           const msg=document.getElementById('ind_estado_msg');
@@ -10385,9 +10252,26 @@ html,body{overflow-x:hidden!important;}
         }}
         document.getElementById('ind_dni')?.addEventListener('change', buscarIndumentariaDNI);
         actualizarEstadoIndumentaria();
-        document.addEventListener('keydown', e=>{{ if(e.key==='Escape') closeIndumentariaModal(); }});
-        document.getElementById('modal_indumentaria')?.addEventListener('click', e=>{{ if(e.target.id==='modal_indumentaria') closeIndumentariaModal(); }});
         </script>
+        <style>
+        .ind-hero-premium{{background:linear-gradient(135deg,#f6fffb,#ecfdf5)!important;border:1px solid #b7f7d0!important;border-radius:28px!important;padding:28px 34px!important;box-shadow:0 18px 45px rgba(4,120,87,.08)!important}}
+        .ind-hero-premium h1{{font-size:36px!important;line-height:1.08!important;color:#071b34!important}}
+        .ind-hero-actions{{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end}}
+        .ind-primary{{background:#071225!important;color:#fff!important;box-shadow:0 18px 34px rgba(7,18,37,.18)!important}}
+        .indumentaria-pro .span-12,.ind-alert.span-12,.ind-modal-head.span-12{{grid-column:1/-1}}
+        .ind-alert{{display:flex;gap:18px;align-items:center;justify-content:space-between;border:1px solid rgba(16,185,129,.25);background:linear-gradient(135deg,rgba(16,185,129,.14),rgba(15,23,42,.03));border-radius:18px;padding:16px;margin-bottom:8px}}
+        .ind-alert small{{display:block;color:#64748b;font-weight:800;letter-spacing:.08em}}
+        .ind-alert select{{font-size:16px;font-weight:800;border-radius:12px;padding:10px 12px}}
+        #ind_estado_msg{{font-weight:800;color:#0f172a}}
+        .ind-modal-form{{display:none!important;position:fixed!important;z-index:9999!important;left:50%!important;top:24px!important;transform:translateX(-50%)!important;width:min(1180px,94vw)!important;max-height:92vh!important;overflow:auto!important;background:#fff!important;border-radius:28px!important;box-shadow:0 35px 85px rgba(15,23,42,.35)!important;border:1px solid #dbeafe!important;grid-template-columns:170px minmax(220px,1fr) 170px minmax(220px,1fr)!important;gap:14px!important}}
+        .ind-modal-form.ind-modal-open{{display:grid!important}}
+        .ind-modal-head{{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;padding-bottom:12px;margin-bottom:6px}}
+        .ind-modal-head h2{{margin:0;color:#071b34;font-size:26px}}
+        .ind-close{{background:#071225;color:#fff;border:0;border-radius:14px;padding:12px 22px;font-weight:950;cursor:pointer}}
+        .indumentaria-pro input,.indumentaria-pro select,.indumentaria-pro textarea{{border-radius:16px!important;border:1px solid #cfe1f3!important;min-height:50px!important;font-weight:850!important}}
+        .indumentaria-pro b{{color:#071b34!important;font-weight:950!important}}
+        @media(max-width:900px){{.ind-modal-form{{grid-template-columns:1fr!important;left:12px!important;right:12px!important;transform:none!important;width:auto!important}}}}
+        </style>
         """)
     elif sec=='integracion_nisira':
         with db() as con_bc:
