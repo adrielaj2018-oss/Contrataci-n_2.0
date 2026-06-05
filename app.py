@@ -4681,6 +4681,67 @@ function initSide(){
 function filterCards(){const q=(document.getElementById('cardSearch')?.value||'').toLowerCase();document.querySelectorAll('.doc-card').forEach(c=>{c.style.display=c.innerText.toLowerCase().includes(q)?'block':'none'})}
 window.addEventListener('DOMContentLoaded',()=>{initSide(); if(location.hash){document.querySelectorAll('.menu-item').forEach(x=>{if(x.getAttribute('href')&&x.getAttribute('href').endsWith(location.hash)) x.classList.add('active')}); setTimeout(()=>{document.querySelector(location.hash)?.scrollIntoView({block:'start'});},120)}});window.addEventListener('beforeunload',saveSideScroll)
 </script>
+
+
+<!-- === FIX GLOBAL 2026: contraer sidebar al abrir ventanas/modales === -->
+<style id="fix-sidebar-modal-auto-collapse">
+body.modal-mode .side{width:92px!important;min-width:92px!important}
+body.modal-mode .app{grid-template-columns:92px minmax(0,1fr)!important}
+body.modal-mode .side .label,body.modal-mode .side .chev,body.modal-mode .side .subtxt,body.modal-mode .side .brand,body.modal-mode .side .side-user,body.modal-mode .side .submenu{display:none!important}
+body.modal-mode .side .menu-title,body.modal-mode .side .menu-item{justify-content:center!important;padding-left:10px!important;padding-right:10px!important}
+body.modal-mode .side .menu-title i,body.modal-mode .side .menu-item i{margin:0!important}
+body.modal-mode .main{min-width:0!important}
+.modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,[role="dialog"]{z-index:10020!important}
+.modal-card,.c-modal-card,.modal-content,.popup-card{z-index:10021!important}
+@media(max-width:1000px){body.modal-mode .side{transform:translateX(-100%)!important;left:-340px!important}body.modal-mode .app{grid-template-columns:1fr!important}}
+</style>
+<script id="fix-sidebar-modal-auto-collapse">
+(function(){
+  function qs(sel){return document.querySelector(sel)}
+  function sideEl(){return qs('.side')}
+  function appEl(){return qs('.app')}
+  function setCollapsed(on){
+    const s=sideEl(), a=appEl();
+    if(!s) return;
+    if(window.innerWidth < 1000){
+      s.classList.remove('open');
+      document.body.classList.toggle('modal-mode', !!on);
+      return;
+    }
+    s.classList.toggle('collapsed', !!on);
+    if(a) a.classList.toggle('side-collapsed', !!on);
+    document.body.classList.toggle('modal-mode', !!on);
+    try{ localStorage.setItem('sideCollapsed', on ? '1' : '0'); }catch(e){}
+  }
+  function visible(el){
+    if(!el) return false;
+    const st=getComputedStyle(el);
+    if(st.display==='none' || st.visibility==='hidden' || st.opacity==='0') return false;
+    if(el.classList.contains('hidden') || el.hasAttribute('hidden')) return false;
+    const r=el.getBoundingClientRect();
+    return r.width>20 && r.height>20;
+  }
+  function hasOpenModal(){
+    const selectors='.modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,[role="dialog"]';
+    return Array.from(document.querySelectorAll(selectors)).some(visible);
+  }
+  function sync(){ setCollapsed(hasOpenModal()); }
+  document.addEventListener('click', function(ev){
+    const el=ev.target.closest('button,a,.btn,.btn-green,.btn-blue,.crear-btn,.c-btn');
+    if(!el) return;
+    const txt=(el.innerText||el.value||el.getAttribute('title')||'').toLowerCase();
+    const href=(el.getAttribute('href')||'').toLowerCase();
+    const isModalAction = /registrar|nuevo|crear|agregar|ver detalle|vista previa|editar|abrir ficha/.test(txt) || href.includes('modal=') || el.getAttribute('data-modal');
+    if(isModalAction){ setTimeout(function(){ setCollapsed(true); sync(); }, 80); }
+  }, true);
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') setTimeout(sync, 80); });
+  window.addEventListener('DOMContentLoaded', function(){
+    sync();
+    const mo=new MutationObserver(function(){ sync(); });
+    mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','open']});
+  });
+})();
+</script>
 </head><body>{{ body|safe }}
 <script>
 window.addEventListener('DOMContentLoaded',()=>{
