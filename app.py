@@ -8242,7 +8242,7 @@ def admin_contratacion():
                 # VALIDACIÓN CRÍTICA:
                 # No se permite completar/guardar ficha si el DNI no pertenece al requerimiento seleccionado.
                 # Primero debe existir como postulante pre-registrado/importado en el ticket.
-                dni_en_requerimiento = con.execute("""SELECT id FROM contratacion_ingresos
+                dni_en_requerimiento = con.execute("""SELECT * FROM contratacion_ingresos
                                                        WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
                                                          AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
                                                        ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
@@ -8252,6 +8252,12 @@ def admin_contratacion():
                 if not dni_en_requerimiento:
                     flash(f'El DNI {dni} no se encuentra registrado en el requerimiento {requerimiento}. Primero agréguelo/importelo al ticket desde Requerimiento/Importación masiva.', 'error')
                     return redirect(url_for('admin_contratacion', sec='nuevos', req=requerimiento))
+
+                # El tipo de ingreso lo manda el DNI dentro del requerimiento actual.
+                # No se marca REINGRESANTE solo porque exista en tabla trabajadores.
+                tipo_ticket_actual = clean(row_get(dni_en_requerimiento, 'tipo_ingreso')).upper() if dni_en_requerimiento else ''
+                if tipo_ticket_actual in ('NUEVO', 'REINGRESANTE'):
+                    tipo_ingreso = tipo_ticket_actual
 
                 # Bloqueo PRO: no permite superar la cantidad solicitada del requerimiento.
                 # Si el DNI ya estaba pre-registrado en ese ticket, solo se completa su ficha.
@@ -8288,7 +8294,9 @@ def admin_contratacion():
                 existe = con.execute('SELECT dni FROM trabajadores WHERE dni=?', (dni,)).fetchone()
                 if existe:
                     con.execute("""UPDATE trabajadores SET nombre=?, empresa=?, cargo=?, area=?, correo=?, celular=?, activo=1, fecha_ingreso=COALESCE(NULLIF(?,''),fecha_ingreso), observacion=?, foto_ruta=COALESCE(NULLIF(?,''),foto_ruta), fecha_nacimiento=COALESCE(NULLIF(?,''),fecha_nacimiento), fecha_fin_contrato=COALESCE(NULLIF(?,''),fecha_fin_contrato), tipo_contrato=COALESCE(NULLIF(?,''),tipo_contrato), remuneracion_basica=COALESCE(NULLIF(?,''),remuneracion_basica) WHERE dni=?""", (nombre,empresa,cargo,area,correo,celular,fecha_ingreso,obs,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica,dni))
-                    tipo_ingreso = 'REINGRESANTE'
+                    # Se actualiza la base histórica, pero se conserva el tipo definido en el requerimiento actual.
+                    if tipo_ingreso not in ('NUEVO', 'REINGRESANTE'):
+                        tipo_ingreso = 'REINGRESANTE'
                 else:
                     con.execute("""INSERT INTO trabajadores(dni,nombre,correo,cargo,area,empresa,activo,fecha_registro,fecha_ingreso,celular,observacion,usuario_portal,clave_portal,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica) VALUES(?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)""", (dni,nombre,correo,cargo,area,empresa,now_txt(),fecha_ingreso,celular,obs,dni,dni,foto_ruta,fecha_nacimiento,fecha_fin_contrato,tipo_contrato,remuneracion_basica))
                 con.execute("""UPDATE trabajadores SET direccion=COALESCE(NULLIF(?,''),direccion), departamento=COALESCE(NULLIF(?,''),departamento), provincia=COALESCE(NULLIF(?,''),provincia), distrito=COALESCE(NULLIF(?,''),distrito), modalidad=COALESCE(NULLIF(?,''),modalidad), jefe_nombre=COALESCE(NULLIF(?,''),jefe_nombre), cuenta_bancaria=COALESCE(NULLIF(?,''),cuenta_bancaria), indumentaria=COALESCE(NULLIF(?,''),indumentaria), contacto_emergencia=COALESCE(NULLIF(?,''),contacto_emergencia), estado_civil=COALESCE(NULLIF(?,''),estado_civil), sistema_pensionario=COALESCE(NULLIF(?,''),sistema_pensionario), ultima_empresa=COALESCE(NULLIF(?,''),ultima_empresa), discapacidad=COALESCE(NULLIF(?,''),discapacidad), cantidad_hijos=COALESCE(NULLIF(?,''),cantidad_hijos), nacionalidad=COALESCE(NULLIF(?,''),nacionalidad), sexo=COALESCE(NULLIF(?,''),sexo), regimen_laboral=COALESCE(NULLIF(?,''),regimen_laboral), periodicidad_pago=COALESCE(NULLIF(?,''),periodicidad_pago), tipo_pago=COALESCE(NULLIF(?,''),tipo_pago), cuspp=COALESCE(NULLIF(?,''),cuspp), remuneracion_letra=COALESCE(NULLIF(?,''),remuneracion_letra), nombre_moneda=COALESCE(NULLIF(?,''),nombre_moneda), simbolo_moneda=COALESCE(NULLIF(?,''),simbolo_moneda), funciones=COALESCE(NULLIF(?,''),funciones), meses_contrato=COALESCE(NULLIF(?,''),meses_contrato), biometria_estado=? WHERE dni=?""", (direccion, departamento, provincia, distrito, modalidad, jefe, cuenta_bancaria, talla_indumentaria, contacto_emergencia, estado_civil, sistema_pensionario, ultima_empresa, discapacidad, cantidad_hijos, nacionalidad, sexo, regimen_laboral, periodicidad_pago, tipo_pago, cuspp, remuneracion_letra, nombre_moneda, simbolo_moneda, funciones, meses_contrato, 'CAPTURADA' if huella_ruta else 'PENDIENTE', dni))
@@ -9920,6 +9928,27 @@ html,body{overflow-x:hidden!important;}
         pend_firma = sum(1 for r in real_rows if clean(_rv(r,'estado_firma')).upper() not in ('FIRMADO','OK','COMPLETO')) if real_rows else 0
         inducidos = sum(1 for r in real_rows if clean(_rv(r,'estado_induccion')).upper() in ('INDUCIDO','OK','COMPLETO')) if real_rows else 0
         dnis_req_js = json.dumps([normalizar_dni(_rv(r,'dni')) for r in real_rows if normalizar_dni(_rv(r,'dni'))], ensure_ascii=False)
+        postulantes_req_js = json.dumps({normalizar_dni(_rv(r,'dni')): {
+            'tipo_ingreso': (clean(_rv(r,'tipo_ingreso')).upper() or 'NUEVO'),
+            'trabajador': clean(_rv(r,'trabajador')),
+            'empresa': clean(_rv(r,'empresa')),
+            'cargo': clean(_rv(r,'cargo')),
+            'area': clean(_rv(r,'area')),
+            'correo': clean(_rv(r,'correo')),
+            'celular': clean(_rv(r,'celular')),
+            'direccion': clean(_rv(r,'direccion')),
+            'departamento': clean(_rv(r,'departamento')),
+            'provincia': clean(_rv(r,'provincia')),
+            'distrito': clean(_rv(r,'distrito')),
+            'estado_civil': clean(_rv(r,'estado_civil')),
+            'sistema_pensionario': clean(_rv(r,'sistema_pensionario')),
+            'ultima_empresa': clean(_rv(r,'ultima_empresa')),
+            'discapacidad': clean(_rv(r,'discapacidad')),
+            'cantidad_hijos': clean(_rv(r,'cantidad_hijos')),
+            'cuenta_bancaria': clean(_rv(r,'cuenta_bancaria')),
+            'talla_indumentaria': clean(_rv(r,'talla_indumentaria')),
+            'contacto_emergencia': clean(_rv(r,'contacto_emergencia'))
+        } for r in real_rows if normalizar_dni(_rv(r,'dni'))}, ensure_ascii=False)
         content=wrap(f'''
         <style>
         .pp-final *{{box-sizing:border-box!important}}.pp-final{{font-family:Inter,Segoe UI,Arial,sans-serif!important;color:#0b2341!important}}.pp-hero{{background:#fff!important;border:1px solid #d9e7f0!important;border-radius:24px!important;padding:28px 34px!important;margin-bottom:18px!important;display:flex!important;justify-content:space-between!important;align-items:center!important;box-shadow:0 12px 30px rgba(15,43,67,.06)!important}}.pp-hero h1{{margin:0!important;font-size:38px!important;line-height:1!important;color:#04733d!important;font-weight:950!important;letter-spacing:-1px!important}}.pp-hero p{{margin:12px 0 0!important;color:#52637b!important;font-size:15px!important}}.pp-btn-green{{background:linear-gradient(135deg,#009b57,#006d3c)!important;color:#fff!important;border:0!important;border-radius:10px!important;padding:14px 22px!important;font-weight:950!important;text-decoration:none!important;box-shadow:0 14px 28px rgba(0,125,72,.24)!important;display:inline-flex!important;align-items:center!important;gap:10px!important}}.pp-filter-card{{background:#fff!important;border:1px solid #dfeaf2!important;border-radius:14px!important;padding:18px!important;margin-bottom:18px!important;display:grid!important;grid-template-columns:1.1fr .9fr .8fr!important;gap:28px!important;box-shadow:0 10px 26px rgba(15,43,67,.05)!important}}.pp-field label{{display:block!important;color:#007a43!important;font-weight:950!important;font-size:14px!important;margin-bottom:8px!important}}.pp-control{{height:46px!important;border:1px solid #d3e0eb!important;border-radius:8px!important;background:#fff!important;padding:0 16px!important;width:100%!important;font-weight:800!important;color:#172b43!important;font-size:14px!important}}.pp-search-wrap{{position:relative!important}}.pp-search-wrap span{{position:absolute!important;right:16px!important;top:12px!important;font-size:22px!important;color:#111!important}}.pp-kpi-row{{display:grid!important;grid-template-columns:repeat(6,1fr)!important;gap:14px!important;margin-bottom:18px!important}}.pp-kpi{{background:#fff!important;border:1px solid #e3e9ef!important;border-radius:10px!important;min-height:98px!important;padding:16px!important;display:flex!important;align-items:center!important;gap:14px!important;box-shadow:0 10px 22px rgba(15,43,67,.08)!important}}.pp-ico{{width:43px!important;height:43px!important;border-radius:50%!important;background:linear-gradient(135deg,#009b57,#006d3c)!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:21px!important;box-shadow:0 12px 22px rgba(0,125,72,.25)!important;flex:0 0 43px!important}}.pp-kpi h4{{margin:0 0 2px!important;font-size:12px!important;color:#1e2e42!important;font-weight:950!important}}.pp-kpi b{{display:block!important;font-size:26px!important;line-height:1!important;color:#0c253e!important;font-weight:950!important}}.pp-kpi small{{font-size:12px!important;color:#44566e!important}}.pp-control360{{background:#fff!important;border:1px solid #e0e8ee!important;border-radius:12px!important;margin-bottom:18px!important;padding:18px!important;display:grid!important;grid-template-columns:1.45fr repeat(6,1fr)!important;gap:14px!important;align-items:stretch!important;box-shadow:0 10px 26px rgba(15,43,67,.05)!important}}.pp-radial-card{{display:flex!important;align-items:center!important;gap:18px!important;min-width:0!important}}.pp-radial-title h3{{margin:0 0 8px!important;color:#007a43!important;font-weight:950!important;font-size:18px!important}}.pp-radial-title p{{margin:0!important;font-weight:800!important;color:#203045!important;font-size:12px!important}}.pp-ring{{width:96px!important;height:96px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;position:relative!important;flex:0 0 96px!important}}.pp-ring:before{{content:'';position:absolute;width:76px;height:76px;border-radius:50%;background:#fff!important}}.pp-ring div{{position:relative!important;text-align:center!important;font-weight:950!important;color:#0b223b!important;font-size:22px!important;line-height:1.05!important}}.pp-ring span{{display:block!important;font-size:11px!important;font-weight:700!important;color:#34445a!important}}.pp-stage{{border:1px solid #dfe8ef!important;border-radius:9px!important;min-height:112px!important;padding:14px 10px!important;text-align:center!important;box-shadow:0 8px 18px rgba(15,43,67,.04)!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:6px!important;border-bottom:2px solid #22b56d!important}}.pp-stage.warn{{border-bottom-color:#f6b73c!important}}.pp-stage.bad{{border-bottom-color:#ff5b5b!important}}.pp-stage .sico{{width:40px!important;height:40px!important;border-radius:50%!important;background:#d9f8e8!important;display:flex!important;align-items:center!important;justify-content:center!important;color:#007a43!important;font-size:20px!important;font-weight:950!important}}.pp-stage.warn .sico{{background:#fff1c8!important;color:#c47b00!important}}.pp-stage.bad .sico{{background:#ffdada!important;color:#df2735!important}}.pp-stage h4{{margin:0!important;font-size:12px!important;font-weight:950!important;color:#172a41!important}}.pp-stage b{{font-size:25px!important;line-height:1!important}}.pp-stage small{{font-size:12px!important;color:#405269!important}}.pp-table-card{{background:#fff!important;border:1px solid #dfe9f1!important;border-radius:14px!important;padding:14px!important;box-shadow:0 10px 26px rgba(15,43,67,.06)!important}}.pp-table-head{{display:flex!important;justify-content:space-between!important;align-items:center!important;margin-bottom:12px!important;gap:16px!important}}.pp-table-head h3{{margin:0!important;color:#007a43!important;font-size:17px!important;font-weight:950!important}}.pp-table-actions{{display:flex!important;gap:12px!important;align-items:center!important}}.pp-light-btn{{height:40px!important;padding:0 20px!important;border-radius:8px!important;border:1px solid #dce6ee!important;background:#fff!important;color:#10253d!important;font-weight:950!important;text-decoration:none!important;display:inline-flex!important;align-items:center!important;gap:8px!important}}.pp-table-wrap{{overflow-x:auto!important;border-radius:10px!important;border:1px solid #dfe7ee!important}}table.pp-table{{width:100%!important;min-width:1120px!important;border-collapse:collapse!important;background:#fff!important}}.pp-table th{{background:linear-gradient(180deg,#00894c,#006f3e)!important;color:#fff!important;font-size:12px!important;padding:11px 10px!important;text-align:center!important;border-right:1px solid rgba(255,255,255,.35)!important;white-space:nowrap!important}}.pp-table td{{padding:10px!important;border-right:1px solid #e1e8ef!important;border-bottom:1px solid #e1e8ef!important;text-align:center!important;vertical-align:middle!important;font-size:12px!important;color:#10253d!important}}.pp-table tr:hover td{{background:#f7fffb!important}}.pp-name{{text-align:left!important;font-weight:900!important;line-height:1.25!important}}.pp-photo{{width:42px!important;height:42px!important;border-radius:10px!important;border:1px solid #b7efcd!important;background:#f1fff7!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:24px!important;overflow:hidden!important}}.pp-pill{{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:92px!important;border-radius:999px!important;padding:7px 12px!important;font-weight:950!important;font-size:12px!important}}.pp-pill.ok{{background:#dff8e8!important;color:#04783e!important}}.pp-pill.warn{{background:#fff0cc!important;color:#d17a00!important}}.pp-pill.bad{{background:#ffe2e2!important;color:#df2735!important}}.pp-bar{{width:82px!important;height:7px!important;border-radius:999px!important;background:#e0e4e8!important;margin:6px auto 0!important;overflow:hidden!important}}.pp-bar span{{display:block!important;height:100%!important;border-radius:999px!important;background:#008b4d!important}}.pp-actions{{white-space:nowrap!important}}.pp-actions a{{width:30px!important;height:30px!important;margin:0 2px!important;border:1px solid #b7efcd!important;border-radius:7px!important;color:#00824a!important;background:#fff!important;text-decoration:none!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-weight:950!important}}.pp-demo-note{{font-size:12px!important;color:#6b7c90!important;margin-top:10px!important}}@media(max-width:1200px){{.pp-kpi-row{{grid-template-columns:repeat(3,1fr)!important}}.pp-control360{{grid-template-columns:repeat(3,1fr)!important}}.pp-radial-card{{grid-column:1/-1!important}}.pp-filter-card{{grid-template-columns:1fr!important}}}}
@@ -9996,6 +10025,7 @@ html,body{overflow-x:hidden!important;}
         }}
 
         const dnisRequerimiento = new Set({dnis_req_js});
+        const postulantesRequerimiento = {postulantes_req_js};
         const trabajadoresBase = {{}};
         {';'.join([f"trabajadoresBase['{h(t['dni'])}']={{nombre:'{h(t['nombre'])}',empresa:'{h(t['empresa'])}',cargo:'{h(t['cargo'] or '')}',area:'{h(t['area'] or '')}',correo:'{h(t['correo'] or '')}'}}" for t in trabajadores[:700]])};
         function numeroALetrasEntero(n){{
@@ -10040,11 +10070,23 @@ html,body{overflow-x:hidden!important;}
           }}catch(e){{}}
         }}
         let dniBloqueadoActual='';
+        function bloquearCamposPorDniInvalido(invalido){{
+          const form=document.getElementById('form_ingreso'); if(!form)return;
+          form.classList.toggle('form-dni-invalido', invalido);
+          form.querySelectorAll('input,select,textarea,button').forEach(el=>{{
+            const mantener = ['accion','foto_base64','origen_validacion','requerimiento'].includes(el.name) || el.id==='requerimiento_ingreso_hidden' || el.id==='dni_ingreso' || el.closest('#dni_req_msg') || el.closest('#bloqueo_req_msg');
+            if(mantener) return;
+            if(el.id==='btn_guardar_ingreso'){{ el.disabled = invalido; return; }}
+            el.disabled = invalido;
+          }});
+        }}
         function validarDniRequerimiento(){{
           const form=document.getElementById('form_ingreso');
           const dniEl=document.getElementById('dni_ingreso');
           const btn=document.getElementById('btn_guardar_ingreso');
           const msg=document.getElementById('dni_req_msg');
+          const tipo=document.getElementById('tipo_ingreso');
+          const origen=document.getElementById('origen_validacion');
           if(!form||!dniEl) return true;
           const req=(form.getAttribute('data-req-activo')||'').trim();
           const dni=(dniEl.value||'').replace(/\D/g,'').slice(-8);
@@ -10057,6 +10099,11 @@ html,body{overflow-x:hidden!important;}
           }}
           if(btn){{btn.disabled=invalido; btn.classList.toggle('disabled-pro', invalido);}}
           dniEl.classList.toggle('input-error-dni', invalido);
+          bloquearCamposPorDniInvalido(invalido);
+          if(invalido){{
+            if(tipo){{ tipo.value='NUEVO'; alertaTipoIngreso(); const box=document.querySelector('.tipo-ingreso-alert small'); if(box) box.innerText='DNI bloqueado: no pertenece al requerimiento seleccionado. No se permite continuar el registro.'; }}
+            if(origen) origen.value='BLOQUEADO: DNI NO PERTENECE AL REQUERIMIENTO';
+          }}
           if(invalido && dniBloqueadoActual!==dni){{dniBloqueadoActual=dni; emitirBeepBloqueo();}}
           if(!invalido) dniBloqueadoActual='';
           dniEl.setCustomValidity(invalido ? 'El DNI no pertenece al requerimiento seleccionado.' : '');
@@ -10072,7 +10119,35 @@ html,body{overflow-x:hidden!important;}
         function emitirBeep(tipo){{try{{const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.type='sine';o.frequency.value=(tipo==='REINGRESANTE'?880:520);o.connect(g);g.connect(ctx.destination);g.gain.setValueAtTime(0.08,ctx.currentTime);o.start();setTimeout(()=>{{o.stop();ctx.close();}},180);}}catch(e){{}}}}
         function alertaTipoIngreso(){{const tipo=document.getElementById('tipo_ingreso'); const box=document.querySelector('.tipo-ingreso-alert'); if(!tipo||!box)return; box.classList.remove('nuevo','reingresante'); box.classList.add(tipo.value==='REINGRESANTE'?'reingresante':'nuevo'); emitirBeep(tipo.value); const msg=box.querySelector('small'); if(msg){{msg.innerText=tipo.value==='REINGRESANTE'?'REINGRESANTE detectado: revisar datos jalados del historial antes de guardar.':'NUEVO: completar campos obligatorios antes de generar documentos.';}}}}
         function scanDniIngreso(e){{if(e.key==='Enter'){{e.preventDefault();var v=(e.target.value||'').replace(/\D/g,'').slice(-8);var dni=document.getElementById('dni_ingreso');if(dni){{dni.value=v;detectarReingreso();dni.focus();}}}}}}
-        async function detectarReingreso(){{const dni=document.getElementById('dni_ingreso').value.replace(/\D/g,''); const tipo=document.getElementById('tipo_ingreso'); const origen=document.getElementById('origen_validacion'); if(dni.length!==8) return; let t=trabajadoresBase[dni]||null; try{{const r=await fetch('/api/contratacion/trabajador/'+dni); const j=await r.json(); if(j.ok) t=j.trabajador;}}catch(e){{}} if(t){{tipo.value='REINGRESANTE'; alertaTipoIngreso(); origen.value='BASE HISTORICA EXCEL / POSTULANTES'; const map={{trabajador_ingreso:(t.nombre||t.trabajador), empresa_ingreso:t.empresa, cargo_ingreso:t.cargo, area_ingreso:t.area, correo_ingreso:t.correo, celular_ingreso:t.celular}}; Object.keys(map).forEach(id=>{{const el=document.getElementById(id); if(el && !el.value) el.value=map[id]||'';}}); ['direccion','departamento','provincia','distrito','estado_civil','sistema_pensionario','ultima_empresa','discapacidad','cantidad_hijos','cuenta_bancaria','talla_indumentaria','contacto_emergencia'].forEach(k=>{{const el=document.querySelector('[name="'+k+'"]'); if(el && !el.value && t[k]) el.value=t[k];}});}} else {{tipo.value='NUEVO'; alertaTipoIngreso(); origen.value='NUEVO / COMPLETAR FICHA';}}}}
+        async function detectarReingreso(){{
+          const dniEl=document.getElementById('dni_ingreso');
+          const dni=(dniEl?.value||'').replace(/\D/g,'').slice(-8);
+          const tipo=document.getElementById('tipo_ingreso');
+          const origen=document.getElementById('origen_validacion');
+          if(dni.length!==8) return;
+          if(!validarDniRequerimiento()) return;
+
+          const actual = postulantesRequerimiento[dni] || null;
+          if(actual){{
+            const tipoTicket = ((actual.tipo_ingreso||'NUEVO').toUpperCase()==='REINGRESANTE') ? 'REINGRESANTE' : 'NUEVO';
+            if(tipo) tipo.value = tipoTicket;
+            alertaTipoIngreso();
+            if(origen) origen.value = tipoTicket==='REINGRESANTE' ? 'TIPO DEFINIDO EN REQUERIMIENTO / BASE HISTORICA' : 'TIPO DEFINIDO EN REQUERIMIENTO: NUEVO';
+            const map={{trabajador_ingreso:actual.trabajador, empresa_ingreso:actual.empresa, cargo_ingreso:actual.cargo, area_ingreso:actual.area, correo_ingreso:actual.correo, celular_ingreso:actual.celular}};
+            Object.keys(map).forEach(id=>{{const el=document.getElementById(id); if(el && !el.value && map[id]) el.value=map[id];}});
+            ['direccion','departamento','provincia','distrito','estado_civil','sistema_pensionario','ultima_empresa','discapacidad','cantidad_hijos','cuenta_bancaria','talla_indumentaria','contacto_emergencia'].forEach(k=>{{const el=document.querySelector('[name="'+k+'"]'); if(el && !el.value && actual[k]) el.value=actual[k];}});
+            if(tipoTicket==='REINGRESANTE'){{
+              let t=null; try{{const r=await fetch('/api/contratacion/trabajador/'+dni); const j=await r.json(); if(j.ok) t=j.trabajador;}}catch(e){{}}
+              if(t){{
+                const hist={{trabajador_ingreso:(t.nombre||t.trabajador), empresa_ingreso:t.empresa, cargo_ingreso:t.cargo, area_ingreso:t.area, correo_ingreso:t.correo, celular_ingreso:t.celular}};
+                Object.keys(hist).forEach(id=>{{const el=document.getElementById(id); if(el && !el.value && hist[id]) el.value=hist[id];}});
+                ['direccion','departamento','provincia','distrito','estado_civil','sistema_pensionario','ultima_empresa','discapacidad','cantidad_hijos','cuenta_bancaria','talla_indumentaria','contacto_emergencia'].forEach(k=>{{const el=document.querySelector('[name="'+k+'"]'); if(el && !el.value && t[k]) el.value=t[k];}});
+              }}
+            }}
+            return;
+          }}
+          if(tipo) tipo.value='NUEVO'; alertaTipoIngreso(); if(origen) origen.value='TIPO DEFINIDO EN REQUERIMIENTO: NUEVO';
+        }}
         let streamIngreso=null; async function activarCamaraIngreso(){{try{{streamIngreso=await navigator.mediaDevices.getUserMedia({{video:{{facingMode:'user'}},audio:false}});document.getElementById('camVideo').srcObject=streamIngreso;}}catch(e){{alert('No se pudo activar cámara. Use HTTPS/Render o adjunte foto.')}}}}
         function capturarFotoIngreso(){{const v=document.getElementById('camVideo'),c=document.getElementById('camCanvas'),img=document.getElementById('camPreview'); if(!v||!v.videoWidth){{alert('Active la cámara primero.');return;}} c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0); const data=c.toDataURL('image/jpeg',0.90); document.getElementById('foto_base64').value=data; img.src=data; img.style.display='block';}}
         function apagarCamaraIngreso(){{if(streamIngreso){{streamIngreso.getTracks().forEach(t=>t.stop());streamIngreso=null;}}}}
