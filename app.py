@@ -4683,9 +4683,10 @@ window.addEventListener('DOMContentLoaded',()=>{initSide(); if(location.hash){do
 </script>
 
 
-<!-- === FIX GLOBAL DEFINITIVO 2026: sidebar auto-contraíble para CUALQUIER modal/ventana flotante === -->
-<style id="fix-sidebar-modal-auto-collapse">
-/* Cuando cualquier ventana/modal está abierto, el menú lateral pasa a modo iconos para no tapar el formulario */
+<!-- === FIX FINAL SEGURO 2026: sidebar auto-contraíble SOLO cuando hay modal real abierto === -->
+<style id="fix-sidebar-modal-auto-collapse-final-safe">
+/* IMPORTANTE: estas reglas solo actúan si JS agrega body.modal-mode.
+   Al entrar a cualquier módulo normal, el sidebar queda libre para expandir/contraer. */
 body.modal-mode .side{width:92px!important;min-width:92px!important;max-width:92px!important;overflow:hidden!important;z-index:10000!important}
 body.modal-mode .app{grid-template-columns:92px minmax(0,1fr)!important}
 body.modal-mode .app.side-collapsed{grid-template-columns:92px minmax(0,1fr)!important}
@@ -4705,13 +4706,11 @@ body.modal-mode .side .menu-item i{margin:0!important;min-width:44px!important}
 body.modal-mode .side-head-pro,
 body.modal-mode .side-top{min-height:60px!important;padding-left:8px!important;padding-right:8px!important;justify-content:center!important}
 
-/* Reubica modales propios y genéricos para que empiecen después del sidebar contraído */
 body.modal-mode .post-modal,
 body.modal-mode .med-modal,
 body.modal-mode .ind-modal,
 body.modal-mode .indu-modal,
 body.modal-mode .induccion-modal,
-body.modal-mode .cap-modal,
 body.modal-mode .foto-modal,
 body.modal-mode .fotocheck-modal,
 body.modal-mode .doc-modal,
@@ -4733,7 +4732,6 @@ body.modal-mode .med-modal-card,
 body.modal-mode .ind-modal-card,
 body.modal-mode .indu-modal-card,
 body.modal-mode .induccion-modal-card,
-body.modal-mode .cap-modal-card,
 body.modal-mode .foto-modal-card,
 body.modal-mode .fotocheck-modal-card,
 body.modal-mode .doc-modal-card,
@@ -4747,10 +4745,6 @@ body.modal-mode .c-modal-card,
 body.modal-mode .modal-content,
 body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-width:calc(100vw - 130px)!important;z-index:10021!important}
 
-/* Evita que overlays de fondo queden encima del menú y del modal */
-.modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,[role="dialog"]{z-index:10020!important}
-.modal-card,.c-modal-card,.modal-content,.popup-card{z-index:10021!important}
-
 @media(max-width:1000px){
   body.modal-mode .side{transform:translateX(-100%)!important;left:-340px!important;width:0!important;min-width:0!important;max-width:0!important}
   body.modal-mode .app{grid-template-columns:1fr!important}
@@ -4759,7 +4753,6 @@ body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-
   body.modal-mode .ind-modal,
   body.modal-mode .indu-modal,
   body.modal-mode .induccion-modal,
-  body.modal-mode .cap-modal,
   body.modal-mode .foto-modal,
   body.modal-mode .fotocheck-modal,
   body.modal-mode .doc-modal,
@@ -4780,7 +4773,6 @@ body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-
   body.modal-mode .ind-modal-card,
   body.modal-mode .indu-modal-card,
   body.modal-mode .induccion-modal-card,
-  body.modal-mode .cap-modal-card,
   body.modal-mode .foto-modal-card,
   body.modal-mode .fotocheck-modal-card,
   body.modal-mode .doc-modal-card,
@@ -4795,17 +4787,13 @@ body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-
   body.modal-mode .popup-card{width:min(96vw,1180px)!important;max-width:96vw!important}
 }
 </style>
-<script id="fix-sidebar-modal-auto-collapse">
+<script id="fix-sidebar-modal-auto-collapse-final-safe">
 (function(){
-  // Parche seguro: el panel SOLO se contrae mientras exista una ventana/modal realmente visible.
-  // No guarda el estado contraído en localStorage para evitar que el menú amanezca cerrado.
-  if(window.__PRIZE_GLOBAL_MODAL_SIDEBAR_FIX_SAFE__) return;
-  window.__PRIZE_GLOBAL_MODAL_SIDEBAR_FIX_SAFE__ = true;
+  if(window.__PRIZE_MODAL_SIDEBAR_FINAL_SAFE__) return;
+  window.__PRIZE_MODAL_SIDEBAR_FINAL_SAFE__ = true;
 
-  const MODAL_INPUT_SELECTOR = '.post-modal-check,.med-modal-check,.ind-modal-check,.indu-modal-check,.induccion-modal-check,.cap-modal-check,.foto-modal-check,.fotocheck-modal-check,.doc-modal-check,.docs-modal-check,.req-modal-check,.firma-modal-check,.ren-modal-check,.obs-modal-check,input[id^="modal_"],input[id*="_modal"]';
-  const MODAL_SELECTOR = '.modal,.c-modal,.modal-pro,.modal-prize,.modal-window,.popup-overlay,.overlay-modal,.post-modal,.med-modal,.ind-modal,.indu-modal,.induccion-modal,.cap-modal,.foto-modal,.fotocheck-modal,.doc-modal,.docs-modal,.req-modal,.firma-modal,.ren-modal,.obs-modal,[role="dialog"],dialog,[class*="modal-overlay"],[class*="popup-overlay"]';
-
-  let forcedByClick = false;
+  const CHECK_SELECTOR = '.post-modal-check,.med-modal-check,.ind-modal-check,.indu-modal-check,.induccion-modal-check,.foto-modal-check,.fotocheck-modal-check,.doc-modal-check,.docs-modal-check,.req-modal-check,.firma-modal-check,.ren-modal-check,.obs-modal-check,input[id^="modal_"],input[id*="_modal"]';
+  const MODAL_SELECTOR = '.post-modal,.med-modal,.ind-modal,.indu-modal,.induccion-modal,.foto-modal,.fotocheck-modal,.doc-modal,.docs-modal,.req-modal,.firma-modal,.ren-modal,.obs-modal,.c-modal,.modal,.modal-pro,.modal-prize,.modal-window,.popup-overlay,.overlay-modal,[role="dialog"],dialog,[class*="modal-overlay"],[class*="popup-overlay"]';
   let previousSideState = null;
   let syncTimer = null;
 
@@ -4813,6 +4801,7 @@ body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-
   function qa(sel){ return Array.from(document.querySelectorAll(sel)); }
   function sideEl(){ return q('.side') || q('aside.sidebar') || q('.sidebar'); }
   function appEl(){ return q('.app') || q('.layout') || q('.admin-layout'); }
+  function insideSide(el){ return !!(el && el.closest && el.closest('.side,.sidebar,aside.sidebar')); }
 
   function rememberState(){
     const s = sideEl(), a = appEl();
@@ -4820,7 +4809,8 @@ body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-
     previousSideState = {
       sideCollapsed: s.classList.contains('collapsed'),
       sideOpen: s.classList.contains('open'),
-      appCollapsed: a ? a.classList.contains('side-collapsed') : false
+      appCollapsed: a ? a.classList.contains('side-collapsed') : false,
+      storedCollapsed: localStorage.getItem('sideCollapsed')
     };
   }
 
@@ -4832,56 +4822,55 @@ body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-
     s.classList.add('collapsed');
     s.classList.remove('open');
     if(a) a.classList.add('side-collapsed');
-    try{ localStorage.removeItem('sideCollapsed'); }catch(e){}
   }
 
   function restoreSidebar(){
     const s = sideEl(), a = appEl();
     document.body.classList.remove('modal-mode');
-    forcedByClick = false;
     if(!s) return;
     if(previousSideState){
       s.classList.toggle('collapsed', !!previousSideState.sideCollapsed);
       s.classList.toggle('open', !!previousSideState.sideOpen);
       if(a) a.classList.toggle('side-collapsed', !!previousSideState.appCollapsed);
+      if(previousSideState.storedCollapsed === null) localStorage.removeItem('sideCollapsed');
+      else localStorage.setItem('sideCollapsed', previousSideState.storedCollapsed);
       previousSideState = null;
-    }else{
-      // Si no hay modal abierto, nunca dejar el sistema bloqueado contraído por este parche.
-      s.classList.remove('collapsed');
-      if(a) a.classList.remove('side-collapsed');
     }
-    try{ localStorage.removeItem('sideCollapsed'); }catch(e){}
   }
 
-  function isInsideSidebar(el){ return !!(el && el.closest && el.closest('.side')); }
-  function isActuallyVisible(el){
-    if(!el || el === document.body || el === document.documentElement || isInsideSidebar(el)) return false;
+  function checkboxOpen(){
+    return qa(CHECK_SELECTOR).some(function(el){ return el.checked && !insideSide(el); });
+  }
+
+  function visible(el){
+    if(!el || el === document.body || el === document.documentElement || insideSide(el)) return false;
+    if(el.hasAttribute('hidden') || el.getAttribute('aria-hidden') === 'true') return false;
     if(el.classList && (el.classList.contains('hidden') || el.classList.contains('hide') || el.classList.contains('d-none'))) return false;
-    if(el.hasAttribute && (el.hasAttribute('hidden') || el.getAttribute('aria-hidden') === 'true')) return false;
     const st = getComputedStyle(el);
     if(st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity) === 0) return false;
     const r = el.getBoundingClientRect();
-    if(r.width < 120 || r.height < 90) return false;
-    return true;
+    return r.width >= 260 && r.height >= 180;
   }
 
-  function isOpenModalElement(el){
-    if(!isActuallyVisible(el)) return false;
+  function realModalOpen(el){
+    if(!visible(el)) return false;
+    if(el.tagName === 'DIALOG') return el.hasAttribute('open');
     const st = getComputedStyle(el);
-    const cls = (el.className || '').toString().toLowerCase();
-    const id = (el.id || '').toLowerCase();
+    const cls = String(el.className || '').toLowerCase();
     const role = (el.getAttribute('role') || '').toLowerCase();
-    const isDialog = el.tagName === 'DIALOG' ? el.hasAttribute('open') : role === 'dialog';
-    const nameLooksModal = /(^|\s)(modal|c-modal|modal-pro|modal-prize|popup-overlay|overlay-modal|post-modal|med-modal|ind-modal|indu-modal|induccion-modal|foto-modal|fotocheck-modal|doc-modal|docs-modal|req-modal|firma-modal|ren-modal|obs-modal)(\s|$)/.test(cls)
-      || /modal|popup|dialog|registro|crearplantilla|obsmodal|cargomodal/i.test(id);
-    const openedClass = el.classList && (el.classList.contains('show') || el.classList.contains('active') || el.classList.contains('open'));
-    const fixedOverlay = (st.position === 'fixed' || st.position === 'absolute') && parseInt(st.zIndex || '0',10) >= 900;
-    return isDialog || (nameLooksModal && (openedClass || fixedOverlay || st.display === 'flex' || st.display === 'block'));
+
+    // Regla clave: no contraer por contenedores normales del módulo.
+    // Solo aceptamos ventanas flotantes/overlays reales: fixed, role dialog, o checkbox activo.
+    const isFixed = st.position === 'fixed';
+    const isDialog = role === 'dialog' || el.getAttribute('aria-modal') === 'true';
+    const modalName = /(^|\s)(post-modal|med-modal|ind-modal|indu-modal|induccion-modal|foto-modal|fotocheck-modal|doc-modal|docs-modal|req-modal|firma-modal|ren-modal|obs-modal|c-modal|modal|modal-pro|modal-prize|modal-window|popup-overlay|overlay-modal)(\s|$)/.test(cls);
+    const openClass = el.classList && (el.classList.contains('show') || el.classList.contains('active') || el.classList.contains('open'));
+    return modalName && (isFixed || isDialog || openClass);
   }
 
   function hasOpenModal(){
-    if(q(MODAL_INPUT_SELECTOR + ':checked')) return true;
-    return qa(MODAL_SELECTOR).some(isOpenModalElement);
+    if(checkboxOpen()) return true;
+    return qa(MODAL_SELECTOR).some(realModalOpen);
   }
 
   function sync(){
@@ -4889,52 +4878,46 @@ body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-
     syncTimer = setTimeout(function(){
       if(hasOpenModal()) collapseSidebar();
       else restoreSidebar();
-    }, 40);
+    }, 60);
   }
 
   window.forceSidebarForModal = function(on){
-    forcedByClick = !!on;
     if(on) collapseSidebar(); else restoreSidebar();
-    setTimeout(sync, 120);
-    setTimeout(sync, 450);
+    setTimeout(sync, 180);
   };
   window.PRIZE_forceSidebarForModal = window.forceSidebarForModal;
 
-  function actionMayOpenModal(el){
-    if(!el || isInsideSidebar(el)) return false;
+  function maybeModalTrigger(el){
+    if(!el || insideSide(el)) return false;
     const txt = (el.innerText || el.value || el.getAttribute('title') || el.getAttribute('aria-label') || '').toLowerCase();
     const href = (el.getAttribute('href') || '').toLowerCase();
     const target = (el.getAttribute('for') || el.getAttribute('data-modal') || el.getAttribute('data-target') || el.getAttribute('data-bs-target') || '').toLowerCase();
-    if(target && /modal|registro|medica|indu|indumentaria|fotocheck|doc|firma|req|obs|plantilla/.test(target)) return true;
-    if(href.startsWith('#') && /modal|registro|crearplantilla|obsmodal|cargomodal/.test(href)) return true;
-    return /registrar|nuevo|crear|agregar|editar|ver detalle|vista previa|abrir ficha|programar|entregar|cargar evidencia|marcar visto|imprimir|validar nisira/.test(txt);
+    return /modal|registro|entrega|ficha|evidencia|detalle|vista|firma|fotocheck|induccion|indumentaria|medica/.test(target)
+      || (href.startsWith('#') && /modal|registro|entrega|ficha|detalle|vista|firma/.test(href))
+      || /registrar|nuevo|crear|agregar|editar|ver detalle|vista previa|abrir ficha|programar|entregar|cargar evidencia|marcar visto/.test(txt);
   }
 
   document.addEventListener('click', function(ev){
     const el = ev.target.closest && ev.target.closest('label,button,a,.btn,.btn-green,.btn-blue,.crear-btn,.c-btn,.ind-btn,.med-select-btn,.post-open,.action,.accion');
-    if(actionMayOpenModal(el)){
-      forcedByClick = true;
-      collapseSidebar();
-      setTimeout(sync, 160);
-      setTimeout(sync, 550);
-      setTimeout(function(){ if(!hasOpenModal()) restoreSidebar(); }, 1000);
+    if(maybeModalTrigger(el)){
+      // NO contraer al instante. Primero dejamos que el modal se abra y luego verificamos.
+      setTimeout(sync, 80);
+      setTimeout(sync, 220);
+      setTimeout(sync, 600);
     }
   }, true);
 
   document.addEventListener('change', function(ev){
-    if(ev.target && ev.target.matches && ev.target.matches(MODAL_INPUT_SELECTOR)){
-      if(ev.target.checked) collapseSidebar(); else restoreSidebar();
-      setTimeout(sync, 120);
-    }
+    if(ev.target && ev.target.matches && ev.target.matches(CHECK_SELECTOR)) setTimeout(sync, 40);
   }, true);
-
   document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') setTimeout(sync, 120); }, true);
 
   window.addEventListener('DOMContentLoaded', function(){
-    // Limpia una contracción heredada de una versión anterior cuando NO hay modal abierto.
-    setTimeout(function(){ if(!hasOpenModal()) restoreSidebar(); }, 120);
+    // Limpieza de versiones anteriores: al cargar módulo normal, NO forzar modal-mode.
+    document.body.classList.remove('modal-mode');
+    setTimeout(sync, 150);
     const mo = new MutationObserver(sync);
-    mo.observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['class','style','hidden','open','checked','aria-hidden']});
+    mo.observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['class','style','hidden','open','checked','aria-hidden','aria-modal']});
   });
   window.addEventListener('resize', sync);
 })();
