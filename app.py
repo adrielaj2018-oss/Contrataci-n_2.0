@@ -4683,75 +4683,263 @@ window.addEventListener('DOMContentLoaded',()=>{initSide(); if(location.hash){do
 </script>
 
 
-<!-- === FIX GLOBAL 2026: contraer sidebar al abrir ventanas/modales === -->
+<!-- === FIX GLOBAL DEFINITIVO 2026: sidebar auto-contraíble para CUALQUIER modal/ventana flotante === -->
 <style id="fix-sidebar-modal-auto-collapse">
-body.modal-mode .side{width:92px!important;min-width:92px!important}
+/* Cuando cualquier ventana/modal está abierto, el menú lateral pasa a modo iconos para no tapar el formulario */
+body.modal-mode .side{width:92px!important;min-width:92px!important;max-width:92px!important;overflow:hidden!important;z-index:10000!important}
 body.modal-mode .app{grid-template-columns:92px minmax(0,1fr)!important}
-body.modal-mode .side .label,body.modal-mode .side .chev,body.modal-mode .side .subtxt,body.modal-mode .side .brand,body.modal-mode .side .side-user,body.modal-mode .side .submenu{display:none!important}
-body.modal-mode .side .menu-title,body.modal-mode .side .menu-item{justify-content:center!important;padding-left:10px!important;padding-right:10px!important}
-body.modal-mode .side .menu-title i,body.modal-mode .side .menu-item i{margin:0!important}
-body.modal-mode .main{min-width:0!important}
-body.modal-mode .side{overflow:hidden!important}
-body.modal-mode .side-head-pro,body.modal-mode .side-top{min-height:60px!important}
-body.modal-mode .post-modal{left:92px!important;width:calc(100vw - 92px)!important;justify-content:center!important}
-body.modal-mode .post-modal-card{width:min(1180px,calc(100vw - 130px))!important;max-width:calc(100vw - 130px)!important}
+body.modal-mode .app.side-collapsed{grid-template-columns:92px minmax(0,1fr)!important}
+body.modal-mode .main{min-width:0!important;width:100%!important;margin-left:0!important}
+body.modal-mode .side .label,
+body.modal-mode .side .chev,
+body.modal-mode .side .subtxt,
+body.modal-mode .side .brand,
+body.modal-mode .side .side-user,
+body.modal-mode .side .submenu,
+body.modal-mode .side .side-footer,
+body.modal-mode .side .user-info{display:none!important;visibility:hidden!important}
+body.modal-mode .side .menu-title,
+body.modal-mode .side .menu-item{justify-content:center!important;padding-left:10px!important;padding-right:10px!important;gap:0!important}
+body.modal-mode .side .menu-title i,
+body.modal-mode .side .menu-item i{margin:0!important;min-width:44px!important}
+body.modal-mode .side-head-pro,
+body.modal-mode .side-top{min-height:60px!important;padding-left:8px!important;padding-right:8px!important;justify-content:center!important}
+
+/* Reubica modales propios y genéricos para que empiecen después del sidebar contraído */
+body.modal-mode .post-modal,
+body.modal-mode .med-modal,
+body.modal-mode .ind-modal,
+body.modal-mode .indu-modal,
+body.modal-mode .induccion-modal,
+body.modal-mode .cap-modal,
+body.modal-mode .foto-modal,
+body.modal-mode .fotocheck-modal,
+body.modal-mode .doc-modal,
+body.modal-mode .docs-modal,
+body.modal-mode .req-modal,
+body.modal-mode .firma-modal,
+body.modal-mode .ren-modal,
+body.modal-mode .obs-modal,
+body.modal-mode .c-modal,
+body.modal-mode .modal-pro,
+body.modal-mode .modal-window,
+body.modal-mode .popup-overlay,
+body.modal-mode .overlay-modal,
+body.modal-mode .modal[style],
+body.modal-mode [role="dialog"]{left:92px!important;width:calc(100vw - 92px)!important;max-width:calc(100vw - 92px)!important;justify-content:center!important;z-index:10020!important}
+
+body.modal-mode .post-modal-card,
+body.modal-mode .med-modal-card,
+body.modal-mode .ind-modal-card,
+body.modal-mode .indu-modal-card,
+body.modal-mode .induccion-modal-card,
+body.modal-mode .cap-modal-card,
+body.modal-mode .foto-modal-card,
+body.modal-mode .fotocheck-modal-card,
+body.modal-mode .doc-modal-card,
+body.modal-mode .docs-modal-card,
+body.modal-mode .req-modal-card,
+body.modal-mode .firma-modal-card,
+body.modal-mode .ren-modal-card,
+body.modal-mode .obs-modal-card,
+body.modal-mode .modal-card,
+body.modal-mode .c-modal-card,
+body.modal-mode .modal-content,
+body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-width:calc(100vw - 130px)!important;z-index:10021!important}
+
+/* Evita que overlays de fondo queden encima del menú y del modal */
 .modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,[role="dialog"]{z-index:10020!important}
 .modal-card,.c-modal-card,.modal-content,.popup-card{z-index:10021!important}
-@media(max-width:1000px){body.modal-mode .side{transform:translateX(-100%)!important;left:-340px!important}body.modal-mode .app{grid-template-columns:1fr!important}}
+
+@media(max-width:1000px){
+  body.modal-mode .side{transform:translateX(-100%)!important;left:-340px!important;width:0!important;min-width:0!important;max-width:0!important}
+  body.modal-mode .app{grid-template-columns:1fr!important}
+  body.modal-mode .post-modal,
+  body.modal-mode .med-modal,
+  body.modal-mode .ind-modal,
+  body.modal-mode .indu-modal,
+  body.modal-mode .induccion-modal,
+  body.modal-mode .cap-modal,
+  body.modal-mode .foto-modal,
+  body.modal-mode .fotocheck-modal,
+  body.modal-mode .doc-modal,
+  body.modal-mode .docs-modal,
+  body.modal-mode .req-modal,
+  body.modal-mode .firma-modal,
+  body.modal-mode .ren-modal,
+  body.modal-mode .obs-modal,
+  body.modal-mode .c-modal,
+  body.modal-mode .modal-pro,
+  body.modal-mode .modal-window,
+  body.modal-mode .popup-overlay,
+  body.modal-mode .overlay-modal,
+  body.modal-mode .modal[style],
+  body.modal-mode [role="dialog"]{left:0!important;width:100vw!important;max-width:100vw!important}
+  body.modal-mode .post-modal-card,
+  body.modal-mode .med-modal-card,
+  body.modal-mode .ind-modal-card,
+  body.modal-mode .indu-modal-card,
+  body.modal-mode .induccion-modal-card,
+  body.modal-mode .cap-modal-card,
+  body.modal-mode .foto-modal-card,
+  body.modal-mode .fotocheck-modal-card,
+  body.modal-mode .doc-modal-card,
+  body.modal-mode .docs-modal-card,
+  body.modal-mode .req-modal-card,
+  body.modal-mode .firma-modal-card,
+  body.modal-mode .ren-modal-card,
+  body.modal-mode .obs-modal-card,
+  body.modal-mode .modal-card,
+  body.modal-mode .c-modal-card,
+  body.modal-mode .modal-content,
+  body.modal-mode .popup-card{width:min(96vw,1180px)!important;max-width:96vw!important}
+}
 </style>
 <script id="fix-sidebar-modal-auto-collapse">
 (function(){
+  if(window.__PRIZE_GLOBAL_MODAL_SIDEBAR_FIX__) return;
+  window.__PRIZE_GLOBAL_MODAL_SIDEBAR_FIX__ = true;
+
+  const MODAL_INPUT_SELECTOR = '.post-modal-check,.med-modal-check,.ind-modal-check,.indu-modal-check,.induccion-modal-check,.cap-modal-check,.foto-modal-check,.fotocheck-modal-check,.doc-modal-check,.docs-modal-check,.req-modal-check,.firma-modal-check,.ren-modal-check,.obs-modal-check,input[id^="modal_"],input[id*="_modal"]';
+  const MODAL_SELECTOR = '.modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,.post-modal,.med-modal,.ind-modal,.indu-modal,.induccion-modal,.cap-modal,.foto-modal,.fotocheck-modal,.doc-modal,.docs-modal,.req-modal,.firma-modal,.ren-modal,.obs-modal,[role="dialog"],[class*="modal-overlay"],[class*="popup-overlay"]';
+  let manualLock = false;
+  let previousSideState = null;
+  let timer = null;
+
   function qs(sel){return document.querySelector(sel)}
-  function sideEl(){return qs('.side')}
-  function appEl(){return qs('.app')}
+  function sideEl(){return qs('.side') || qs('aside') || qs('.sidebar')}
+  function appEl(){return qs('.app') || qs('.layout') || qs('.admin-layout')}
+
+  function rememberState(){
+    const s = sideEl(), a = appEl();
+    if(previousSideState || !s) return;
+    previousSideState = {
+      sideCollapsed: s.classList.contains('collapsed'),
+      sideOpen: s.classList.contains('open'),
+      appCollapsed: a ? a.classList.contains('side-collapsed') : false,
+      bodyModal: document.body.classList.contains('modal-mode')
+    };
+  }
+
+  function restoreState(){
+    const s = sideEl(), a = appEl();
+    if(!s || !previousSideState) return;
+    s.classList.toggle('collapsed', !!previousSideState.sideCollapsed);
+    s.classList.toggle('open', !!previousSideState.sideOpen);
+    if(a) a.classList.toggle('side-collapsed', !!previousSideState.appCollapsed);
+    document.body.classList.toggle('modal-mode', !!previousSideState.bodyModal);
+    previousSideState = null;
+  }
+
   function setCollapsed(on){
-    const s=sideEl(), a=appEl();
+    const s = sideEl(), a = appEl();
     if(!s) return;
-    if(window.innerWidth < 1000){
+    if(on){
+      rememberState();
+      document.body.classList.add('modal-mode');
+      s.classList.add('collapsed');
       s.classList.remove('open');
-      document.body.classList.toggle('modal-mode', !!on);
-      return;
+      if(a) a.classList.add('side-collapsed');
+      try{ localStorage.setItem('sideCollapsed','1'); }catch(e){}
+    }else{
+      manualLock = false;
+      document.body.classList.remove('modal-mode');
+      restoreState();
     }
-    s.classList.toggle('collapsed', !!on);
-    if(a) a.classList.toggle('side-collapsed', !!on);
-    document.body.classList.toggle('modal-mode', !!on);
-    try{ localStorage.setItem('sideCollapsed', on ? '1' : '0'); }catch(e){}
   }
+
   function visible(el){
-    if(!el) return false;
-    const st=getComputedStyle(el);
-    if(st.display==='none' || st.visibility==='hidden' || st.opacity==='0') return false;
+    if(!el || el === document.body || el === document.documentElement) return false;
+    if(el.closest && el.closest('.side')) return false;
+    const st = getComputedStyle(el);
+    if(st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
     if(el.classList.contains('hidden') || el.hasAttribute('hidden')) return false;
-    const r=el.getBoundingClientRect();
-    return r.width>20 && r.height>20;
+    const r = el.getBoundingClientRect();
+    if(r.width <= 40 || r.height <= 40) return false;
+    return true;
   }
+
+  function looksLikeOpenedOverlay(el){
+    if(!visible(el)) return false;
+    const st = getComputedStyle(el);
+    const cls = (el.className || '').toString().toLowerCase();
+    const id = (el.id || '').toLowerCase();
+    const zi = parseInt(st.zIndex || '0', 10);
+    const fixedOrAbs = st.position === 'fixed' || st.position === 'absolute' || st.position === 'sticky';
+    const byName = /modal|popup|overlay|dialog|ventana|drawer|panel-flotante|registro/.test(cls + ' ' + id);
+    const byRole = (el.getAttribute('role') || '').toLowerCase() === 'dialog' || el.hasAttribute('open');
+    const bigOverlay = fixedOrAbs && zi >= 900 && el.getBoundingClientRect().height > 120 && el.getBoundingClientRect().width > 220;
+    return byRole || byName || bigOverlay;
+  }
+
   function hasOpenModal(){
-    const selectors='.modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,.post-modal,.obs-modal,[role="dialog"]';
-    if(document.querySelector('.post-modal-check:checked')) return true;
-    return Array.from(document.querySelectorAll(selectors)).some(visible);
+    if(document.querySelector(MODAL_INPUT_SELECTOR + ':checked')) return true;
+    if(document.querySelector('dialog[open],details[open].modal,details[open].popup')) return true;
+    const direct = Array.from(document.querySelectorAll(MODAL_SELECTOR));
+    if(direct.some(looksLikeOpenedOverlay)) return true;
+    const candidates = Array.from(document.body.children || []);
+    return candidates.some(looksLikeOpenedOverlay);
   }
-  function sync(){ setCollapsed(hasOpenModal()); }
-  window.forceSidebarForModal=function(on){ setCollapsed(!!on); setTimeout(sync,80); };
+
+  function sync(){
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      const open = hasOpenModal();
+      if(open || manualLock) setCollapsed(true);
+      else setCollapsed(false);
+    }, 35);
+  }
+
+  window.forceSidebarForModal = function(on){
+    manualLock = !!on;
+    setCollapsed(!!on);
+    setTimeout(sync, 100);
+    setTimeout(sync, 350);
+  };
+  window.PRIZE_forceSidebarForModal = window.forceSidebarForModal;
+
+  function actionMayOpenModal(el){
+    if(!el) return false;
+    const txt = (el.innerText || el.value || el.getAttribute('title') || el.getAttribute('aria-label') || '').toLowerCase();
+    const href = (el.getAttribute('href') || '').toLowerCase();
+    const target = (el.getAttribute('for') || el.getAttribute('data-modal') || el.getAttribute('data-target') || el.getAttribute('data-bs-target') || '').toLowerCase();
+    if(target && /modal|registro|medica|indu|indumentaria|fotocheck|doc|firma|req|obs/.test(target)) return true;
+    if(href.includes('modal=') || href.startsWith('#modal') || href.includes('#modal')) return true;
+    return /registrar|nuevo|crear|agregar|editar|ver detalle|vista previa|abrir ficha|programar|entregar|cargar evidencia|marcar visto|inducción|induccion|evaluación médica|evaluacion medica|indumentaria|fotocheck|documento/.test(txt);
+  }
+
   document.addEventListener('click', function(ev){
-    const el=ev.target.closest('button,a,.btn,.btn-green,.btn-blue,.crear-btn,.c-btn');
-    if(!el) return;
-    const txt=(el.innerText||el.value||el.getAttribute('title')||'').toLowerCase();
-    const href=(el.getAttribute('href')||'').toLowerCase();
-    const isModalAction = /registrar|nuevo|crear|agregar|ver detalle|vista previa|editar|abrir ficha/.test(txt) || href.includes('modal=') || el.getAttribute('data-modal');
-    if(isModalAction){ setTimeout(function(){ setCollapsed(true); sync(); }, 80); }
+    const el = ev.target.closest && ev.target.closest('label,button,a,.btn,.btn-green,.btn-blue,.crear-btn,.c-btn,.ind-btn,.med-select-btn,.post-open,.card,.action,.accion');
+    if(actionMayOpenModal(el)){
+      setCollapsed(true);
+      setTimeout(sync, 80);
+      setTimeout(sync, 250);
+      setTimeout(sync, 600);
+    }
   }, true);
-  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') setTimeout(sync, 80); });
+
   document.addEventListener('change', function(ev){
-    if(ev.target && ev.target.matches && ev.target.matches('.post-modal-check')){
+    if(ev.target && ev.target.matches && ev.target.matches(MODAL_INPUT_SELECTOR)){
       setCollapsed(!!ev.target.checked);
       setTimeout(sync, 80);
+      setTimeout(sync, 250);
     }
   }, true);
+
+  document.addEventListener('keydown', function(ev){
+    if(ev.key === 'Escape'){
+      manualLock = false;
+      setTimeout(sync, 80);
+      setTimeout(sync, 250);
+    }
+  }, true);
+
   window.addEventListener('DOMContentLoaded', function(){
     sync();
-    const mo=new MutationObserver(function(){ sync(); });
-    mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','open']});
+    const mo = new MutationObserver(function(){ sync(); });
+    mo.observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['class','style','hidden','open','checked','aria-hidden']});
   });
+  window.addEventListener('resize', sync);
 })();
 </script>
 </head><body>{{ body|safe }}
@@ -10130,7 +10318,7 @@ html,body{overflow-x:hidden!important;}
             </div>
           </div>
 
-          <input type='checkbox' id='modal_medica_registro' class='med-modal-check'><div class='med-modal'><div class='med-modal-card'><div class='med-modal-head'><h2>Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar</label></div>
+          <input type='checkbox' id='modal_medica_registro' class='med-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='med-modal'><div class='med-modal-card'><div class='med-modal-head'><h2>Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar</label></div>
           <div class='med-selected'>
             <div class='med-selected-photo' id='med_foto_box'><div class='blank'>SIN FOTO</div><small>Foto del postulante</small></div>
             <div id='med_aptitud_card' class='med-status-card pending'><h3>Aptitud médica</h3><div id='med_aptitud_val' class='med-status-value'>PENDIENTE</div></div>
@@ -10338,7 +10526,7 @@ html,body{overflow-x:hidden!important;}
           <div class='mod360-table-card'><div class='mod360-table-head'><h3>Lista de postulantes del requerimiento - Inducción</h3><div class='mod360-actions'><label for='modal_biblioteca_ind' class='mod360-btn'>📚 Biblioteca</label><button type='button' class='mod360-btn light' onclick='window.print()'>🖨️ Imprimir</button></div></div><div class='mod360-table-wrap'><table id='tabla_induccion_360' class='mod360-table'><tr><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Inducción</th><th>Actividad</th><th>Acción</th></tr>{induccion_control_rows}</table></div></div>
           <form method='post' class='mod360-mass'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='induccion'><input type='hidden' name='campo_estado' value='estado_capacitacion'><h3>Cambio masivo / notificaciones</h3><b>Estado masivo</b><select name='nuevo_estado'><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>PENDIENTE</option></select><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b class='mass-ob-label'>Observación</b><textarea name='observacion' placeholder='Observación del administrador.'></textarea><button class='mod360-btn green mass-submit'>✅ Cambiar seleccionados y notificar</button></form>
           <div class='mod360-control'><div class='mod360-stage'><div class='sico'>🎫</div><h4>Postulantes</h4><b>{total_ind_req}</b><small>Del ticket</small></div><div class='mod360-stage'><div class='sico'>🎓</div><h4>Inducidos</h4><b>{inducidos_req}</b><small>Realizados</small></div><div class='mod360-stage'><div class='sico'>⏳</div><h4>Pendientes</h4><b>{pendientes_ind_req}</b><small>Por completar</small></div><div class='mod360-stage'><div class='sico'>▶️</div><h4>Videos</h4><b>{videos_subidos_req}</b><small>Materiales</small></div><div class='mod360-stage'><div class='sico'>⚠️</div><h4>Observados</h4><b>0</b><small>Atención</small></div></div>
-          <input type='checkbox' id='modal_biblioteca_ind' class='modal-toggle'><div class='mod360-modal'><div class='mod360-modal-card'><div class='mod360-modal-head'><h3>📚 Biblioteca de inducción</h3><label for='modal_biblioteca_ind' class='mod360-close'>Cerrar</label></div><form id='form_capacitacion' method='post' enctype='multipart/form-data' class='mod360-form'><input type='hidden' name='accion' value='guardar_capacitacion'><input type='hidden' name='req_contexto' value='{h(req_filtro_induccion)}'><b>Tema inducción</b><select name='curso' required>{opciones_curso}</select><b>Tipo video</b><select name='tipo_video' required><option>URL EXTERNA</option><option>ARCHIVO MP4</option><option>YOUTUBE / DRIVE</option><option>MICROLEARNING</option></select><b>URL video</b><input name='video_url' placeholder='https://...'><b>Cargar video MP4</b><input type='file' name='archivo_video' accept='.mp4,.webm,.mov'><b>Duración min.</b><input name='duracion_min' type='number' min='0' placeholder='0'><b>Fecha inicio</b><input type='date' name='fecha_inicio' value='{hoy_iso()}' required><b>Fecha fin</b><input type='date' name='fecha_fin' value='{hoy_iso()}'><b>Material adicional</b><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.xlsx,.docx'><span></span><button class='mod360-btn green'>💾 Guardar video/material</button></form><hr><h3>Base de videos y materiales</h3><div class='mod360-table-wrap'><table class='mod360-table'><tr><th>Fecha</th><th>Tema</th><th>Tipo</th><th>Archivo / URL</th><th>Min.</th><th>Estado</th></tr>{video_rows}</table></div></div></div>
+          <input type='checkbox' id='modal_biblioteca_ind' class='modal-toggle' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='mod360-modal'><div class='mod360-modal-card'><div class='mod360-modal-head'><h3>📚 Biblioteca de inducción</h3><label for='modal_biblioteca_ind' class='mod360-close'>Cerrar</label></div><form id='form_capacitacion' method='post' enctype='multipart/form-data' class='mod360-form'><input type='hidden' name='accion' value='guardar_capacitacion'><input type='hidden' name='req_contexto' value='{h(req_filtro_induccion)}'><b>Tema inducción</b><select name='curso' required>{opciones_curso}</select><b>Tipo video</b><select name='tipo_video' required><option>URL EXTERNA</option><option>ARCHIVO MP4</option><option>YOUTUBE / DRIVE</option><option>MICROLEARNING</option></select><b>URL video</b><input name='video_url' placeholder='https://...'><b>Cargar video MP4</b><input type='file' name='archivo_video' accept='.mp4,.webm,.mov'><b>Duración min.</b><input name='duracion_min' type='number' min='0' placeholder='0'><b>Fecha inicio</b><input type='date' name='fecha_inicio' value='{hoy_iso()}' required><b>Fecha fin</b><input type='date' name='fecha_fin' value='{hoy_iso()}'><b>Material adicional</b><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.xlsx,.docx'><span></span><button class='mod360-btn green'>💾 Guardar video/material</button></form><hr><h3>Base de videos y materiales</h3><div class='mod360-table-wrap'><table class='mod360-table'><tr><th>Fecha</th><th>Tema</th><th>Tipo</th><th>Archivo / URL</th><th>Min.</th><th>Estado</th></tr>{video_rows}</table></div></div></div>
         </section>
         """)
     elif sec=='indumentaria':
@@ -10391,7 +10579,7 @@ html,body{overflow-x:hidden!important;}
           <div class='ind-kpis'><div class='ind-kpi'><span class='ico'>👥</span><div><h4>Seleccionados</h4><b>{total_indumentaria_req}</b><small>Postulantes del ticket</small></div></div><div class='ind-kpi'><span class='ico'>🦺</span><div><h4>Entregados</h4><b>{entregados_req}</b><small>Cargo completo</small></div></div><div class='ind-kpi'><span class='ico'>🟡</span><div><h4>Parcial</h4><b>{parciales_req}</b><small>Entrega en proceso</small></div></div><div class='ind-kpi'><span class='ico'>⏳</span><div><h4>Pendientes</h4><b>{pendientes_req}</b><small>Sin entrega</small></div></div><div class='ind-kpi'><span class='ico'>⚠️</span><div><h4>Observados</h4><b>{observados_req}</b><small>Requiere atención</small></div></div></div>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Lista de postulantes del requerimiento</h2><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn green'>🧥 Registrar entrega</label><button type='button' class='ind-btn light' onclick='window.print()'>🖨️ Imprimir</button></div></div><div class='ind-table-wrap'><table id='tabla_indumentaria_360' class='ind-table'><tr><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Actividad</th><th>Estado</th><th>%</th><th>Acción</th></tr>{indumentaria_control_rows}</table></div></div>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Cargos de entrega registrados</h2><small>{len(indumentarias_filtradas)} registro(s)</small></div><div class='ind-table-wrap'><table class='ind-table'><tr><th>Fecha registro</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Fotocheck</th><th>Estado</th><th>Responsable</th><th>Fecha entrega</th><th>Acción</th></tr>{ind_rows}</table></div></div>
-          <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check'><div class='ind-modal'><div class='ind-modal-card'><div class='ind-modal-head'><h2>Registrar entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar</label></div><div class='ind-alert'><span id='ind_estado_msg'>Pendiente: falta registrar entrega.</span><span>Primero elija requerimiento y DNI.</span></div><form method='post' enctype='multipart/form-data' class='ind-form'><input type='hidden' name='accion' value='guardar_indumentaria'><div class='section'>1. Requerimiento y postulante</div><b>Requerimiento</b><select name='requerimiento' id='ind_requerimiento'><option value='{h(req_filtro_indumentaria)}'>{h(req_filtro_indumentaria) or 'Seleccione requerimiento'}</option>{req_options_indumentaria}</select><b>DNI</b><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI' required><span></span><button type='button' class='ind-btn green' onclick='buscarIndumentariaDNI()'>🔎 Buscar DNI</button><div class='section'>2. Datos del trabajador</div><b>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI'><b>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b>Área</b><input id='ind_area' name='area' placeholder='Área'><b>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'>3. Detalle de prendas / EPP</div><b>Polo</b><input name='polo' placeholder='Talla / cantidad'><b>Pantalón</b><input name='pantalon' placeholder='Talla / cantidad'><b>Botas</b><input name='botas' placeholder='Talla'><b>Casaca</b><input name='casaca' placeholder='Talla / cantidad'><b>Gorro</b><input name='gorro' placeholder='Sí / No / cantidad'><b>Lentes</b><input name='lentes' placeholder='Sí / No / cantidad'><b>Guantes</b><input name='guantes' placeholder='Talla / cantidad'><b>Fotocheck</b><select name='fotocheck'><option>NO ENTREGADO</option><option>ENTREGADO</option><option>PENDIENTE</option></select><b>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b>Estado</b><select name='estado' id='ind_estado' onchange='actualizarEstadoIndumentaria()'><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select><b>Fecha entrega</b><input type='date' name='fecha_entrega' value='{hoy_iso()}'><b>Responsable entrega</b><input name='responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><button class='ind-btn green'>💾 Guardar entrega</button></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>
+          <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card'><div class='ind-modal-head'><h2>Registrar entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar</label></div><div class='ind-alert'><span id='ind_estado_msg'>Pendiente: falta registrar entrega.</span><span>Primero elija requerimiento y DNI.</span></div><form method='post' enctype='multipart/form-data' class='ind-form'><input type='hidden' name='accion' value='guardar_indumentaria'><div class='section'>1. Requerimiento y postulante</div><b>Requerimiento</b><select name='requerimiento' id='ind_requerimiento'><option value='{h(req_filtro_indumentaria)}'>{h(req_filtro_indumentaria) or 'Seleccione requerimiento'}</option>{req_options_indumentaria}</select><b>DNI</b><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI' required><span></span><button type='button' class='ind-btn green' onclick='buscarIndumentariaDNI()'>🔎 Buscar DNI</button><div class='section'>2. Datos del trabajador</div><b>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI'><b>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b>Área</b><input id='ind_area' name='area' placeholder='Área'><b>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'>3. Detalle de prendas / EPP</div><b>Polo</b><input name='polo' placeholder='Talla / cantidad'><b>Pantalón</b><input name='pantalon' placeholder='Talla / cantidad'><b>Botas</b><input name='botas' placeholder='Talla'><b>Casaca</b><input name='casaca' placeholder='Talla / cantidad'><b>Gorro</b><input name='gorro' placeholder='Sí / No / cantidad'><b>Lentes</b><input name='lentes' placeholder='Sí / No / cantidad'><b>Guantes</b><input name='guantes' placeholder='Talla / cantidad'><b>Fotocheck</b><select name='fotocheck'><option>NO ENTREGADO</option><option>ENTREGADO</option><option>PENDIENTE</option></select><b>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b>Estado</b><select name='estado' id='ind_estado' onchange='actualizarEstadoIndumentaria()'><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select><b>Fecha entrega</b><input type='date' name='fecha_entrega' value='{hoy_iso()}'><b>Responsable entrega</b><input name='responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><button class='ind-btn green'>💾 Guardar entrega</button></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>
         </section>
         <script>
         const trabajadoresIndumentaria = {trabajadores_js};
