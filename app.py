@@ -10197,7 +10197,8 @@ html,body{overflow-x:hidden!important;}
           .premium-card{{background:#fff;border:1px solid #dbe7ef;border-radius:24px;padding:22px;margin-bottom:18px;box-shadow:0 12px 30px rgba(15,23,42,.05)}} .premium-card-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}} .premium-card h2{{margin:0;color:#062044}}
           .premium-table-wrap{{overflow:auto;border-radius:16px;border:1px solid #e2edf5}} .premium-table{{width:100%;border-collapse:collapse;min-width:980px}} .premium-table th{{background:#008f51;color:white;text-align:left;padding:14px;font-size:13px}} .premium-table td{{padding:14px;border-bottom:1px solid #edf2f7;color:#062044;font-weight:800;background:#fff}} .premium-table tr:hover td{{background:#f8fffb}}
           .mini-avatar{{width:34px;height:34px;border-radius:50%;background:#dcfce7;color:#008f51;display:grid;place-items:center;font-weight:1000}}
-          .library-grid{{display:grid;grid-template-columns:1fr 1fr;gap:18px}} .premium-form{{display:grid;grid-template-columns:170px 1fr 170px 1fr;gap:12px;align-items:center}} .premium-form .span-all{{grid-column:1/-1}}
+          .library-grid{{display:grid;grid-template-columns:1fr 1fr;gap:18px}} .premium-form{{display:grid;grid-template-columns:150px minmax(180px,1fr) 150px minmax(180px,1fr);gap:14px;align-items:center}} .premium-form .span-all{{grid-column:1/-1}}
+          .premium-modal{{display:none;position:fixed;inset:0;background:rgba(15,23,42,.54);z-index:9999;padding:28px;overflow:auto}} .premium-modal.show{{display:flex;align-items:flex-start;justify-content:center}} .premium-modal-box{{width:min(1180px,96vw);background:#fff;border-radius:28px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.32);padding:24px}} .premium-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;border-bottom:1px solid #e2edf5;padding-bottom:14px}} .premium-modal-head h2{{margin:0;color:#062044}} .modal-library{{grid-template-columns:1fr 1fr}} .premium-modal .premium-card{{box-shadow:none;margin-bottom:0}} .premium-form input[type=file]{{padding:10px;font-size:13px;min-height:54px}}
           @media(max-width:1200px){{.premium-hero,.filter-card,.control-card,.library-grid,.premium-form{{grid-template-columns:1fr}}}}
         </style>
         <div class='premium-hero'>
@@ -10208,7 +10209,7 @@ html,body{overflow-x:hidden!important;}
         <div class='filter-card'>
           <div><label>Buscar postulantes del requerimiento</label><input oninput="filtrarTabla(this,'tabla_induccion_premium')" placeholder='DNI, trabajador, cargo, actividad...'></div>
           <div><label>Filtrar por estado</label><select><option>Todos los estados</option><option>PENDIENTE</option><option>VIDEO ASIGNADO</option><option>VIDEO VISTO</option><option>APROBADO</option><option>OBSERVADO</option></select></div>
-          <div><label>Acciones rápidas</label><button class='premium-btn' type='button' onclick="document.getElementById('biblioteca_induccion').scrollIntoView({{behavior:'smooth'}})">📚 Biblioteca</button></div>
+          <div><label>Acciones rápidas</label><button class='premium-btn' type='button' onclick="openPremiumModal('modal_biblioteca_induccion')">📚 Biblioteca</button></div>
         </div>
 
         <div class='control-card'>
@@ -10231,10 +10232,10 @@ html,body{overflow-x:hidden!important;}
           </div>
         </form>
 
-        <div id='biblioteca_induccion' class='library-grid'>
+        <div id='modal_biblioteca_induccion' class='premium-modal'><div class='premium-modal-box'><div class='premium-modal-head'><h2>📚 Biblioteca de inducción</h2><button type='button' class='premium-btn light' onclick="closePremiumModal('modal_biblioteca_induccion')">Cerrar</button></div><div id='biblioteca_induccion' class='library-grid modal-library'>
           <form id='form_capacitacion' method='post' enctype='multipart/form-data' class='premium-card premium-form'>
             <input type='hidden' name='accion' value='guardar_capacitacion'>
-            <h2 class='span-all'>Biblioteca de inducción</h2>
+            <div class='span-all' style='font-weight:1000;color:#062044;font-size:18px'>Registro de video / material</div>
             <b>Tema inducción</b><select name='curso' required>{opciones_curso}</select>
             <b>Tipo video</b><select name='tipo_video' required><option>URL EXTERNA</option><option>ARCHIVO MP4</option><option>YOUTUBE / DRIVE</option><option>MICROLEARNING</option></select>
             <b>URL video</b><input name='video_url' placeholder='https://...'>
@@ -10249,7 +10250,13 @@ html,body{overflow-x:hidden!important;}
             <div class='premium-card-head'><h2>Base de videos y materiales</h2><button type='button' class='premium-btn light' onclick='window.print()'>🖨️ Imprimir</button></div>
             <div class='premium-table-wrap'><table class='premium-table'><tr><th>Fecha</th><th>Tema</th><th>Tipo</th><th>Archivo / URL</th><th>Min.</th><th>Estado</th></tr>{video_rows}</table></div>
           </div>
-        </div>
+        </div></div></div>
+        <script>
+        function openPremiumModal(id){{ const el=document.getElementById(id); if(el) el.classList.add('show'); }}
+        function closePremiumModal(id){{ const el=document.getElementById(id); if(el) el.classList.remove('show'); }}
+        document.addEventListener('keydown', e=>{{ if(e.key==='Escape') document.querySelectorAll('.premium-modal.show').forEach(x=>x.classList.remove('show')); }});
+        document.querySelectorAll('.premium-modal').forEach(m=>m.addEventListener('click',e=>{{ if(e.target===m)m.classList.remove('show'); }}));
+        </script>
         """)
 
     elif sec=='indumentaria':
@@ -10287,7 +10294,8 @@ html,body{overflow-x:hidden!important;}
           .premium-card{{background:#fff;border:1px solid #dbe7ef;border-radius:24px;padding:22px;margin-bottom:18px;box-shadow:0 12px 30px rgba(15,23,42,.05)}} .premium-card-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}} .premium-card h2{{margin:0;color:#062044}}
           .premium-table-wrap{{overflow:auto;border-radius:16px;border:1px solid #e2edf5}} .premium-table{{width:100%;border-collapse:collapse;min-width:980px}} .premium-table th{{background:#008f51;color:white;text-align:left;padding:14px;font-size:13px}} .premium-table td{{padding:14px;border-bottom:1px solid #edf2f7;color:#062044;font-weight:800;background:#fff}} .premium-table tr:hover td{{background:#f8fffb}}
           .mini-avatar{{width:34px;height:34px;border-radius:50%;background:#dcfce7;color:#008f51;display:grid;place-items:center;font-weight:1000}}
-          .premium-form{{display:grid;grid-template-columns:170px 1fr 170px 1fr;gap:12px;align-items:center}} .premium-form .span-all{{grid-column:1/-1}} .soft-alert{{grid-column:1/-1;border:1px solid #bbf7d0;background:#ecfdf5;border-radius:18px;padding:15px;font-weight:900;color:#062044;display:flex;justify-content:space-between;gap:12px;align-items:center}}
+          .premium-form{{display:grid;grid-template-columns:150px minmax(180px,1fr) 150px minmax(180px,1fr);gap:14px;align-items:center}} .premium-form .span-all{{grid-column:1/-1}} .soft-alert{{grid-column:1/-1;border:1px solid #bbf7d0;background:#ecfdf5;border-radius:18px;padding:14px 16px;font-weight:900;color:#062044;display:grid;grid-template-columns:140px 1fr 1.2fr;gap:12px;align-items:center}}
+          .premium-modal{{display:none;position:fixed;inset:0;background:rgba(15,23,42,.54);z-index:9999;padding:28px;overflow:auto}} .premium-modal.show{{display:flex;align-items:flex-start;justify-content:center}} .premium-modal-box{{width:min(1120px,96vw);background:#fff;border-radius:28px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.32);padding:24px}} .premium-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;border-bottom:1px solid #e2edf5;padding-bottom:14px}} .premium-modal-head h2{{margin:0;color:#062044}} .premium-modal .premium-card{{box-shadow:none;border:0;padding:0;margin:0}} .premium-form input[type=file]{{padding:10px;font-size:13px;min-height:54px}}
           @media(max-width:1200px){{.premium-hero,.filter-card,.control-card,.premium-form{{grid-template-columns:1fr}}}}
         </style>
 
@@ -10299,7 +10307,7 @@ html,body{overflow-x:hidden!important;}
         <div class='filter-card'>
           <div><label>Buscar postulantes del requerimiento</label><input oninput="filtrarTabla(this,'tabla_ind_postulantes')" placeholder='DNI, trabajador, cargo, actividad...'></div>
           <div><label>Filtrar por estado</label><select><option>Todos los estados</option><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select></div>
-          <div><label>Acciones rápidas</label><button class='premium-btn' type='button' onclick="document.getElementById('form_indumentaria').scrollIntoView({{behavior:'smooth'}})">📦 Registrar entrega</button></div>
+          <div><label>Acciones rápidas</label><button class='premium-btn' type='button' onclick="openIndumentariaModal()">📦 Registrar entrega</button></div>
         </div>
 
         <div class='control-card'>
@@ -10312,13 +10320,13 @@ html,body{overflow-x:hidden!important;}
         </div>
 
         <div class='premium-card'>
-          <div class='premium-card-head'><h2>Lista de postulantes del requerimiento - Indumentaria</h2><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='premium-btn' type='button' onclick="document.getElementById('form_indumentaria').scrollIntoView({{behavior:'smooth'}})">📦 Registrar entrega</button><button class='premium-btn light' type='button' onclick='window.print()'>🖨️ Imprimir</button></div></div>
+          <div class='premium-card-head'><h2>Lista de postulantes del requerimiento - Indumentaria</h2><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='premium-btn' type='button' onclick="openIndumentariaModal()">📦 Registrar entrega</button><button class='premium-btn light' type='button' onclick='window.print()'>🖨️ Imprimir</button></div></div>
           <div class='premium-table-wrap'><table id='tabla_ind_postulantes' class='premium-table'><tr><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Indumentaria</th><th>Actividad</th><th>Acción</th></tr>{ind_post_rows}</table></div>
         </div>
 
+        <div id='modal_indumentaria' class='premium-modal'><div class='premium-modal-box'><div class='premium-modal-head'><h2>📦 Registrar entrega de indumentaria / EPP</h2><button type='button' class='premium-btn light' onclick="closeIndumentariaModal()">Cerrar</button></div>
         <form id='form_indumentaria' method='post' enctype='multipart/form-data' class='premium-card premium-form'>
           <input type='hidden' name='accion' value='guardar_indumentaria'>
-          <h2 class='span-all'>Registrar entrega de indumentaria / EPP</h2>
           <div class='soft-alert'><div>Estado de entrega</div><select name='estado' id='ind_estado' onchange='actualizarEstadoIndumentaria()'><option>PENDIENTE</option><option>PARCIAL</option><option>ENTREGADO</option><option>OBSERVADO</option></select><div id='ind_estado_msg'>Pendiente: falta registrar entrega.</div></div>
           <b>Requerimiento</b><input id='ind_requerimiento' name='requerimiento' placeholder='Se carga automático o puede editarse'>
           <b>DNI</b><input id='ind_dni' name='dni' list='lista_ingresos' maxlength='8' required placeholder='Digite DNI'><datalist id='lista_ingresos'>{opt_ingresos}</datalist>
@@ -10342,7 +10350,7 @@ html,body{overflow-x:hidden!important;}
           <b>Otros / cantidad</b><input name='otros' placeholder='Ej. 2 mascarillas, 1 chaleco'>
           <b>Observación</b><textarea name='observacion' rows='2' placeholder='Detalle de entrega, faltantes, responsable o cargo firmado.'></textarea>
           <div class='span-all' style='text-align:center'><button class='premium-btn green'>💾 Guardar entrega</button></div>
-        </form>
+        </form></div></div>
 
         <div class='premium-card'>
           <div class='premium-card-head'><h2>Historial de entregas registradas</h2><input oninput="filtrarTabla(this,'tabla_indumentaria')" placeholder='Filtrar historial...' style='border:1px solid #d6e3ef;border-radius:14px;padding:12px;font-weight:900'></div>
@@ -10363,7 +10371,9 @@ html,body{overflow-x:hidden!important;}
             document.getElementById('ind_estado_msg').innerText='Datos cargados correctamente. Registre prendas, responsable y cargo firmado.';
           }}catch(e){{ alert('No se pudo consultar el DNI.'); }}
         }}
-        function prepararEntrega(dni){{ const el=document.getElementById('ind_dni'); if(el){{el.value=dni; buscarIndumentariaDNI();}} document.getElementById('form_indumentaria').scrollIntoView({{behavior:'smooth',block:'start'}}); }}
+        function openIndumentariaModal(){{ const m=document.getElementById('modal_indumentaria'); if(m) m.classList.add('show'); }}
+        function closeIndumentariaModal(){{ const m=document.getElementById('modal_indumentaria'); if(m) m.classList.remove('show'); }}
+        function prepararEntrega(dni){{ const el=document.getElementById('ind_dni'); openIndumentariaModal(); if(el){{el.value=dni; setTimeout(buscarIndumentariaDNI,80);}} }}
         function actualizarEstadoIndumentaria(){{
           const v=document.getElementById('ind_estado')?.value||'PENDIENTE';
           const msg=document.getElementById('ind_estado_msg');
@@ -10375,6 +10385,8 @@ html,body{overflow-x:hidden!important;}
         }}
         document.getElementById('ind_dni')?.addEventListener('change', buscarIndumentariaDNI);
         actualizarEstadoIndumentaria();
+        document.addEventListener('keydown', e=>{{ if(e.key==='Escape') closeIndumentariaModal(); }});
+        document.getElementById('modal_indumentaria')?.addEventListener('click', e=>{{ if(e.target.id==='modal_indumentaria') closeIndumentariaModal(); }});
         </script>
         """)
     elif sec=='integracion_nisira':
