@@ -4691,6 +4691,10 @@ body.modal-mode .side .label,body.modal-mode .side .chev,body.modal-mode .side .
 body.modal-mode .side .menu-title,body.modal-mode .side .menu-item{justify-content:center!important;padding-left:10px!important;padding-right:10px!important}
 body.modal-mode .side .menu-title i,body.modal-mode .side .menu-item i{margin:0!important}
 body.modal-mode .main{min-width:0!important}
+body.modal-mode .side{overflow:hidden!important}
+body.modal-mode .side-head-pro,body.modal-mode .side-top{min-height:60px!important}
+body.modal-mode .post-modal{left:92px!important;width:calc(100vw - 92px)!important;justify-content:center!important}
+body.modal-mode .post-modal-card{width:min(1180px,calc(100vw - 130px))!important;max-width:calc(100vw - 130px)!important}
 .modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,[role="dialog"]{z-index:10020!important}
 .modal-card,.c-modal-card,.modal-content,.popup-card{z-index:10021!important}
 @media(max-width:1000px){body.modal-mode .side{transform:translateX(-100%)!important;left:-340px!important}body.modal-mode .app{grid-template-columns:1fr!important}}
@@ -4722,10 +4726,12 @@ body.modal-mode .main{min-width:0!important}
     return r.width>20 && r.height>20;
   }
   function hasOpenModal(){
-    const selectors='.modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,[role="dialog"]';
+    const selectors='.modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,.post-modal,.obs-modal,[role="dialog"]';
+    if(document.querySelector('.post-modal-check:checked')) return true;
     return Array.from(document.querySelectorAll(selectors)).some(visible);
   }
   function sync(){ setCollapsed(hasOpenModal()); }
+  window.forceSidebarForModal=function(on){ setCollapsed(!!on); setTimeout(sync,80); };
   document.addEventListener('click', function(ev){
     const el=ev.target.closest('button,a,.btn,.btn-green,.btn-blue,.crear-btn,.c-btn');
     if(!el) return;
@@ -4735,6 +4741,12 @@ body.modal-mode .main{min-width:0!important}
     if(isModalAction){ setTimeout(function(){ setCollapsed(true); sync(); }, 80); }
   }, true);
   document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') setTimeout(sync, 80); });
+  document.addEventListener('change', function(ev){
+    if(ev.target && ev.target.matches && ev.target.matches('.post-modal-check')){
+      setCollapsed(!!ev.target.checked);
+      setTimeout(sync, 80);
+    }
+  }, true);
   window.addEventListener('DOMContentLoaded', function(){
     sync();
     const mo=new MutationObserver(function(){ sync(); });
@@ -9783,7 +9795,7 @@ html,body{overflow-x:hidden!important;}
 .post-modal-tools{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px 22px;margin:0 0 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 14px 32px rgba(15,23,42,.07)}}.post-modal-tools h2{{margin:0!important;color:#071b34!important;font-size:24px;font-weight:1000}}.post-modal-tools p{{margin:4px 0 0;color:#53627a;font-weight:800}}.post-modal-check{{display:none}}.post-modal{{position:fixed;inset:0;background:rgba(15,23,42,.58);z-index:9999;display:none;align-items:center;justify-content:center;padding:28px 22px;overflow:auto}}.post-modal-check:checked + .post-modal{{display:flex}}.post-modal-card{{width:min(1120px,96vw);max-height:92vh;background:#fff;border-radius:24px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.35);overflow:auto}}.post-modal-head{{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border-bottom:1px solid #e5eef6;background:#fbfffd}}.post-modal-head h2{{margin:0!important;color:#071b34!important;font-weight:1000}}.post-close{{cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;border-radius:12px;padding:10px 16px;font-weight:1000;box-shadow:0 10px 20px rgba(0,138,72,.18)}}.post-modal-card #form_ingreso{{margin:0!important;border:0!important;box-shadow:none!important;border-radius:0!important}}
 </style>
         <div class='post-modal-tools'><div><h2>Postulantes</h2><p>Primero elige el requerimiento. Luego registra la ficha en una ventana separada, igual que Indumentaria.</p></div><label for='modal_postulante_registro' class='c-btn'>👤 Registrar postulante</label></div>
-        <input type='checkbox' id='modal_postulante_registro' class='post-modal-check'><div class='post-modal'><div class='post-modal-card'><div class='post-modal-head'><h2>Registro de postulante</h2><label for='modal_postulante_registro' class='post-close'>Cerrar</label></div>
+        <input type='checkbox' id='modal_postulante_registro' class='post-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='post-modal'><div class='post-modal-card'><div class='post-modal-head'><h2>Registro de postulante</h2><label for='modal_postulante_registro' class='post-close'>Cerrar</label></div>
         <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form ficha-registro-pro' style='padding:20px' data-req-activo='{h(ticket_sel)}' onsubmit='if(!validarDniRequerimiento()){{emitirBeepBloqueo();return false;}}'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><input type='hidden' name='requerimiento' id='requerimiento_ingreso_hidden' value='{h(ticket_sel)}'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='missing-note'>Campos obligatorios alineados a plantillas: DNI, nombre, cargo, fechas, dirección, contacto, remuneración y duración del contrato.</div><div id='bloqueo_req_msg' class='full req-lock-alert' style='display:none'><b>Primero seleccione un requerimiento arriba.</b><small>La ficha queda bloqueada para evitar registros sueltos sin ticket.</small></div><div id='dni_req_msg' class='full req-lock-alert dni-alert-pro' style='display:none'>
   <div class='alerta-icono-dni'>⚠</div>
   <div><b>DNI no pertenece al requerimiento seleccionado.</b><small>Solo se permite completar ficha de los DNI ya registrados/importados en este ticket.</small></div>
