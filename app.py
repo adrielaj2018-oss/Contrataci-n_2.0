@@ -4797,151 +4797,149 @@ body.modal-mode .popup-card{width:min(1180px,calc(100vw - 130px))!important;max-
 </style>
 <script id="fix-sidebar-modal-auto-collapse">
 (function(){
-  if(window.__PRIZE_GLOBAL_MODAL_SIDEBAR_FIX__) return;
-  window.__PRIZE_GLOBAL_MODAL_SIDEBAR_FIX__ = true;
+  // Parche seguro: el panel SOLO se contrae mientras exista una ventana/modal realmente visible.
+  // No guarda el estado contraído en localStorage para evitar que el menú amanezca cerrado.
+  if(window.__PRIZE_GLOBAL_MODAL_SIDEBAR_FIX_SAFE__) return;
+  window.__PRIZE_GLOBAL_MODAL_SIDEBAR_FIX_SAFE__ = true;
 
   const MODAL_INPUT_SELECTOR = '.post-modal-check,.med-modal-check,.ind-modal-check,.indu-modal-check,.induccion-modal-check,.cap-modal-check,.foto-modal-check,.fotocheck-modal-check,.doc-modal-check,.docs-modal-check,.req-modal-check,.firma-modal-check,.ren-modal-check,.obs-modal-check,input[id^="modal_"],input[id*="_modal"]';
-  const MODAL_SELECTOR = '.modal,.c-modal,.modal-pro,.modal-window,.popup-overlay,.overlay-modal,.post-modal,.med-modal,.ind-modal,.indu-modal,.induccion-modal,.cap-modal,.foto-modal,.fotocheck-modal,.doc-modal,.docs-modal,.req-modal,.firma-modal,.ren-modal,.obs-modal,[role="dialog"],[class*="modal-overlay"],[class*="popup-overlay"]';
-  let manualLock = false;
-  let previousSideState = null;
-  let timer = null;
+  const MODAL_SELECTOR = '.modal,.c-modal,.modal-pro,.modal-prize,.modal-window,.popup-overlay,.overlay-modal,.post-modal,.med-modal,.ind-modal,.indu-modal,.induccion-modal,.cap-modal,.foto-modal,.fotocheck-modal,.doc-modal,.docs-modal,.req-modal,.firma-modal,.ren-modal,.obs-modal,[role="dialog"],dialog,[class*="modal-overlay"],[class*="popup-overlay"]';
 
-  function qs(sel){return document.querySelector(sel)}
-  function sideEl(){return qs('.side') || qs('aside') || qs('.sidebar')}
-  function appEl(){return qs('.app') || qs('.layout') || qs('.admin-layout')}
+  let forcedByClick = false;
+  let previousSideState = null;
+  let syncTimer = null;
+
+  function q(sel){ return document.querySelector(sel); }
+  function qa(sel){ return Array.from(document.querySelectorAll(sel)); }
+  function sideEl(){ return q('.side') || q('aside.sidebar') || q('.sidebar'); }
+  function appEl(){ return q('.app') || q('.layout') || q('.admin-layout'); }
 
   function rememberState(){
     const s = sideEl(), a = appEl();
-    if(previousSideState || !s) return;
+    if(!s || previousSideState) return;
     previousSideState = {
       sideCollapsed: s.classList.contains('collapsed'),
       sideOpen: s.classList.contains('open'),
-      appCollapsed: a ? a.classList.contains('side-collapsed') : false,
-      bodyModal: document.body.classList.contains('modal-mode')
+      appCollapsed: a ? a.classList.contains('side-collapsed') : false
     };
   }
 
-  function restoreState(){
-    const s = sideEl(), a = appEl();
-    if(!s || !previousSideState) return;
-    s.classList.toggle('collapsed', !!previousSideState.sideCollapsed);
-    s.classList.toggle('open', !!previousSideState.sideOpen);
-    if(a) a.classList.toggle('side-collapsed', !!previousSideState.appCollapsed);
-    document.body.classList.toggle('modal-mode', !!previousSideState.bodyModal);
-    previousSideState = null;
-  }
-
-  function setCollapsed(on){
+  function collapseSidebar(){
     const s = sideEl(), a = appEl();
     if(!s) return;
-    if(on){
-      rememberState();
-      document.body.classList.add('modal-mode');
-      s.classList.add('collapsed');
-      s.classList.remove('open');
-      if(a) a.classList.add('side-collapsed');
-      try{ localStorage.setItem('sideCollapsed','1'); }catch(e){}
-    }else{
-      manualLock = false;
-      document.body.classList.remove('modal-mode');
-      restoreState();
-    }
+    rememberState();
+    document.body.classList.add('modal-mode');
+    s.classList.add('collapsed');
+    s.classList.remove('open');
+    if(a) a.classList.add('side-collapsed');
+    try{ localStorage.removeItem('sideCollapsed'); }catch(e){}
   }
 
-  function visible(el){
-    if(!el || el === document.body || el === document.documentElement) return false;
-    if(el.closest && el.closest('.side')) return false;
+  function restoreSidebar(){
+    const s = sideEl(), a = appEl();
+    document.body.classList.remove('modal-mode');
+    forcedByClick = false;
+    if(!s) return;
+    if(previousSideState){
+      s.classList.toggle('collapsed', !!previousSideState.sideCollapsed);
+      s.classList.toggle('open', !!previousSideState.sideOpen);
+      if(a) a.classList.toggle('side-collapsed', !!previousSideState.appCollapsed);
+      previousSideState = null;
+    }else{
+      // Si no hay modal abierto, nunca dejar el sistema bloqueado contraído por este parche.
+      s.classList.remove('collapsed');
+      if(a) a.classList.remove('side-collapsed');
+    }
+    try{ localStorage.removeItem('sideCollapsed'); }catch(e){}
+  }
+
+  function isInsideSidebar(el){ return !!(el && el.closest && el.closest('.side')); }
+  function isActuallyVisible(el){
+    if(!el || el === document.body || el === document.documentElement || isInsideSidebar(el)) return false;
+    if(el.classList && (el.classList.contains('hidden') || el.classList.contains('hide') || el.classList.contains('d-none'))) return false;
+    if(el.hasAttribute && (el.hasAttribute('hidden') || el.getAttribute('aria-hidden') === 'true')) return false;
     const st = getComputedStyle(el);
-    if(st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') return false;
-    if(el.classList.contains('hidden') || el.hasAttribute('hidden')) return false;
+    if(st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity) === 0) return false;
     const r = el.getBoundingClientRect();
-    if(r.width <= 40 || r.height <= 40) return false;
+    if(r.width < 120 || r.height < 90) return false;
     return true;
   }
 
-  function looksLikeOpenedOverlay(el){
-    if(!visible(el)) return false;
+  function isOpenModalElement(el){
+    if(!isActuallyVisible(el)) return false;
     const st = getComputedStyle(el);
     const cls = (el.className || '').toString().toLowerCase();
     const id = (el.id || '').toLowerCase();
-    const zi = parseInt(st.zIndex || '0', 10);
-    const fixedOrAbs = st.position === 'fixed' || st.position === 'absolute' || st.position === 'sticky';
-    const byName = /modal|popup|overlay|dialog|ventana|drawer|panel-flotante|registro/.test(cls + ' ' + id);
-    const byRole = (el.getAttribute('role') || '').toLowerCase() === 'dialog' || el.hasAttribute('open');
-    const bigOverlay = fixedOrAbs && zi >= 900 && el.getBoundingClientRect().height > 120 && el.getBoundingClientRect().width > 220;
-    return byRole || byName || bigOverlay;
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    const isDialog = el.tagName === 'DIALOG' ? el.hasAttribute('open') : role === 'dialog';
+    const nameLooksModal = /(^|\s)(modal|c-modal|modal-pro|modal-prize|popup-overlay|overlay-modal|post-modal|med-modal|ind-modal|indu-modal|induccion-modal|foto-modal|fotocheck-modal|doc-modal|docs-modal|req-modal|firma-modal|ren-modal|obs-modal)(\s|$)/.test(cls)
+      || /modal|popup|dialog|registro|crearplantilla|obsmodal|cargomodal/i.test(id);
+    const openedClass = el.classList && (el.classList.contains('show') || el.classList.contains('active') || el.classList.contains('open'));
+    const fixedOverlay = (st.position === 'fixed' || st.position === 'absolute') && parseInt(st.zIndex || '0',10) >= 900;
+    return isDialog || (nameLooksModal && (openedClass || fixedOverlay || st.display === 'flex' || st.display === 'block'));
   }
 
   function hasOpenModal(){
-    if(document.querySelector(MODAL_INPUT_SELECTOR + ':checked')) return true;
-    if(document.querySelector('dialog[open],details[open].modal,details[open].popup')) return true;
-    const direct = Array.from(document.querySelectorAll(MODAL_SELECTOR));
-    if(direct.some(looksLikeOpenedOverlay)) return true;
-    const candidates = Array.from(document.body.children || []);
-    return candidates.some(looksLikeOpenedOverlay);
+    if(q(MODAL_INPUT_SELECTOR + ':checked')) return true;
+    return qa(MODAL_SELECTOR).some(isOpenModalElement);
   }
 
   function sync(){
-    clearTimeout(timer);
-    timer = setTimeout(function(){
-      const open = hasOpenModal();
-      if(open || manualLock) setCollapsed(true);
-      else setCollapsed(false);
-    }, 35);
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(function(){
+      if(hasOpenModal()) collapseSidebar();
+      else restoreSidebar();
+    }, 40);
   }
 
   window.forceSidebarForModal = function(on){
-    manualLock = !!on;
-    setCollapsed(!!on);
-    setTimeout(sync, 100);
-    setTimeout(sync, 350);
+    forcedByClick = !!on;
+    if(on) collapseSidebar(); else restoreSidebar();
+    setTimeout(sync, 120);
+    setTimeout(sync, 450);
   };
   window.PRIZE_forceSidebarForModal = window.forceSidebarForModal;
 
   function actionMayOpenModal(el){
-    if(!el) return false;
+    if(!el || isInsideSidebar(el)) return false;
     const txt = (el.innerText || el.value || el.getAttribute('title') || el.getAttribute('aria-label') || '').toLowerCase();
     const href = (el.getAttribute('href') || '').toLowerCase();
     const target = (el.getAttribute('for') || el.getAttribute('data-modal') || el.getAttribute('data-target') || el.getAttribute('data-bs-target') || '').toLowerCase();
-    if(target && /modal|registro|medica|indu|indumentaria|fotocheck|doc|firma|req|obs/.test(target)) return true;
-    if(href.includes('modal=') || href.startsWith('#modal') || href.includes('#modal')) return true;
-    return /registrar|nuevo|crear|agregar|editar|ver detalle|vista previa|abrir ficha|programar|entregar|cargar evidencia|marcar visto|inducción|induccion|evaluación médica|evaluacion medica|indumentaria|fotocheck|documento/.test(txt);
+    if(target && /modal|registro|medica|indu|indumentaria|fotocheck|doc|firma|req|obs|plantilla/.test(target)) return true;
+    if(href.startsWith('#') && /modal|registro|crearplantilla|obsmodal|cargomodal/.test(href)) return true;
+    return /registrar|nuevo|crear|agregar|editar|ver detalle|vista previa|abrir ficha|programar|entregar|cargar evidencia|marcar visto|imprimir|validar nisira/.test(txt);
   }
 
   document.addEventListener('click', function(ev){
-    const el = ev.target.closest && ev.target.closest('label,button,a,.btn,.btn-green,.btn-blue,.crear-btn,.c-btn,.ind-btn,.med-select-btn,.post-open,.card,.action,.accion');
+    const el = ev.target.closest && ev.target.closest('label,button,a,.btn,.btn-green,.btn-blue,.crear-btn,.c-btn,.ind-btn,.med-select-btn,.post-open,.action,.accion');
     if(actionMayOpenModal(el)){
-      setCollapsed(true);
-      setTimeout(sync, 80);
-      setTimeout(sync, 250);
-      setTimeout(sync, 600);
+      forcedByClick = true;
+      collapseSidebar();
+      setTimeout(sync, 160);
+      setTimeout(sync, 550);
+      setTimeout(function(){ if(!hasOpenModal()) restoreSidebar(); }, 1000);
     }
   }, true);
 
   document.addEventListener('change', function(ev){
     if(ev.target && ev.target.matches && ev.target.matches(MODAL_INPUT_SELECTOR)){
-      setCollapsed(!!ev.target.checked);
-      setTimeout(sync, 80);
-      setTimeout(sync, 250);
+      if(ev.target.checked) collapseSidebar(); else restoreSidebar();
+      setTimeout(sync, 120);
     }
   }, true);
 
-  document.addEventListener('keydown', function(ev){
-    if(ev.key === 'Escape'){
-      manualLock = false;
-      setTimeout(sync, 80);
-      setTimeout(sync, 250);
-    }
-  }, true);
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') setTimeout(sync, 120); }, true);
 
   window.addEventListener('DOMContentLoaded', function(){
-    sync();
-    const mo = new MutationObserver(function(){ sync(); });
+    // Limpia una contracción heredada de una versión anterior cuando NO hay modal abierto.
+    setTimeout(function(){ if(!hasOpenModal()) restoreSidebar(); }, 120);
+    const mo = new MutationObserver(sync);
     mo.observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['class','style','hidden','open','checked','aria-hidden']});
   });
   window.addEventListener('resize', sync);
 })();
 </script>
+
 </head><body>{{ body|safe }}
 <script>
 window.addEventListener('DOMContentLoaded',()=>{
