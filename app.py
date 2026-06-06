@@ -8025,7 +8025,7 @@ def admin_contratacion():
                 flash('Primero seleccione/valide un postulante del requerimiento.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica'))
             with db() as con_val:
-                pertenece = con_val.execute('SELECT id, trabajador FROM contratacion_ingresos WHERE dni=? AND TRIM(requerimiento)=TRIM(?) LIMIT 1', (dni, req_medica)).fetchone()
+                pertenece = con_val.execute('SELECT * FROM contratacion_ingresos WHERE dni=? AND TRIM(requerimiento)=TRIM(?) LIMIT 1', (dni, req_medica)).fetchone()
             if not pertenece:
                 flash('El DNI no pertenece al requerimiento seleccionado. No se guardó la evaluación médica.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
@@ -10494,7 +10494,7 @@ html,body{overflow-x:hidden!important;}
                 'medica': med or {}
             })
             med_table_rows.append(f"""
-              <tr onclick="seleccionarMedico('{h(dni_r)}')" data-dni="{h(dni_r)}">
+              <tr onclick="abrirModalMedica('{h(dni_r)}')" data-dni="{h(dni_r)}" data-trabajador="{h(trabajador_r)}" data-requerimiento="{h(req_r)}" data-empresa="{h(row_get(r,'empresa'))}" data-area="{h(row_get(r,'area'))}" data-cargo="{h(row_get(r,'cargo'))}" data-foto-url="{('/foto/' + h(dni_r)) if foto_r else ''}">
                 <td>{foto_html}</td>
                 <td><b>{h(dni_r)}</b></td>
                 <td><b>{h(trabajador_r)}</b></td>
@@ -10505,7 +10505,7 @@ html,body{overflow-x:hidden!important;}
                 <td><span class='med-pill {clase_medica(est)}'>{h(est)}</span></td>
                 <td>{h(med.get('fecha_resultado') if med else '')}</td>
                 <td>{h(med.get('fecha_vencimiento') if med else '')}</td>
-                <td><label for='modal_medica_registro' class='mini-btn med-select-btn' data-dni='{h(dni_r)}' onclick="event.stopPropagation();setTimeout(function(){{abrirModalMedica();seleccionarMedico('{h(dni_r)}');}},80)">Registrar</label></td>
+                <td><label for='modal_medica_registro' class='mini-btn med-select-btn' data-dni='{h(dni_r)}' data-trabajador='{h(trabajador_r)}' data-requerimiento='{h(req_r)}' data-empresa='{h(row_get(r,'empresa'))}' data-area='{h(row_get(r,'area'))}' data-cargo='{h(row_get(r,'cargo'))}' data-foto-url='{('/foto/' + h(dni_r)) if foto_r else ''}' onclick="event.stopPropagation();abrirModalMedica('{h(dni_r)}');return false;">Registrar</label></td>
               </tr>
             """)
 
@@ -10627,7 +10627,7 @@ html,body{overflow-x:hidden!important;}
           </div>
 
           <div class='med-table-card'>
-            <div class='med-table-head'><h3>Lista médica de postulantes del requerimiento</h3><div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap'><span class='status-pill ok'>Seleccione un trabajador para completar ficha</span><label for='modal_medica_registro' class='c-btn' onclick='setTimeout(function(){{abrirModalMedica();var x=document.getElementById("med_dni_lookup"); if(MEDICA_POSTULANTES && MEDICA_POSTULANTES.length===1){{seleccionarMedico(MEDICA_POSTULANTES[0].dni);}} if(x) x.focus();}},80)'>🩺 Registrar evaluación</label></div></div>
+            <div class='med-table-head'><h3>Lista médica de postulantes del requerimiento</h3><div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap'><span class='status-pill ok'>Seleccione un trabajador para completar ficha</span><button type='button' class='c-btn' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(window.MEDICA_POSTULANTES && window.MEDICA_POSTULANTES.length===1){{seleccionarMedico(window.MEDICA_POSTULANTES[0].dni);}} if(x){{x.focus(); if((x.value||"").replace(/\D/g,"").length===8) buscarMedicaPorDni(x.value);}}}},80)'>🩺 Registrar evaluación</button></div></div>
             <div class='med-scroll'>
               <table id='tabla_medica_postulantes' class='med-grid-table'>
                 <tr><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Empresa</th><th>Requerimiento</th><th>Aptitud</th><th>Estado operativo</th><th>Resultado</th><th>Vencimiento</th><th>Acción</th></tr>
@@ -10695,7 +10695,8 @@ html,body{overflow-x:hidden!important;}
         </div>
 
         <script>
-          const MEDICA_POSTULANTES = {medica_json};
+          window.MEDICA_POSTULANTES = {medica_json};
+          const MEDICA_POSTULANTES = window.MEDICA_POSTULANTES || [];
           const MEDICA_BY_DNI = Object.create(null);
           (MEDICA_POSTULANTES || []).forEach(function(x){{ MEDICA_BY_DNI[normDni(x.dni)] = x; }});
           const medDni = document.getElementById('med_dni_lookup');
@@ -10742,6 +10743,25 @@ html,body{overflow-x:hidden!important;}
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
           }}
           function normDni(v){{ return (v || '').toString().replace(/\D/g,'').slice(-8).padStart(8,'0'); }}
+          function rowDesdeTablaMedica(dni){{
+            const key = normDni(dni);
+            if(!key) return null;
+            const tr = document.querySelector(`#tabla_medica_postulantes tr[data-dni='${{key}}']`) || document.querySelector(`#tabla_medica_postulantes tr[data-dni='${{dni}}']`);
+            if(!tr) return null;
+            return {{
+              dni: tr.dataset.dni || key,
+              trabajador: tr.dataset.trabajador || '',
+              requerimiento: tr.dataset.requerimiento || (medReqInput ? medReqInput.value : '{h(req_actual)}'),
+              empresa: tr.dataset.empresa || '',
+              area: tr.dataset.area || '',
+              cargo: tr.dataset.cargo || '',
+              foto: !!tr.dataset.fotoUrl,
+              foto_url: tr.dataset.fotoUrl || '',
+              aptitud: 'PENDIENTE',
+              estado: 'PENDIENTE',
+              medica: {{}}
+            }};
+          }}
           function pintarMedico(row, dniFallback){{
             if(!row){{ limpiarSeleccionMedica('El DNI no pertenece al requerimiento seleccionado.'); return false; }}
             const dniNorm = normDni(row.dni || dniFallback || '');
@@ -10784,37 +10804,48 @@ html,body{overflow-x:hidden!important;}
           }}
           function seleccionarMedico(dni){{
             const dniNorm = normDni(dni);
-            const row = MEDICA_BY_DNI[dniNorm];
-            if(row){{ pintarMedico(row, dniNorm); return; }}
-            buscarMedicaPorDni(dniNorm);
+            let row = MEDICA_BY_DNI[dniNorm] || rowDesdeTablaMedica(dniNorm);
+            if(row){{ pintarMedico(row, dniNorm); buscarMedicaPorDni(dniNorm, true); return true; }}
+            buscarMedicaPorDni(dniNorm, true);
+            return false;
           }}
           let medicaFetchTimer = null;
-          async function buscarMedicaPorDni(v){{
+          async function buscarMedicaPorDni(v, forzarApi){{
             const dni=(v||'').replace(/\D/g,'').slice(0,8);
-            if(medDni.value !== dni) medDni.value = dni;
+            if(medDni && medDni.value !== dni) medDni.value = dni;
             if(dni.length < 8){{ limpiarSeleccionMedica('Digite los 8 dígitos del DNI para validar contra el requerimiento.'); return; }}
-            const local = MEDICA_BY_DNI[normDni(dni)] || MEDICA_BY_DNI[dni];
-            if(local){{ pintarMedico(local, dni); return; }}
+            const dniNorm = normDni(dni);
+            const local = MEDICA_BY_DNI[dniNorm] || MEDICA_BY_DNI[dni] || rowDesdeTablaMedica(dniNorm);
+            if(local && !forzarApi){{ pintarMedico(local, dniNorm); return; }}
+            if(local) pintarMedico(local, dniNorm); // pinta de inmediato, mientras confirma por API
             const req = (medReqInput && medReqInput.value) ? medReqInput.value : '{h(req_actual)}';
             if(!req){{ limpiarSeleccionMedica('Seleccione requerimiento antes de buscar DNI.'); return; }}
-            medDecisionMsg.textContent = 'Buscando DNI en el requerimiento seleccionado...';
-            medDecisionMsg.className = 'med-block-msg';
+            if(!local){{ medDecisionMsg.textContent = 'Buscando DNI en el requerimiento seleccionado...'; medDecisionMsg.className = 'med-block-msg'; }}
             clearTimeout(medicaFetchTimer);
             medicaFetchTimer = setTimeout(async function(){{
               try{{
-                const resp = await fetch('/api/contratacion/medica_postulante?dni=' + encodeURIComponent(dni) + '&req=' + encodeURIComponent(req), {{cache:'no-store'}});
+                const resp = await fetch('/api/contratacion/medica_postulante?dni=' + encodeURIComponent(dniNorm) + '&req=' + encodeURIComponent(req), {{cache:'no-store'}});
                 const data = await resp.json();
                 if(data && data.ok && data.postulante){{
-                  pintarMedico(data.postulante, dni);
-                }}else{{
+                  pintarMedico(data.postulante, dniNorm);
+                }}else if(!local){{
                   limpiarSeleccionMedica((data && data.mensaje) ? data.mensaje : 'DNI no pertenece al requerimiento seleccionado.');
                 }}
               }}catch(e){{
-                limpiarSeleccionMedica('No se pudo consultar el DNI. Revise conexión o recargue la página.');
+                if(!local) limpiarSeleccionMedica('No se pudo consultar el DNI. Revise conexión o recargue la página.');
               }}
-            }}, 120);
+            }}, 80);
           }}
-          function abrirModalMedica(){{ const chk=document.getElementById('modal_medica_registro'); if(chk){{ chk.checked=true; if(window.forceSidebarForModal)window.forceSidebarForModal(true); }} }}
+          function abrirModalMedica(dni){{
+            const chk=document.getElementById('modal_medica_registro');
+            if(chk){{ chk.checked=true; if(window.forceSidebarForModal)window.forceSidebarForModal(true); }}
+            setTimeout(function(){{
+              const input=document.getElementById('med_dni_lookup');
+              if(dni){{ seleccionarMedico(dni); }}
+              else if(input && (input.value||'').replace(/\D/g,'').length===8){{ buscarMedicaPorDni(input.value, true); }}
+              if(input) input.focus();
+            }}, 60);
+          }}
           function validarMedicaSeleccionada(){{
             const dni=(medDni.value||'').replace(/\D/g,'');
             const row = MEDICA_BY_DNI[normDni(dni)];
@@ -10855,8 +10886,8 @@ html,body{overflow-x:hidden!important;}
             r.required = obligatorio;
             r.placeholder = obligatorio ? 'Obligatorio: detalle restricción, no apto u observación operativa' : 'Opcional: no cargar peso, uso de lentes, control médico, etc.';
           }}
-          medAptitudSelect.addEventListener('change', () => {{ setMedCard(medAptitudCard, medAptitudVal, medAptitudSelect.value); actualizarObligatorioRestricciones(); }});
-          medEstadoSelect.addEventListener('change', () => {{ setMedCard(medEstadoCard, medEstadoVal, medEstadoSelect.value); actualizarObligatorioRestricciones(); }});
+          if(medAptitudSelect) medAptitudSelect.addEventListener('change', () => {{ setMedCard(medAptitudCard, medAptitudVal, medAptitudSelect.value); actualizarObligatorioRestricciones(); }});
+          if(medEstadoSelect) medEstadoSelect.addEventListener('change', () => {{ setMedCard(medEstadoCard, medEstadoVal, medEstadoSelect.value); actualizarObligatorioRestricciones(); }});
           actualizarObligatorioRestricciones();
           // FIX 2026: recuperación del comportamiento anterior.
           // 1) El botón Registrar abre el modal aunque el label/checkbox falle por CSS.
@@ -10870,8 +10901,7 @@ html,body{overflow-x:hidden!important;}
             const btn = ev.target.closest ? ev.target.closest('.med-select-btn') : null;
             if(btn && btn.dataset && btn.dataset.dni){{
               ev.preventDefault(); ev.stopPropagation();
-              abrirModalMedica();
-              setTimeout(function(){{ seleccionarMedico(btn.dataset.dni); }}, 50);
+              abrirModalMedica(btn.dataset.dni);
             }}
           }});
           function bindMedicaInput(){{
@@ -10888,9 +10918,11 @@ html,body{overflow-x:hidden!important;}
             bindMedicaInput();
             document.querySelectorAll('.med-select-btn').forEach(function(btn){{
               btn.addEventListener('click', function(ev){{
-                // No bloquear el onclick del botón. La validación real ocurre al guardar.
+                if(btn.dataset && btn.dataset.dni){{ ev.preventDefault(); ev.stopPropagation(); abrirModalMedica(btn.dataset.dni); }}
               }});
             }});
+            const input=document.getElementById('med_dni_lookup');
+            if(input && (input.value||'').replace(/\D/g,'').length===8) buscarMedicaPorDni(input.value, true);
           }});
         </script>
         """)
