@@ -2350,6 +2350,11 @@ def init_db():
             nota TEXT, fecha_inicio TEXT, fecha_fin TEXT, evidencia_nombre TEXT, ruta_evidencia TEXT,
             observacion TEXT, fecha_registro TEXT, registrado_por TEXT
         )''')
+        # PRO VALIDACIÓN: Inducción/Capacitación debe quedar amarrada al requerimiento/ticket.
+        try: con.execute('ALTER TABLE contratacion_capacitacion ADD COLUMN requerimiento TEXT')
+        except Exception: pass
+        try: con.execute('CREATE INDEX IF NOT EXISTS idx_capacitacion_req_dni ON contratacion_capacitacion(requerimiento,dni)')
+        except Exception: pass
         con.execute('''
         CREATE TABLE IF NOT EXISTS contratacion_indumentaria(
             id INTEGER PRIMARY KEY AUTOINCREMENT, dni TEXT, trabajador TEXT, requerimiento TEXT, polo TEXT, pantalon TEXT, botas TEXT,
@@ -2370,6 +2375,10 @@ def init_db():
         ]:
             try: con.execute(ddl)
             except Exception: pass
+        try: con.execute('CREATE INDEX IF NOT EXISTS idx_indumentaria_req_dni ON contratacion_indumentaria(requerimiento,dni)')
+        except Exception: pass
+        try: con.execute('CREATE INDEX IF NOT EXISTS idx_medica_req_dni ON contratacion_medica(requerimiento,dni)')
+        except Exception: pass
 
         # PRO: Centro de Fotocheck conectado a Requerimiento/Postulantes.
         # Administra foto, validación, cola de impresión Zebra ZC300 y cargo de entrega firmado.
@@ -2761,6 +2770,36 @@ def row_get(row, key, default=''):
         return default
 
 
+
+
+
+def validar_dni_en_requerimiento(con, dni, requerimiento):
+    """Valida que exista un postulante activo con DNI dentro del requerimiento seleccionado."""
+    dni = normalizar_dni(dni)
+    requerimiento = clean(requerimiento)
+    if not requerimiento:
+        return False, 'Primero seleccione un requerimiento/ticket.', None
+    if not dni:
+        return False, 'Digite un DNI válido de 8 dígitos.', None
+    row = con.execute("""SELECT * FROM contratacion_ingresos
+                         WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                           AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                         ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
+    if not row:
+        return False, f'El DNI {dni} no pertenece al requerimiento {requerimiento}. Primero regístrelo en Postulantes/Requerimiento.', None
+    return True, '', row
+
+def existe_registro_modulo(con, tabla, dni, requerimiento):
+    dni = normalizar_dni(dni)
+    requerimiento = clean(requerimiento)
+    try:
+        return con.execute(f"SELECT id FROM {tabla} WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?) LIMIT 1", (dni, requerimiento)).fetchone() is not None
+    except Exception:
+        return False
+
+def validar_prendas_indumentaria(form):
+    campos = ['polo','pantalon','botas','casaca','gorro','lentes','guantes','fotocheck','otros']
+    return any(clean(form.get(c)) for c in campos)
 
 
 def row_to_dict(row):
@@ -7910,6 +7949,10 @@ def admin_contratacion():
             if not pertenece:
                 flash('El DNI no pertenece al requerimiento seleccionado. No se guardó la evaluación médica.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
+            with db() as con_dup_med:
+                if existe_registro_modulo(con_dup_med, 'contratacion_medica', dni, req_medica):
+                    flash(f'Este DNI ya tiene evaluación médica registrada para el requerimiento {req_medica}. No se permite duplicar.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
 
             # Validación obligatoria de la ficha médica antes de registrar.
             aptitud_med = clean(request.form.get('aptitud')).upper()
@@ -7974,12 +8017,24 @@ def admin_contratacion():
             return redirect(url_for('admin_contratacion', sec=destino))
         if accion == 'guardar_capacitacion':
             dni=normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni)
+            req_cap = clean(request.form.get('requerimiento') or request.form.get('req_contexto'))
+            if not req_cap:
+                flash('Primero seleccione requerimiento/ticket para registrar inducción.', 'error')
+                return redirect(url_for('admin_contratacion', sec='induccion'))
+            with db() as con_val_cap:
+                ok_req, msg_req, ing_cap = validar_dni_en_requerimiento(con_val_cap, dni, req_cap)
+                if not ok_req:
+                    flash(msg_req, 'error')
+                    return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
+                if existe_registro_modulo(con_val_cap, 'contratacion_capacitacion', dni, req_cap):
+                    flash(f'Este DNI ya tiene inducción/capacitación registrada para el requerimiento {req_cap}. No se permite duplicar.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
             if not dni or not clean(request.form.get('curso')):
                 flash('Digite DNI y curso obligatorio.', 'error')
-                return redirect(url_for('admin_contratacion', sec='capacitacion'))
+                return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
             if not clean(request.form.get('video_url')) and not (request.files.get('archivo_video') and request.files.get('archivo_video').filename):
                 flash('Cargue un video MP4 o ingrese URL del video.', 'error')
-                return redirect(url_for('admin_contratacion', sec='capacitacion'))
+                return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
             f=request.files.get('evidencia'); ruta=''; nombre_arch=''
             if f and f.filename:
                 carpeta=UPLOAD_DIR/'contratacion'/'capacitacion'/dni; carpeta.mkdir(parents=True, exist_ok=True)
@@ -7995,19 +8050,40 @@ def admin_contratacion():
                 if val: obs_extra.append(f'{etiqueta}: {val}')
             obs_final=(obs_base + (' | ' if obs_base and obs_extra else '') + ' | '.join(obs_extra)).strip()
             with db() as con:
-                con.execute('''INSERT INTO contratacion_capacitacion(dni,trabajador,curso,video_url,estado,nota,fecha_inicio,fecha_fin,evidencia_nombre,ruta_evidencia,observacion,fecha_registro,registrado_por,tipo_video,archivo_video_nombre,ruta_video,duracion_min,preguntas,intentos,aprobador) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), clean(request.form.get('curso')), clean(request.form.get('video_url')), clean(request.form.get('estado')) or 'PENDIENTE', clean(request.form.get('nota')), fecha_sin_hora(request.form.get('fecha_inicio')), fecha_sin_hora(request.form.get('fecha_fin')), nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_video')), nombre_video, ruta_video, clean(request.form.get('duracion_min')), clean(request.form.get('preguntas')), clean(request.form.get('intentos')), clean(request.form.get('aprobador'))))
-                con.execute('UPDATE contratacion_ingresos SET estado_capacitacion=? WHERE dni=?', (clean(request.form.get('estado')) or 'PENDIENTE', dni))
+                con.execute('''INSERT INTO contratacion_capacitacion(dni,trabajador,requerimiento,curso,video_url,estado,nota,fecha_inicio,fecha_fin,evidencia_nombre,ruta_evidencia,observacion,fecha_registro,registrado_por,tipo_video,archivo_video_nombre,ruta_video,duracion_min,preguntas,intentos,aprobador) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), req_cap, clean(request.form.get('curso')), clean(request.form.get('video_url')), clean(request.form.get('estado')) or 'PENDIENTE', clean(request.form.get('nota')), fecha_sin_hora(request.form.get('fecha_inicio')), fecha_sin_hora(request.form.get('fecha_fin')), nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_video')), nombre_video, ruta_video, clean(request.form.get('duracion_min')), clean(request.form.get('preguntas')), clean(request.form.get('intentos')), clean(request.form.get('aprobador'))))
+                con.execute('UPDATE contratacion_ingresos SET estado_capacitacion=? WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)', (clean(request.form.get('estado')) or 'PENDIENTE', dni, req_cap))
                 con.commit()
             flash('Capacitación registrada.', 'ok')
-            return redirect(url_for('admin_contratacion', sec='capacitacion'))
+            return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
         if accion == 'guardar_indumentaria':
-            dni=normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni)
-            if not dni:
-                flash('Digite DNI obligatorio para registrar indumentaria.', 'error')
+            dni = normalizar_dni(request.form.get('dni'))
+            req_ind = clean(request.form.get('requerimiento'))
+            if not req_ind:
+                flash('Primero seleccione requerimiento/ticket antes de registrar indumentaria.', 'error')
                 return redirect(url_for('admin_contratacion', sec='indumentaria'))
-            data_ind = datos_unificados_contratacion(dni, clean(request.form.get('requerimiento')))
-            trabajador_ind = clean(request.form.get('trabajador')) or data_ind.get('nombre') or (trab['nombre'] if trab else '')
-            estado_ind = clean(request.form.get('estado')) or 'PENDIENTE'
+            with db() as con_val_ind:
+                ok_req, msg_req, ing_ind = validar_dni_en_requerimiento(con_val_ind, dni, req_ind)
+                if not ok_req:
+                    flash(msg_req, 'error')
+                    return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
+                if existe_registro_modulo(con_val_ind, 'contratacion_indumentaria', dni, req_ind):
+                    flash(f'Este DNI ya tiene entrega de indumentaria registrada para el requerimiento {req_ind}. No se permite duplicar.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
+
+            data_ind = datos_unificados_contratacion(dni, req_ind)
+            trabajador_ind = clean(request.form.get('trabajador')) or data_ind.get('nombre') or row_get(ing_ind, 'trabajador')
+            estado_ind = clean(request.form.get('estado')) or 'ENTREGADO'
+            resp_entrega = clean(request.form.get('responsable_entrega'))
+            fecha_entrega_ind = fecha_sin_hora(request.form.get('fecha_entrega')) or fecha_sin_hora(hoy_iso())
+            faltantes_ind = []
+            if not trabajador_ind: faltantes_ind.append('Trabajador')
+            if not resp_entrega: faltantes_ind.append('Responsable de entrega')
+            if not fecha_entrega_ind: faltantes_ind.append('Fecha de entrega')
+            if not validar_prendas_indumentaria(request.form): faltantes_ind.append('Al menos una prenda/EPP')
+            if faltantes_ind:
+                flash('Complete obligatorios de indumentaria: ' + ', '.join(faltantes_ind), 'error')
+                return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
+
             cargo_file = request.files.get('cargo_firmado')
             ruta_cargo = ''; nombre_cargo = ''
             if cargo_file and cargo_file.filename:
@@ -8018,15 +8094,14 @@ def admin_contratacion():
                 cargo_file.save(path_cargo)
                 ruta_cargo = str(path_cargo)
             obs_base = clean(request.form.get('observacion'))
-            resp_entrega = clean(request.form.get('responsable_entrega'))
             if resp_entrega:
                 obs_base = (obs_base + (' | ' if obs_base else '') + f'Responsable entrega: {resp_entrega}').strip()
             with db() as con:
-                con.execute('''INSERT INTO contratacion_indumentaria(dni,trabajador,requerimiento,polo,pantalon,botas,casaca,gorro,lentes,guantes,fotocheck,otros,estado,fecha_entrega,observacion,fecha_registro,registrado_por,empresa,area,cargo,actividad,fecha_ingreso,responsable_entrega,cargo_firmado_nombre,ruta_cargo_firmado) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trabajador_ind, clean(request.form.get('requerimiento')) or data_ind.get('requerimiento',''), clean(request.form.get('polo')), clean(request.form.get('pantalon')), clean(request.form.get('botas')), clean(request.form.get('casaca')), clean(request.form.get('gorro')), clean(request.form.get('lentes')), clean(request.form.get('guantes')), clean(request.form.get('fotocheck')), clean(request.form.get('otros')), estado_ind, fecha_sin_hora(request.form.get('fecha_entrega')) or fecha_sin_hora(hoy_iso()), obs_base, now_txt(), session.get('admin_user','admin'), data_ind.get('empresa',''), data_ind.get('area',''), data_ind.get('cargo',''), data_ind.get('actividad',''), data_ind.get('fecha_ingreso',''), resp_entrega, nombre_cargo, ruta_cargo))
-                con.execute('UPDATE contratacion_ingresos SET estado_indumentaria=? WHERE dni=?', (estado_ind, dni))
+                con.execute('''INSERT INTO contratacion_indumentaria(dni,trabajador,requerimiento,polo,pantalon,botas,casaca,gorro,lentes,guantes,fotocheck,otros,estado,fecha_entrega,observacion,fecha_registro,registrado_por,empresa,area,cargo,actividad,fecha_ingreso,responsable_entrega,cargo_firmado_nombre,ruta_cargo_firmado) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trabajador_ind, req_ind, clean(request.form.get('polo')), clean(request.form.get('pantalon')), clean(request.form.get('botas')), clean(request.form.get('casaca')), clean(request.form.get('gorro')), clean(request.form.get('lentes')), clean(request.form.get('guantes')), clean(request.form.get('fotocheck')), clean(request.form.get('otros')), estado_ind, fecha_entrega_ind, obs_base, now_txt(), session.get('admin_user','admin'), data_ind.get('empresa') or row_get(ing_ind,'empresa'), data_ind.get('area') or row_get(ing_ind,'area'), data_ind.get('cargo') or row_get(ing_ind,'cargo'), data_ind.get('actividad') or row_get(ing_ind,'actividad'), data_ind.get('fecha_ingreso') or row_get(ing_ind,'fecha_ingreso'), resp_entrega, nombre_cargo, ruta_cargo))
+                con.execute('UPDATE contratacion_ingresos SET estado_indumentaria=? WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)', (estado_ind, dni, req_ind))
                 con.commit()
             flash('Entrega de indumentaria registrada y sincronizada con el postulante.', 'ok')
-            return redirect(url_for('admin_contratacion', sec='indumentaria'))
+            return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
         if accion == 'fotocheck_guardar_config_zebra':
             req_return = clean(request.form.get('req_return'))
             cfg = {
