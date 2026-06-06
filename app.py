@@ -2802,6 +2802,51 @@ def validar_prendas_indumentaria(form):
     return any(clean(form.get(c)) for c in campos)
 
 
+
+
+# =============================
+# VALIDACIONES DE FLUJO OPERATIVO CONTRATACIÓN
+# Postulantes -> Evaluación Médica -> Inducción -> Indumentaria
+# =============================
+def flujo_postulante_completo(row):
+    """Solo deja avanzar a módulos posteriores si la ficha de Postulantes está registrada y completa."""
+    if not row:
+        return False
+    dni = normalizar_dni(row_get(row, 'dni'))
+    trabajador = clean(row_get(row, 'trabajador'))
+    if not dni or not trabajador or trabajador.upper() in ('PENDIENTE COMPLETAR', 'NUEVO - PENDIENTE COMPLETAR'):
+        return False
+    try:
+        return len(campos_faltantes_postulante(row)) == 0
+    except Exception:
+        # Respaldo mínimo si cambia el esquema: no permitir avance sin datos base.
+        minimos = ['dni', 'trabajador', 'empresa', 'area', 'cargo', 'actividad', 'requerimiento']
+        return all(not es_valor_incompleto(row_get(row, c)) for c in minimos)
+
+
+def flujo_medica_apta_con(con, dni, requerimiento):
+    """Valida evaluación médica apta/habilitada para el requerimiento exacto."""
+    dni = normalizar_dni(dni)
+    requerimiento = clean(requerimiento)
+    if not dni or not requerimiento:
+        return False
+    r = con.execute("""SELECT estado, aptitud FROM contratacion_medica
+                       WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                       ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
+    if not r:
+        return False
+    estado = estado_norm(row_get(r, 'estado'))
+    aptitud = estado_norm(row_get(r, 'aptitud'))
+    return estado in ('APTO', 'HABILITADO', 'APROBADO') or aptitud in ('APTO', 'APTO CON RESTRICCIONES', 'HABILITADO', 'APROBADO')
+
+
+def flujo_induccion_ok(row):
+    return estado_norm(row_get(row, 'estado_capacitacion')) in ('VIDEO VISTO', 'APROBADO', 'INDUCIDO', 'COMPLETO', 'COMPLETADO', 'OK')
+
+
+def flujo_indumentaria_ok(row):
+    return estado_norm(row_get(row, 'estado_indumentaria')) in ('ENTREGADO', 'COMPLETO', 'COMPLETADO', 'OK')
+
 def row_to_dict(row):
     if not row:
         return {}
@@ -7876,9 +7921,24 @@ def admin_contratacion():
             else:
                 q = ','.join(['?']*len(ids))
                 with db() as con:
-                    con.execute(f'UPDATE contratacion_ingresos SET {campo}=? WHERE id IN ({q})', [nuevo_estado] + ids)
+                    ids_validos = ids
+                    bloqueados = 0
+                    if campo == 'estado_capacitacion':
+                        rows_validar = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q})', ids).fetchall()
+                        ids_validos = [row_get(r,'id') for r in rows_validar if flujo_postulante_completo(r) and flujo_medica_apta_con(con, row_get(r,'dni'), row_get(r,'requerimiento'))]
+                        bloqueados = len(ids) - len(ids_validos)
+                    elif campo == 'estado_indumentaria':
+                        rows_validar = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q})', ids).fetchall()
+                        ids_validos = [row_get(r,'id') for r in rows_validar if flujo_postulante_completo(r) and flujo_medica_apta_con(con, row_get(r,'dni'), row_get(r,'requerimiento')) and flujo_induccion_ok(r)]
+                        bloqueados = len(ids) - len(ids_validos)
+                    if ids_validos:
+                        q2 = ','.join(['?']*len(ids_validos))
+                        con.execute(f'UPDATE contratacion_ingresos SET {campo}=? WHERE id IN ({q2})', [nuevo_estado] + ids_validos)
                     con.commit()
-                flash(f'Se actualizó {campo} a {nuevo_estado} para {len(ids)} trabajador(es).', 'ok')
+                if bloqueados:
+                    flash(f'Se actualizó {campo} a {nuevo_estado} para {len(ids_validos)} trabajador(es). Bloqueados por flujo previo pendiente: {bloqueados}.', 'error' if not ids_validos else 'ok')
+                else:
+                    flash(f'Se actualizó {campo} a {nuevo_estado} para {len(ids_validos)} trabajador(es).', 'ok')
             return redirect(url_for('admin_contratacion', sec=request.form.get('volver') or 'nuevos'))
         if accion == 'registrar_dni_requerimiento':
             ticket = clean(request.form.get('ticket_req'))
@@ -7948,6 +8008,9 @@ def admin_contratacion():
                 pertenece = con_val.execute('SELECT id, trabajador FROM contratacion_ingresos WHERE dni=? AND TRIM(requerimiento)=TRIM(?) LIMIT 1', (dni, req_medica)).fetchone()
             if not pertenece:
                 flash('El DNI no pertenece al requerimiento seleccionado. No se guardó la evaluación médica.', 'error')
+                return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
+            if not flujo_postulante_completo(pertenece):
+                flash('No puede registrar evaluación médica: primero complete la ficha en Postulantes.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
             with db() as con_dup_med:
                 if existe_registro_modulo(con_dup_med, 'contratacion_medica', dni, req_medica):
@@ -8022,15 +8085,25 @@ def admin_contratacion():
                 flash('Primero seleccione requerimiento/ticket para registrar inducción.', 'error')
                 return redirect(url_for('admin_contratacion', sec='induccion'))
             with db() as con_val_cap:
-                ok_req, msg_req, ing_cap = validar_dni_en_requerimiento(con_val_cap, dni, req_cap)
-                if not ok_req:
-                    flash(msg_req, 'error')
-                    return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
-                if existe_registro_modulo(con_val_cap, 'contratacion_capacitacion', dni, req_cap):
-                    flash(f'Este DNI ya tiene inducción/capacitación registrada para el requerimiento {req_cap}. No se permite duplicar.', 'error')
-                    return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
-            if not dni or not clean(request.form.get('curso')):
-                flash('Digite DNI y curso obligatorio.', 'error')
+                # Si no viene DNI, se está registrando solo material/biblioteca de inducción.
+                # No debe romper el botón de guardar video/material.
+                ing_cap = None
+                if dni:
+                    ok_req, msg_req, ing_cap = validar_dni_en_requerimiento(con_val_cap, dni, req_cap)
+                    if not ok_req:
+                        flash(msg_req, 'error')
+                        return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
+                    if not flujo_postulante_completo(ing_cap):
+                        flash('No puede pasar a Inducción: primero complete la ficha en Postulantes.', 'error')
+                        return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
+                    if not flujo_medica_apta_con(con_val_cap, dni, req_cap):
+                        flash('No puede registrar Inducción: primero debe tener evaluación médica APTO/HABILITADO.', 'error')
+                        return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
+                    if existe_registro_modulo(con_val_cap, 'contratacion_capacitacion', dni, req_cap):
+                        flash(f'Este DNI ya tiene inducción/capacitación registrada para el requerimiento {req_cap}. No se permite duplicar.', 'error')
+                        return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
+            if not clean(request.form.get('curso')):
+                flash('Seleccione tema/curso obligatorio.', 'error')
                 return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
             if not clean(request.form.get('video_url')) and not (request.files.get('archivo_video') and request.files.get('archivo_video').filename):
                 flash('Cargue un video MP4 o ingrese URL del video.', 'error')
@@ -8065,6 +8138,15 @@ def admin_contratacion():
                 ok_req, msg_req, ing_ind = validar_dni_en_requerimiento(con_val_ind, dni, req_ind)
                 if not ok_req:
                     flash(msg_req, 'error')
+                    return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
+                if not flujo_postulante_completo(ing_ind):
+                    flash('No puede registrar indumentaria: primero complete la ficha en Postulantes.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
+                if not flujo_medica_apta_con(con_val_ind, dni, req_ind):
+                    flash('No puede registrar indumentaria: primero debe tener evaluación médica APTO/HABILITADO.', 'error')
+                    return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
+                if not flujo_induccion_ok(ing_ind):
+                    flash('No puede registrar indumentaria: primero debe completar Inducción.', 'error')
                     return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
                 if existe_registro_modulo(con_val_ind, 'contratacion_indumentaria', dni, req_ind):
                     flash(f'Este DNI ya tiene entrega de indumentaria registrada para el requerimiento {req_ind}. No se permite duplicar.', 'error')
@@ -10307,7 +10389,7 @@ html,body{overflow-x:hidden!important;}
                 return 'ok'
             return 'pending'
 
-        lista_med = trabajadores_proceso_mostrar if req_actual else []
+        lista_med = [r for r in trabajadores_proceso_mostrar if flujo_postulante_completo(r)] if req_actual else []
         total_med_req = len(lista_med)
         aptos_med_req = 0
         no_aptos_med_req = 0
@@ -10698,7 +10780,9 @@ html,body{overflow-x:hidden!important;}
               input.addEventListener('change', function(){{ buscarMedicaPorDni(this.value); }});
             }}
             document.querySelectorAll('.med-select-btn').forEach(function(btn){{
-              btn.addEventListener('click', function(ev){{ ev.preventDefault(); ev.stopPropagation(); }});
+              btn.addEventListener('click', function(ev){{
+                // No bloquear el onclick del botón. La validación real ocurre al guardar.
+              }});
             }});
           }});
         </script>
@@ -10709,7 +10793,10 @@ html,body{overflow-x:hidden!important;}
             return redirect(url_for('admin_contratacion', sec='induccion'))
         es_ind = (sec=='induccion')
         req_filtro_induccion = clean(request.args.get('req'))
-        trabajadores_induccion = [r for r in trabajadores_proceso if (not req_filtro_induccion or clean(row_get(r,'requerimiento')) == req_filtro_induccion)]
+        trabajadores_induccion_base = [r for r in trabajadores_proceso if (not req_filtro_induccion or clean(row_get(r,'requerimiento')) == req_filtro_induccion)]
+        # Flujo obligatorio: a Inducción solo pasan postulantes con ficha completa y evaluación médica APTO/HABILITADO.
+        with db() as con_flujo_ind:
+            trabajadores_induccion = [r for r in trabajadores_induccion_base if flujo_postulante_completo(r) and flujo_medica_apta_con(con_flujo_ind, row_get(r,'dni'), row_get(r,'requerimiento'))]
         req_options_induccion = ''.join([f"<option value='{h(r['ticket'])}' {'selected' if clean(r['ticket'])==req_filtro_induccion else ''}>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['area'])} / {h(r['cargo'])}</option>" for r in requerimientos])
         total_ind_req = len(trabajadores_induccion)
         inducidos_req = len([r for r in trabajadores_induccion if clean(row_get(r,'estado_capacitacion')).upper() in ('VIDEO VISTO','APROBADO','INDUCIDO','COMPLETO')])
@@ -10786,7 +10873,10 @@ html,body{overflow-x:hidden!important;}
         """)
     elif sec=='indumentaria':
         req_filtro_indumentaria = clean(request.args.get('req'))
-        trabajadores_indumentaria = [r for r in trabajadores_proceso if (not req_filtro_indumentaria or clean(row_get(r,'requerimiento')) == req_filtro_indumentaria)]
+        trabajadores_indumentaria_base = [r for r in trabajadores_proceso if (not req_filtro_indumentaria or clean(row_get(r,'requerimiento')) == req_filtro_indumentaria)]
+        # Flujo obligatorio: a Indumentaria solo pasan quienes ya completaron Postulantes + Médico + Inducción.
+        with db() as con_flujo_indum:
+            trabajadores_indumentaria = [r for r in trabajadores_indumentaria_base if flujo_postulante_completo(r) and flujo_medica_apta_con(con_flujo_indum, row_get(r,'dni'), row_get(r,'requerimiento')) and flujo_induccion_ok(r)]
         indumentarias_filtradas = [r for r in indumentarias if (not req_filtro_indumentaria or clean(row_get(r,'requerimiento')) == req_filtro_indumentaria)]
         req_options_indumentaria = ''.join([f"<option value='{h(r['ticket'])}' {'selected' if clean(r['ticket'])==req_filtro_indumentaria else ''}>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['area'])} / {h(r['cargo'])}</option>" for r in requerimientos])
 
