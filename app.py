@@ -10368,7 +10368,7 @@ html,body{overflow-x:hidden!important;}
                 <td><span class='med-pill {clase_medica(est)}'>{h(est)}</span></td>
                 <td>{h(med.get('fecha_resultado') if med else '')}</td>
                 <td>{h(med.get('fecha_vencimiento') if med else '')}</td>
-                <td><button type='button' class='mini-btn med-select-btn' onclick="event.stopPropagation();seleccionarMedico('{h(dni_r)}');abrirModalMedica()">Registrar</button></td>
+                <td><button type='button' class='mini-btn med-select-btn' onclick="event.stopPropagation();abrirModalMedica();setTimeout(function(){{seleccionarMedico('{h(dni_r)}');}},80)">Registrar</button></td>
               </tr>
             """)
 
@@ -10489,7 +10489,7 @@ html,body{overflow-x:hidden!important;}
           </div>
 
           <div class='med-table-card'>
-            <div class='med-table-head'><h3>Lista médica de postulantes del requerimiento</h3><div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap'><span class='status-pill ok'>Seleccione un trabajador para completar ficha</span><label for='modal_medica_registro' class='c-btn'>🩺 Registrar evaluación</label></div></div>
+            <div class='med-table-head'><h3>Lista médica de postulantes del requerimiento</h3><div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap'><span class='status-pill ok'>Seleccione un trabajador para completar ficha</span><button type='button' class='c-btn' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(x) x.focus();}},120)'>🩺 Registrar evaluación</button></div></div>
             <div class='med-scroll'>
               <table id='tabla_medica_postulantes' class='med-grid-table'>
                 <tr><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Empresa</th><th>Requerimiento</th><th>Aptitud</th><th>Estado operativo</th><th>Resultado</th><th>Vencimiento</th><th>Acción</th></tr>
@@ -10600,10 +10600,12 @@ html,body{overflow-x:hidden!important;}
             medDecisionMsg.className = 'med-block-msg blocked';
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
           }}
+          function normDni(v){{ return (v || '').toString().replace(/\D/g,'').slice(-8).padStart(8,'0'); }}
           function seleccionarMedico(dni){{
-            const row = MEDICA_POSTULANTES.find(x => (x.dni || '') === dni);
+            const dniNorm = normDni(dni);
+            const row = MEDICA_POSTULANTES.find(x => normDni(x.dni) === dniNorm);
             if(!row){{ limpiarSeleccionMedica('El DNI no pertenece al requerimiento seleccionado.'); return; }}
-            medDni.value = row.dni || '';
+            medDni.value = row.dni || dniNorm;
             medDniShow.textContent = row.dni || '—';
             medNombre.textContent = row.trabajador || '—';
             medReq.textContent = row.requerimiento || '—';
@@ -10633,14 +10635,14 @@ html,body{overflow-x:hidden!important;}
             const dni=(v||'').replace(/\D/g,'').slice(0,8);
             if(medDni.value !== dni) medDni.value = dni;
             if(dni.length < 8){{ limpiarSeleccionMedica('Digite los 8 dígitos del DNI para validar contra el requerimiento.'); return; }}
-            const row = MEDICA_POSTULANTES.find(x => (x.dni || '') === dni);
+            const row = MEDICA_POSTULANTES.find(x => normDni(x.dni) === dni);
             if(!row){{ limpiarSeleccionMedica('DNI no pertenece al requerimiento seleccionado.'); return; }}
             seleccionarMedico(dni);
           }}
           function abrirModalMedica(){{ const chk=document.getElementById('modal_medica_registro'); if(chk){{ chk.checked=true; if(window.forceSidebarForModal)window.forceSidebarForModal(true); }} }}
           function validarMedicaSeleccionada(){{
             const dni=(medDni.value||'').replace(/\D/g,'');
-            const row = MEDICA_POSTULANTES.find(x => (x.dni || '') === dni);
+            const row = MEDICA_POSTULANTES.find(x => normDni(x.dni) === normDni(dni));
             if(!row){{alert('El DNI no pertenece al requerimiento seleccionado.'); return false;}}
             if(!medReqInput.value){{alert('Primero valide un postulante del requerimiento.'); return false;}}
             const faltantes=[];
@@ -10681,6 +10683,24 @@ html,body{overflow-x:hidden!important;}
           medAptitudSelect.addEventListener('change', () => {{ setMedCard(medAptitudCard, medAptitudVal, medAptitudSelect.value); actualizarObligatorioRestricciones(); }});
           medEstadoSelect.addEventListener('change', () => {{ setMedCard(medEstadoCard, medEstadoVal, medEstadoSelect.value); actualizarObligatorioRestricciones(); }});
           actualizarObligatorioRestricciones();
+          // FIX 2026: recuperación del comportamiento anterior.
+          // 1) El botón Registrar abre el modal aunque el label/checkbox falle por CSS.
+          // 2) Al digitar DNI, carga datos/foto del postulante dentro del requerimiento seleccionado.
+          // 3) Expone funciones al ámbito global para los onclick generados en la tabla.
+          window.abrirModalMedica = abrirModalMedica;
+          window.seleccionarMedico = seleccionarMedico;
+          window.buscarMedicaPorDni = buscarMedicaPorDni;
+          window.validarMedicaSeleccionada = validarMedicaSeleccionada;
+          document.addEventListener('DOMContentLoaded', function(){{
+            const input = document.getElementById('med_dni_lookup');
+            if(input){{
+              input.addEventListener('keyup', function(){{ buscarMedicaPorDni(this.value); }});
+              input.addEventListener('change', function(){{ buscarMedicaPorDni(this.value); }});
+            }}
+            document.querySelectorAll('.med-select-btn').forEach(function(btn){{
+              btn.addEventListener('click', function(ev){{ ev.preventDefault(); ev.stopPropagation(); }});
+            }});
+          }});
         </script>
         """)
     elif sec in ('capacitacion','induccion','cursos'):
