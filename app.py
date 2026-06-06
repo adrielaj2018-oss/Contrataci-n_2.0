@@ -10742,43 +10742,77 @@ html,body{overflow-x:hidden!important;}
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
           }}
           function normDni(v){{ return (v || '').toString().replace(/\D/g,'').slice(-8).padStart(8,'0'); }}
-          function seleccionarMedico(dni){{
-            const dniNorm = normDni(dni);
-            const row = MEDICA_BY_DNI[dniNorm];
-            if(!row){{ limpiarSeleccionMedica('El DNI no pertenece al requerimiento seleccionado.'); return; }}
+          function pintarMedico(row, dniFallback){{
+            if(!row){{ limpiarSeleccionMedica('El DNI no pertenece al requerimiento seleccionado.'); return false; }}
+            const dniNorm = normDni(row.dni || dniFallback || '');
+            row.dni = row.dni || dniNorm;
+            MEDICA_BY_DNI[dniNorm] = row;
             medDni.value = row.dni || dniNorm;
             medDniShow.textContent = row.dni || '—';
             medNombre.textContent = row.trabajador || '—';
             medReq.textContent = row.requerimiento || '—';
             medEmpresa.textContent = row.empresa || '—';
             medAreaCargo.textContent = ((row.area || '—') + ' / ' + (row.cargo || '—'));
-            medReqInput.value = row.requerimiento || '{h(req_actual)}';
+            medReqInput.value = row.requerimiento || medReqInput.value || '{h(req_actual)}';
             medTrabHidden.value = row.trabajador || '';
             const apt = row.aptitud || 'PENDIENTE';
             const est = row.estado || 'PENDIENTE';
             setMedCard(medAptitudCard, medAptitudVal, apt);
             setMedCard(medEstadoCard, medEstadoVal, est);
-            if(medAptitudSelect && apt) medAptitudSelect.value = apt;
-            if(medEstadoSelect && est) medEstadoSelect.value = est;
+            if(medAptitudSelect && apt && Array.from(medAptitudSelect.options).some(o=>o.value===apt)) medAptitudSelect.value = apt;
+            if(medEstadoSelect && est && Array.from(medEstadoSelect.options).some(o=>o.value===est)) medEstadoSelect.value = est;
             if(row.medica){{
-              if(row.medica.restricciones) document.getElementById('med_restricciones').value = row.medica.restricciones;
-              if(row.medica.observacion) document.getElementById('med_observacion').value = row.medica.observacion;
+              const ids = {{
+                med_restricciones: row.medica.restricciones,
+                med_observacion: row.medica.observacion,
+                med_tipo_examen: row.medica.tipo_examen,
+                med_riesgo: row.medica.riesgo_puesto,
+                med_responsable: row.medica.responsable_seguimiento,
+                med_fecha_resultado: row.medica.fecha_resultado,
+                med_fecha_vencimiento: row.medica.fecha_vencimiento
+              }};
+              Object.keys(ids).forEach(function(id){{ const el=document.getElementById(id); if(el && ids[id]) el.value=ids[id]; }});
             }}
             medFotoBox.innerHTML = row.foto_url ? `<img src='${{row.foto_url}}'><small>Foto real del postulante</small>` : (row.foto ? `<img src='/foto/${{row.dni}}'><small>Foto real del postulante</small>` : `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`);
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
             const tr = document.querySelector(`#tabla_medica_postulantes tr[data-dni='${{row.dni}}']`); if(tr) tr.style.outline='3px solid #00b86b';
             const blocked = medClass(apt)==='danger' || medClass(est)==='danger';
-            medDecisionMsg.textContent = blocked ? 'BLOQUEADO: no debe avanzar a contrato/documentos/firma.' : 'Validación médica preparada. Si queda APTO/HABILITADO puede avanzar a inducción.';
+            medDecisionMsg.textContent = blocked ? 'BLOQUEADO: no debe avanzar a contrato/documentos/firma.' : 'Datos cargados correctamente. Complete resultado médico y registre.';
             medDecisionMsg.className = 'med-block-msg' + (blocked ? ' blocked' : '');
-            document.getElementById('form_medica').scrollIntoView({{behavior:'smooth',block:'center'}});
+            actualizarObligatorioRestricciones();
+            return true;
           }}
-          function buscarMedicaPorDni(v){{
+          function seleccionarMedico(dni){{
+            const dniNorm = normDni(dni);
+            const row = MEDICA_BY_DNI[dniNorm];
+            if(row){{ pintarMedico(row, dniNorm); return; }}
+            buscarMedicaPorDni(dniNorm);
+          }}
+          let medicaFetchTimer = null;
+          async function buscarMedicaPorDni(v){{
             const dni=(v||'').replace(/\D/g,'').slice(0,8);
             if(medDni.value !== dni) medDni.value = dni;
             if(dni.length < 8){{ limpiarSeleccionMedica('Digite los 8 dígitos del DNI para validar contra el requerimiento.'); return; }}
-            const row = MEDICA_BY_DNI[dni];
-            if(!row){{ limpiarSeleccionMedica('DNI no pertenece al requerimiento seleccionado.'); return; }}
-            seleccionarMedico(dni);
+            const local = MEDICA_BY_DNI[normDni(dni)] || MEDICA_BY_DNI[dni];
+            if(local){{ pintarMedico(local, dni); return; }}
+            const req = (medReqInput && medReqInput.value) ? medReqInput.value : '{h(req_actual)}';
+            if(!req){{ limpiarSeleccionMedica('Seleccione requerimiento antes de buscar DNI.'); return; }}
+            medDecisionMsg.textContent = 'Buscando DNI en el requerimiento seleccionado...';
+            medDecisionMsg.className = 'med-block-msg';
+            clearTimeout(medicaFetchTimer);
+            medicaFetchTimer = setTimeout(async function(){{
+              try{{
+                const resp = await fetch('/api/contratacion/medica_postulante?dni=' + encodeURIComponent(dni) + '&req=' + encodeURIComponent(req), {{cache:'no-store'}});
+                const data = await resp.json();
+                if(data && data.ok && data.postulante){{
+                  pintarMedico(data.postulante, dni);
+                }}else{{
+                  limpiarSeleccionMedica((data && data.mensaje) ? data.mensaje : 'DNI no pertenece al requerimiento seleccionado.');
+                }}
+              }}catch(e){{
+                limpiarSeleccionMedica('No se pudo consultar el DNI. Revise conexión o recargue la página.');
+              }}
+            }}, 120);
           }}
           function abrirModalMedica(){{ const chk=document.getElementById('modal_medica_registro'); if(chk){{ chk.checked=true; if(window.forceSidebarForModal)window.forceSidebarForModal(true); }} }}
           function validarMedicaSeleccionada(){{
@@ -10840,12 +10874,18 @@ html,body{overflow-x:hidden!important;}
               setTimeout(function(){{ seleccionarMedico(btn.dataset.dni); }}, 50);
             }}
           }});
-          document.addEventListener('DOMContentLoaded', function(){{
+          function bindMedicaInput(){{
             const input = document.getElementById('med_dni_lookup');
-            if(input){{
-              input.addEventListener('keyup', function(){{ buscarMedicaPorDni(this.value); }});
-              input.addEventListener('change', function(){{ buscarMedicaPorDni(this.value); }});
+            if(input && !input.dataset.boundMedica){{
+              input.dataset.boundMedica = '1';
+              ['input','keyup','change','paste'].forEach(function(evt){{
+                input.addEventListener(evt, function(){{ const el=this; setTimeout(function(){{ buscarMedicaPorDni(el.value); }}, 20); }});
+              }});
             }}
+          }}
+          bindMedicaInput();
+          document.addEventListener('DOMContentLoaded', function(){{
+            bindMedicaInput();
             document.querySelectorAll('.med-select-btn').forEach(function(btn){{
               btn.addEventListener('click', function(ev){{
                 // No bloquear el onclick del botón. La validación real ocurre al guardar.
@@ -12998,6 +13038,63 @@ def api_contratacion_trabajador(dni):
     data = datos_unificados_contratacion(dni)
     ok = bool(data and not es_valor_incompleto(data.get('nombre')))
     return jsonify({'ok': ok, 'tipo': 'REINGRESANTE' if ok else 'NUEVO', 'trabajador': data})
+
+
+@app.route('/api/contratacion/medica_postulante')
+@admin_required
+def api_contratacion_medica_postulante():
+    """Devuelve el postulante del requerimiento seleccionado para autocompletar Evaluación Médica."""
+    dni = normalizar_dni(request.args.get('dni'))
+    req = clean(request.args.get('req'))
+    if not dni or len(dni) != 8:
+        return jsonify({'ok': False, 'mensaje': 'DNI inválido.'})
+    if not req:
+        return jsonify({'ok': False, 'mensaje': 'Seleccione requerimiento antes de buscar DNI.'})
+    try:
+        with db() as con:
+            r = con.execute("""
+                SELECT * FROM contratacion_ingresos
+                WHERE dni=? AND TRIM(requerimiento)=TRIM(?)
+                ORDER BY id DESC LIMIT 1
+            """, (dni, req)).fetchone()
+            if not r:
+                return jsonify({'ok': False, 'mensaje': 'DNI no pertenece al requerimiento seleccionado.'})
+            med = con.execute("""
+                SELECT * FROM contratacion_medica
+                WHERE dni=? AND TRIM(requerimiento)=TRIM(?)
+                ORDER BY id DESC LIMIT 1
+            """, (dni, req)).fetchone()
+            def rg(row, campo, default=''):
+                try:
+                    return row[campo] if row and campo in row.keys() and row[campo] is not None else default
+                except Exception:
+                    return default
+            foto_ruta = clean(rg(r, 'foto_ruta'))
+            data_med = {}
+            if med:
+                for k in med.keys():
+                    data_med[k] = rg(med, k)
+            trabajador = clean(rg(r, 'trabajador')) or clean(rg(r, 'nombre')) or 'PENDIENTE COMPLETAR'
+            return jsonify({
+                'ok': True,
+                'postulante': {
+                    'id': rg(r, 'id'),
+                    'dni': dni,
+                    'trabajador': trabajador,
+                    'requerimiento': rg(r, 'requerimiento') or req,
+                    'empresa': rg(r, 'empresa'),
+                    'area': rg(r, 'area'),
+                    'cargo': rg(r, 'cargo'),
+                    'fecha_ingreso': rg(r, 'fecha_ingreso'),
+                    'foto': bool(foto_ruta),
+                    'foto_url': ('/foto/' + dni) if foto_ruta else '',
+                    'aptitud': rg(med, 'aptitud', '') or rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
+                    'estado': rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
+                    'medica': data_med
+                }
+            })
+    except Exception as e:
+        return jsonify({'ok': False, 'mensaje': 'Error cargando datos médicos: ' + str(e)})
 
 @app.route('/api/health')
 def api_health(): return jsonify({'ok': True, 'mensaje': 'Portal PRIZE activo - optimizado Render Free'})
