@@ -8045,6 +8045,7 @@ def admin_contratacion():
                 ('Estado operativo', 'estado'),
                 ('Tipo examen', 'tipo_examen'),
                 ('Riesgo del puesto', 'riesgo_puesto'),
+                ('Protocolo médico', 'protocolo'),
                 ('Fecha resultado', 'fecha_resultado'),
                 ('Fecha vencimiento', 'fecha_vencimiento'),
                 ('Responsable seguimiento', 'responsable_seguimiento'),
@@ -8055,8 +8056,14 @@ def admin_contratacion():
                 faltantes_med.append('Aptitud médica distinta a PENDIENTE')
             if estado_med in ('', 'PENDIENTE'):
                 faltantes_med.append('Estado operativo distinto a PENDIENTE')
+            # Regla operativa definitiva: NO APTO nunca puede quedar HABILITADO/PROGRAMADO.
+            # No se bloquea el guardado: se guarda trazabilidad médica, pero se fuerza BLOQUEADO.
+            if 'NO APTO' in aptitud_med:
+                estado_med = 'BLOQUEADO'
             if ('RESTRICC' in aptitud_med or 'NO APTO' in aptitud_med or estado_med in ('OBSERVADO', 'BLOQUEADO')) and not clean(request.form.get('restricciones')):
-                faltantes_med.append('Restricciones')
+                faltantes_med.append('Restricciones / motivo médico')
+            if 'NO APTO' in aptitud_med and not clean(request.form.get('observacion')):
+                faltantes_med.append('Observación / sustento de NO APTO')
             if faltantes_med:
                 flash('Complete obligatorios de evaluación médica: ' + ', '.join(dict.fromkeys(faltantes_med)), 'error')
                 return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
@@ -8073,10 +8080,10 @@ def admin_contratacion():
                 if val: obs_extra.append(f'{etiqueta}: {val}')
             obs_final = (obs_base + (' | ' if obs_base and obs_extra else '') + ' | '.join(obs_extra)).strip()
             with db() as con:
-                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por,tipo_examen,protocolo,riesgo_puesto,aptitud,restricciones,recomendaciones,fecha_vencimiento,responsable_seguimiento,proveedor_contacto,costo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), req_medica, clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), '', nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_examen')), clean(request.form.get('protocolo')), clean(request.form.get('riesgo_puesto')), clean(request.form.get('aptitud')), clean(request.form.get('restricciones')), clean(request.form.get('recomendaciones')), fecha_sin_hora(request.form.get('fecha_vencimiento')), clean(request.form.get('responsable_seguimiento')), '', ''))
-                estado_flujo_med = clean(request.form.get('aptitud')) or clean(request.form.get('estado')) or 'PENDIENTE'
-                if clean(request.form.get('estado')).upper() in ('BLOQUEADO','OBSERVADO'):
-                    estado_flujo_med = clean(request.form.get('estado'))
+                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por,tipo_examen,protocolo,riesgo_puesto,aptitud,restricciones,recomendaciones,fecha_vencimiento,responsable_seguimiento,proveedor_contacto,costo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), req_medica, estado_med or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), '', nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_examen')), clean(request.form.get('protocolo')), clean(request.form.get('riesgo_puesto')), aptitud_med or clean(request.form.get('aptitud')), clean(request.form.get('restricciones')), clean(request.form.get('recomendaciones')), fecha_sin_hora(request.form.get('fecha_vencimiento')), clean(request.form.get('responsable_seguimiento')), '', ''))
+                estado_flujo_med = aptitud_med or estado_med or 'PENDIENTE'
+                if estado_med in ('BLOQUEADO','OBSERVADO'):
+                    estado_flujo_med = estado_med
                 con.execute('UPDATE contratacion_ingresos SET estado_medico=? WHERE dni=? AND TRIM(requerimiento)=TRIM(?)', (estado_flujo_med, dni, req_medica))
                 con.commit()
             flash('Evaluación médica registrada.', 'ok')
@@ -10668,7 +10675,18 @@ html,body{overflow-x:hidden!important;}
             <b class='med-req-star'>Tipo examen</b><select id='med_tipo_examen' name='tipo_examen' required><option value=''>Seleccione tipo</option><option>PRE OCUPACIONAL</option><option>PERIÓDICO</option><option>RETIRO</option><option>CAMBIO DE PUESTO</option></select>
             <b class='med-req-star'>Riesgo del puesto</b><select id='med_riesgo' name='riesgo_puesto' required><option value=''>Seleccione riesgo</option><option>BAJO</option><option>MEDIO</option><option>ALTO</option></select>
 
-            <b>Protocolo médico</b><input name='protocolo' placeholder='Básico, alto riesgo, manipulación alimentos, altura, etc.'>
+            <b class='med-req-star'>Protocolo médico</b><select id='med_protocolo' name='protocolo' required>
+              <option value=''>Seleccione protocolo</option>
+              <option>BÁSICO</option>
+              <option>ALTO RIESGO</option>
+              <option>MANIPULACIÓN DE ALIMENTOS</option>
+              <option>ALTURA</option>
+              <option>ESPACIOS CONFINADOS</option>
+              <option>CONDUCCIÓN / OPERADOR</option>
+              <option>RUIDO</option>
+              <option>QUÍMICOS</option>
+              <option>OTRO</option>
+            </select>
             <b>Fecha programada</b><input type='date' name='fecha_programada' value='{hoy_iso()}'>
 
             <b class='med-req-star'>Fecha resultado</b><input id='med_fecha_resultado' type='date' name='fecha_resultado' required value='{hoy_iso()}'>
@@ -10680,7 +10698,7 @@ html,body{overflow-x:hidden!important;}
             <b class='med-req-star'>Responsable seguimiento</b><input id='med_responsable' name='responsable_seguimiento' required placeholder='RRHH / SST / Médico ocupacional'>
             <b>Resultado PDF/imagen</b><input type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'>
 
-            <b class='med-req-star'>Observación</b><textarea id='med_observacion' class='full' name='observacion' rows='2' required placeholder='Detalle libre / sustento del resultado médico'></textarea>
+            <b class='med-req-star'>Observación</b><textarea id='med_observacion' class='full' name='observacion' rows='2' required placeholder='Obligatorio: sustento del resultado. Para NO APTO/BLOQUEADO indique motivo y acción de seguimiento'></textarea>
             <div class='span-all' style='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap'>
               <button type='submit' class='c-btn' onclick="return validarMedicaSeleccionada()">💾 Registrar evaluación</button>
             </div>
@@ -10867,6 +10885,7 @@ html,body{overflow-x:hidden!important;}
               ['Estado operativo', medEstadoSelect],
               ['Tipo examen', document.getElementById('med_tipo_examen')],
               ['Riesgo del puesto', document.getElementById('med_riesgo')],
+              ['Protocolo médico', document.getElementById('med_protocolo')],
               ['Fecha resultado', document.getElementById('med_fecha_resultado')],
               ['Fecha vencimiento', document.getElementById('med_fecha_vencimiento')],
               ['Responsable seguimiento', document.getElementById('med_responsable')],
@@ -10875,6 +10894,7 @@ html,body{overflow-x:hidden!important;}
             reqs.forEach(([label, el])=>{{ if(!el || !(el.value||'').trim()) faltantes.push(label); }});
             if(apt==='PENDIENTE') faltantes.push('Aptitud médica distinta a PENDIENTE');
             if(est==='PENDIENTE') faltantes.push('Estado operativo distinto a PENDIENTE');
+            if(apt.includes('NO APTO') && est!=='BLOQUEADO'){{ medEstadoSelect.value='BLOQUEADO'; setMedCard(medEstadoCard, medEstadoVal, 'BLOQUEADO'); }}
             const restricciones=document.getElementById('med_restricciones');
             if((apt.includes('RESTRICC') || apt.includes('NO APTO') || ['OBSERVADO','BLOQUEADO'].includes(est)) && (!restricciones || !restricciones.value.trim())){{
               faltantes.push('Restricciones');
@@ -10893,9 +10913,37 @@ html,body{overflow-x:hidden!important;}
             const obligatorio = apt.includes('RESTRICC') || apt.includes('NO APTO') || ['OBSERVADO','BLOQUEADO'].includes(est);
             r.required = obligatorio;
             r.placeholder = obligatorio ? 'Obligatorio: detalle restricción, no apto u observación operativa' : 'Opcional: no cargar peso, uso de lentes, control médico, etc.';
+            if(medEstadoSelect){{
+              const noApto = apt.includes('NO APTO');
+              Array.from(medEstadoSelect.options).forEach(function(o){{
+                const v=(o.value||o.textContent||'').toUpperCase();
+                o.disabled = noApto && (v==='HABILITADO' || v==='PROGRAMADO');
+              }});
+              if(noApto){{
+                medEstadoSelect.value = 'BLOQUEADO';
+                setMedCard(medEstadoCard, medEstadoVal, 'BLOQUEADO');
+              }}
+            }}
+            if(medDecisionMsg){{
+              if(apt.includes('NO APTO')){{ medDecisionMsg.textContent='NO APTO: no puede quedar HABILITADO. El sistema lo marca como BLOQUEADO/OBSERVADO.'; medDecisionMsg.className='med-block-msg blocked'; }}
+              else if(apt.includes('RESTRICC')){{ medDecisionMsg.textContent='APTO CON RESTRICCIONES: registre restricciones y defina si queda HABILITADO u OBSERVADO.'; medDecisionMsg.className='med-block-msg'; }}
+            }}
           }}
           if(medAptitudSelect) medAptitudSelect.addEventListener('change', () => {{ setMedCard(medAptitudCard, medAptitudVal, medAptitudSelect.value); actualizarObligatorioRestricciones(); }});
           if(medEstadoSelect) medEstadoSelect.addEventListener('change', () => {{ setMedCard(medEstadoCard, medEstadoVal, medEstadoSelect.value); actualizarObligatorioRestricciones(); }});
+          function autoFechaVencimientoMedica(){{
+            const fr=document.getElementById('med_fecha_resultado');
+            const fv=document.getElementById('med_fecha_vencimiento');
+            if(!fr || !fv || !fr.value) return;
+            if(!fv.value || fv.value<=fr.value){{
+              const d=new Date(fr.value + 'T00:00:00');
+              d.setFullYear(d.getFullYear()+1);
+              fv.value=d.toISOString().slice(0,10);
+            }}
+          }}
+          const medFechaResultado=document.getElementById('med_fecha_resultado');
+          if(medFechaResultado) medFechaResultado.addEventListener('change', autoFechaVencimientoMedica);
+          autoFechaVencimientoMedica();
           actualizarObligatorioRestricciones();
           // FIX 2026: recuperación del comportamiento anterior.
           // 1) El botón Registrar abre el modal aunque el label/checkbox falle por CSS.
@@ -11045,9 +11093,16 @@ html,body{overflow-x:hidden!important;}
             if(estCard) estCard.className='med-status-card '+cls(est);
             var r=byId('med_restricciones');
             if(r){{
-              var ob = apt.toUpperCase().indexOf('RESTRICC')>=0 || apt.toUpperCase().indexOf('NO APTO')>=0 || ['OBSERVADO','BLOQUEADO'].indexOf(est.toUpperCase())>=0;
+              var A=apt.toUpperCase(), E=est.toUpperCase();
+              var ob = A.indexOf('RESTRICC')>=0 || A.indexOf('NO APTO')>=0 || ['OBSERVADO','BLOQUEADO'].indexOf(E)>=0;
               r.required=ob;
               r.placeholder = ob ? 'Obligatorio: detalle restricción, no apto u observación operativa' : 'Opcional: no cargar peso, uso de lentes, control médico, etc.';
+              var estSel=byId('med_estado_select');
+              if(estSel){{
+                var noApto=A.indexOf('NO APTO')>=0;
+                Array.prototype.slice.call(estSel.options).forEach(function(o){{ var v=(o.value||o.textContent||'').toUpperCase(); o.disabled = noApto && (v==='HABILITADO' || v==='PROGRAMADO'); }});
+                if(noApto && (E==='HABILITADO' || E==='PROGRAMADO' || E==='')){{ estSel.value='BLOQUEADO'; if(estVal) estVal.textContent='BLOQUEADO'; if(estCard) estCard.className='med-status-card danger'; }}
+              }}
             }}
           }}
           function bindFinal(){{
@@ -11061,7 +11116,15 @@ html,body{overflow-x:hidden!important;}
             var form=byId('form_medica');
             if(form && !form.getAttribute('data-med-form-final-ok')){{
               form.setAttribute('data-med-form-final-ok','1');
-              form.addEventListener('submit', pintar, true);
+              form.addEventListener('submit', function(ev){{
+                pintar();
+                var a=byId('med_aptitud_select'), e=byId('med_estado_select');
+                var A=(a&&a.value?a.value:'').toUpperCase(), E=(e&&e.value?e.value:'').toUpperCase();
+                if(A.indexOf('NO APTO')>=0 && (E==='HABILITADO' || E==='PROGRAMADO')){{
+                  alert('NO APTO no puede quedar HABILITADO/PROGRAMADO. Use BLOQUEADO u OBSERVADO.');
+                  ev.preventDefault(); ev.stopPropagation(); return false;
+                }}
+              }}, true);
             }}
             pintar();
           }}
