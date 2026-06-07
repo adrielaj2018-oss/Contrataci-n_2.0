@@ -11301,8 +11301,10 @@ html,body{overflow-x:hidden!important;}
         avance_indum_req = round((entregados_req / total_indumentaria_req) * 100) if total_indumentaria_req else 0
 
         opt_ingresos_indumentaria = ''.join([f"<option value='{h(r['dni'])}'>{h(r['trabajador'])} | {h(row_get(r,'requerimiento'))} | {h(row_get(r,'cargo'))}</option>" for r in trabajadores_indumentaria])
-        ind_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'polo'))}</td><td>{h(row_get(r,'pantalon'))}</td><td>{h(row_get(r,'botas'))}</td><td>{h(row_get(r,'fotocheck'))}</td><td><span class='ind-pill {_ind_class(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td>{h(row_get(r,'fecha_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{row_get(r,'id')}'><button class='ind-btn danger mini'>Eliminar</button></form></td></tr>" for r in indumentarias_filtradas]) or "<tr><td colspan='14'>Seleccione un requerimiento o no hay entregas registradas para este ticket.</td></tr>"
 
+        # FIX RENDER: estas funciones deben existir ANTES de construir ind_rows.
+        # En Render había registros de indumentaria y el renderizado llamaba _ind_class
+        # antes de declararla, provocando Internal Server Error al abrir Indumentaria.
         def _ind_class(v):
             vv = clean(v).upper()
             if vv in estados_ok: return 'ok'
@@ -11315,6 +11317,9 @@ html,body{overflow-x:hidden!important;}
             if vv in estados_parcial: return 60
             if vv in ('OBSERVADO','RECHAZADO'): return 10
             return 0
+
+        ind_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'polo'))}</td><td>{h(row_get(r,'pantalon'))}</td><td>{h(row_get(r,'botas'))}</td><td>{h(row_get(r,'fotocheck'))}</td><td><span class='ind-pill {_ind_class(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td>{h(row_get(r,'fecha_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{row_get(r,'id')}'><button class='ind-btn danger mini'>Eliminar</button></form></td></tr>" for r in indumentarias_filtradas]) or "<tr><td colspan='14'>Seleccione un requerimiento o no hay entregas registradas para este ticket.</td></tr>"
+
         indumentaria_control_rows = ''.join([
             f"""<tr><td>{i}</td><td><span class='avatar-mini'>{'📷' if clean(row_get(r,'foto_ruta')) else '👤'}</span></td><td><b>{h(row_get(r,'dni'))}</b></td><td class='name-cell'>{h(row_get(r,'trabajador')) or 'PENDIENTE COMPLETAR'}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'actividad'))}</td><td><span class='ind-pill {_ind_class(row_get(r,'estado_indumentaria'))}'>{h(row_get(r,'estado_indumentaria') or 'PENDIENTE')}</span></td><td><b>{_ind_pct(row_get(r,'estado_indumentaria'))}%</b><div class='ind-bar'><span style='width:{_ind_pct(row_get(r,'estado_indumentaria'))}%'></span></div></td><td><a class='ind-btn light mini' href='/admin/contratacion?sec=detalle_postulante&id={row_get(r,'id')}'>Ver</a></td></tr>"""
             for i,r in enumerate(trabajadores_indumentaria[:500],1)
