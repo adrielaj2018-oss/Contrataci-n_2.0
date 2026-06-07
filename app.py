@@ -5983,10 +5983,30 @@ def plantilla_trabajadores():
 @app.route('/foto/<dni>')
 @app.route('/foto_trabajador/<dni>')
 def foto_trabajador(dni):
-    t = get_trabajador(dni)
-    if not t or not t['foto_ruta']: abort(404)
-    path = Path(t['foto_ruta'])
-    if not path.exists(): abort(404)
+    """Muestra la foto real del postulante/trabajador.
+    Prioridad: Postulantes de contratación -> Trabajadores.
+    Esto evita que Evaluación Médica se quede en SIN FOTO cuando la foto fue tomada
+    dentro del módulo Postulantes y no existe aún en la tabla trabajadores.
+    """
+    dni = normalizar_dni(dni)
+    foto_ruta = ''
+    try:
+        with db() as con:
+            r = con.execute("""SELECT foto_ruta FROM contratacion_ingresos
+                               WHERE dni=? AND COALESCE(foto_ruta,'')<>''
+                               ORDER BY id DESC LIMIT 1""", (dni,)).fetchone()
+            if r and row_get(r, 'foto_ruta'):
+                foto_ruta = row_get(r, 'foto_ruta')
+    except Exception:
+        foto_ruta = ''
+    if not foto_ruta:
+        t = get_trabajador(dni)
+        foto_ruta = row_get(t, 'foto_ruta') if t else ''
+    if not foto_ruta:
+        abort(404)
+    path = Path(foto_ruta)
+    if not path.exists():
+        abort(404)
     return send_file(path, as_attachment=False)
 
 @app.route('/mi_foto', methods=['POST'])
@@ -10475,8 +10495,7 @@ html,body{overflow-x:hidden!important;}
                 except Exception:
                     pass
             foto_r = clean(row_get(r, 'foto_ruta'))
-            foto_url_r = url_for('contratacion_foto_postulante', ingreso_id=row_get(r, 'id')) if foto_r else ''
-            foto_html = f"<img class='med-photo' src='{foto_url_r}'>" if foto_r else "<span class='med-no-photo'>SIN FOTO</span>"
+            foto_html = f"<img class='med-photo' src='/foto/{h(dni_r)}'>" if foto_r else "<span class='med-no-photo'>SIN FOTO</span>"
             trabajador_r = clean(row_get(r, 'trabajador')) or 'PENDIENTE COMPLETAR'
             medica_data.append({
                 'id': row_get(r, 'id'),
@@ -10488,14 +10507,14 @@ html,body{overflow-x:hidden!important;}
                 'cargo': row_get(r, 'cargo'),
                 'fecha_ingreso': row_get(r, 'fecha_ingreso'),
                 'foto': bool(foto_r),
-                'foto_url': foto_url_r if foto_r else '',
+                'foto_url': ('/foto/' + dni_r) if (foto_r and dni_r) else '',
                 'req_actual': req_actual,
                 'aptitud': apt,
                 'estado': est,
                 'medica': med or {}
             })
             med_table_rows.append(f"""
-              <tr onclick="abrirModalMedica('{h(dni_r)}')" data-dni="{h(dni_r)}" data-trabajador="{h(trabajador_r)}" data-requerimiento="{h(req_r)}" data-empresa="{h(row_get(r,'empresa'))}" data-area="{h(row_get(r,'area'))}" data-cargo="{h(row_get(r,'cargo'))}" data-foto-url="{h(foto_url_r) if foto_r else ''}">
+              <tr onclick="abrirModalMedica('{h(dni_r)}')" data-dni="{h(dni_r)}" data-trabajador="{h(trabajador_r)}" data-requerimiento="{h(req_r)}" data-empresa="{h(row_get(r,'empresa'))}" data-area="{h(row_get(r,'area'))}" data-cargo="{h(row_get(r,'cargo'))}" data-foto-url="{('/foto/' + h(dni_r)) if foto_r else ''}">
                 <td>{foto_html}</td>
                 <td><b>{h(dni_r)}</b></td>
                 <td><b>{h(trabajador_r)}</b></td>
@@ -10506,7 +10525,7 @@ html,body{overflow-x:hidden!important;}
                 <td><span class='med-pill {clase_medica(est)}'>{h(est)}</span></td>
                 <td>{h(med.get('fecha_resultado') if med else '')}</td>
                 <td>{h(med.get('fecha_vencimiento') if med else '')}</td>
-                <td><label for='modal_medica_registro' class='mini-btn med-select-btn' data-dni='{h(dni_r)}' data-trabajador='{h(trabajador_r)}' data-requerimiento='{h(req_r)}' data-empresa='{h(row_get(r,'empresa'))}' data-area='{h(row_get(r,'area'))}' data-cargo='{h(row_get(r,'cargo'))}' data-foto-url='{h(foto_url_r) if foto_r else ''}' onclick="event.stopPropagation();abrirModalMedica('{h(dni_r)}');return false;">Registrar</label></td>
+                <td><label for='modal_medica_registro' class='mini-btn med-select-btn' data-dni='{h(dni_r)}' data-trabajador='{h(trabajador_r)}' data-requerimiento='{h(req_r)}' data-empresa='{h(row_get(r,'empresa'))}' data-area='{h(row_get(r,'area'))}' data-cargo='{h(row_get(r,'cargo'))}' data-foto-url='{('/foto/' + h(dni_r)) if foto_r else ''}' onclick="event.stopPropagation();abrirModalMedica('{h(dni_r)}');return false;">Registrar</label></td>
               </tr>
             """)
 
@@ -10652,10 +10671,10 @@ html,body{overflow-x:hidden!important;}
             </div>
           </div>
 
-          <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid' novalidate>
+          <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid'>
             <input type='hidden' name='accion' value='guardar_medica'>
             <input type='hidden' id='med_trabajador_hidden' name='trabajador'>
-            <b class='med-req-star'>DNI del postulante</b><input id='med_dni_lookup' name='dni' maxlength='8' minlength='8' inputmode='numeric' required placeholder='Digite DNI del ticket seleccionado' oninput='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onkeyup='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onchange='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' autocomplete='off'>
+            <b class='med-req-star'>DNI del postulante</b><input id='med_dni_lookup' name='dni' type='text' inputmode='numeric' maxlength='8' minlength='8' required pattern='[0-9]{{8}}' title='Digite exactamente 8 números de DNI' placeholder='Digite DNI del ticket seleccionado' oninput='this.value=this.value.replace(/\\D/g,\'\').slice(0,8); buscarMedicaPorDni(this.value)' onkeyup='buscarMedicaPorDni(this.value)' onchange='buscarMedicaPorDni(this.value)' autocomplete='off'>
             <input type='hidden' id='med_req_input' name='requerimiento' value='{h(req_actual)}'>
             <div class='span-all med-req-actual'>Requerimiento seleccionado: <b>{h(req_actual) or 'Seleccione requerimiento antes de registrar'}</b></div>
 
@@ -10768,7 +10787,8 @@ html,body{overflow-x:hidden!important;}
             const dniNorm = normDni(row.dni || dniFallback || '');
             row.dni = row.dni || dniNorm;
             MEDICA_BY_DNI[dniNorm] = row;
-            medDni.value = row.dni || dniNorm;
+            medDni.value = (row.dni || dniNorm).toString().replace(/\D/g,'').slice(0,8);
+            if(medDni.setCustomValidity) medDni.setCustomValidity('');
             medDniShow.textContent = row.dni || '—';
             medNombre.textContent = row.trabajador || '—';
             medReq.textContent = row.requerimiento || '—';
@@ -10814,6 +10834,7 @@ html,body{overflow-x:hidden!important;}
           async function buscarMedicaPorDni(v, forzarApi){{
             const dni=(v||'').replace(/\D/g,'').slice(0,8);
             if(medDni && medDni.value !== dni) medDni.value = dni;
+            if(medDni && medDni.setCustomValidity) medDni.setCustomValidity('');
             if(dni.length < 8){{ limpiarSeleccionMedica('Digite los 8 dígitos del DNI para validar contra el requerimiento.'); return; }}
             const dniNorm = normDni(dni);
             const local = MEDICA_BY_DNI[dniNorm] || MEDICA_BY_DNI[dni] || rowDesdeTablaMedica(dniNorm);
@@ -10924,85 +10945,6 @@ html,body{overflow-x:hidden!important;}
             const input=document.getElementById('med_dni_lookup');
             if(input && (input.value||'').replace(/\D/g,'').length===8) buscarMedicaPorDni(input.value, true);
           }});
-        </script>
-        <script>
-        (function(){{
-          function $id(id){{ return document.getElementById(id); }}
-          function dni8(v){{ return (v||'').toString().replace(/\D/g,'').slice(0,8); }}
-          function getReq(){{ var el=$id('med_req_input'); return el ? (el.value||'') : ''; }}
-          function setTxt(id,v){{ var el=$id(id); if(el) el.textContent = v || '—'; }}
-          function setVal(id,v){{ var el=$id(id); if(el && v!==undefined && v!==null) el.value = v; }}
-          function rows(){{ return Array.prototype.slice.call(document.querySelectorAll('#tabla_medica_postulantes tr[data-dni]')); }}
-          function rowData(dni){{
-            var d=dni8(dni);
-            var tr=rows().find(function(x){{return dni8(x.getAttribute('data-dni'))===d;}});
-            if(!tr) return null;
-            return {{
-              dni:d,
-              trabajador:tr.getAttribute('data-trabajador')||'',
-              requerimiento:tr.getAttribute('data-requerimiento')||getReq(),
-              empresa:tr.getAttribute('data-empresa')||'',
-              area:tr.getAttribute('data-area')||'',
-              cargo:tr.getAttribute('data-cargo')||'',
-              foto_url:tr.getAttribute('data-foto-url')||''
-            }};
-          }}
-          function paint(r){{
-            if(!r) return false;
-            setVal('med_dni_lookup', r.dni);
-            setVal('med_trabajador_hidden', r.trabajador);
-            setTxt('med_dni_show', r.dni);
-            setTxt('med_nombre', r.trabajador);
-            setTxt('med_req', r.requerimiento);
-            setTxt('med_empresa', r.empresa);
-            setTxt('med_area_cargo', (r.area||'—') + ' / ' + (r.cargo||'—'));
-            var msg=$id('med_decision_msg'); if(msg){{ msg.textContent='Datos cargados automáticamente desde Postulantes. Complete la evaluación médica.'; msg.className='med-block-msg'; }}
-            var box=$id('med_foto_box');
-            if(box){{ box.innerHTML = r.foto_url ? "<img src='"+r.foto_url+"'><small>Foto real del postulante</small>" : "<div class='blank'>SIN FOTO</div><small>Foto del postulante</small>"; }}
-            rows().forEach(function(tr){{ tr.style.outline=''; }});
-            var tr=rows().find(function(x){{return dni8(x.getAttribute('data-dni'))===r.dni;}});
-            if(tr) tr.style.outline='3px solid #00b86b';
-            return true;
-          }}
-          async function auto(v){{
-            var d=dni8(v);
-            var inp=$id('med_dni_lookup'); if(inp && inp.value!==d) inp.value=d;
-            if(d.length!==8) return;
-            var local=rowData(d);
-            if(local) paint(local);
-            var req=getReq();
-            if(!req) return;
-            try{{
-              var resp=await fetch('/api/contratacion/medica_postulante?dni='+encodeURIComponent(d)+'&req='+encodeURIComponent(req), {{cache:'no-store'}});
-              var data=await resp.json();
-              if(data && data.ok && data.postulante) paint({{
-                dni:data.postulante.dni||d,
-                trabajador:data.postulante.trabajador||'',
-                requerimiento:data.postulante.requerimiento||req,
-                empresa:data.postulante.empresa||'',
-                area:data.postulante.area||'',
-                cargo:data.postulante.cargo||'',
-                foto_url:data.postulante.foto_url||''
-              }});
-            }}catch(e){{ /* si la API falla, queda la carga local desde la tabla */ }}
-          }}
-          window.buscarMedicaPorDni = auto;
-          window.seleccionarMedico = function(d){{ var x=$id('modal_medica_registro'); if(x) x.checked=true; auto(d); var i=$id('med_dni_lookup'); if(i) setTimeout(function(){{i.focus();}},50); }};
-          window.abrirModalMedica = function(d){{ var x=$id('modal_medica_registro'); if(x) x.checked=true; if(d) auto(d); var i=$id('med_dni_lookup'); if(i) setTimeout(function(){{i.focus();}},50); }};
-          function bind(){{
-            var input=$id('med_dni_lookup');
-            if(input && !input.getAttribute('data-auto-final')){{
-              input.setAttribute('data-auto-final','1');
-              input.removeAttribute('pattern');
-              ['input','keyup','change','paste','blur'].forEach(function(evt){{ input.addEventListener(evt,function(){{ var el=this; setTimeout(function(){{auto(el.value);}},30); }}); }});
-              if(dni8(input.value).length===8) auto(input.value);
-            }}
-          }}
-          bind();
-          document.addEventListener('DOMContentLoaded', bind);
-          setTimeout(bind,200);
-          setTimeout(bind,800);
-        }})();
         </script>
         """)
     elif sec in ('capacitacion','induccion','cursos'):
@@ -13072,46 +13014,6 @@ def admin_desbloquear_usuarios():
 
 
 
-
-@app.route('/admin/contratacion/foto_postulante/<int:ingreso_id>')
-@admin_required
-def contratacion_foto_postulante(ingreso_id):
-    # Sirve la foto guardada en el módulo Postulantes/Contratación.
-    with db() as con:
-        r = con.execute('SELECT foto_ruta,dni FROM contratacion_ingresos WHERE id=?', (ingreso_id,)).fetchone()
-    if r and row_get(r, 'foto_ruta'):
-        path = Path(row_get(r, 'foto_ruta'))
-        if path.exists():
-            return send_file(path, as_attachment=False)
-    dni = normalizar_dni(row_get(r, 'dni') if r else '')
-    if dni:
-        t = get_trabajador(dni)
-        if t and row_get(t, 'foto_ruta'):
-            path = Path(row_get(t, 'foto_ruta'))
-            if path.exists():
-                return send_file(path, as_attachment=False)
-    abort(404)
-
-
-@app.route('/admin/contratacion/foto_postulante_dni/<dni>')
-@admin_required
-def contratacion_foto_postulante_dni(dni):
-    # Sirve foto del último postulante por DNI, fallback a trabajador.
-    dni = normalizar_dni(dni)
-    with db() as con:
-        r = con.execute('SELECT id,foto_ruta FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (dni,)).fetchone()
-    if r and row_get(r, 'foto_ruta'):
-        path = Path(row_get(r, 'foto_ruta'))
-        if path.exists():
-            return send_file(path, as_attachment=False)
-    t = get_trabajador(dni)
-    if t and row_get(t, 'foto_ruta'):
-        path = Path(row_get(t, 'foto_ruta'))
-        if path.exists():
-            return send_file(path, as_attachment=False)
-    abort(404)
-
-
 @app.route('/admin/contratacion/fotocheck/<int:ingreso_id>/preview')
 @admin_required
 def contratacion_fotocheck_preview(ingreso_id):
@@ -13239,20 +13141,21 @@ def api_contratacion_medica_postulante():
                     ORDER BY id DESC LIMIT 1
                 """, (dni, req))
 
-            # 3) Respaldo final por DNI: evita que la pantalla se quede en blanco.
-            #    Si existe el postulante, se autocompleta igual y se registra con el requerimiento seleccionado.
+            # 3) Respaldo final SOLO en Postulantes por DNI.
+            #    Se usa únicamente para no dejar la pantalla en blanco si el ticket viene con espacios/formato distinto.
+            #    La identidad y la foto salen del módulo Postulantes.
             if not r:
                 r = first_row(con, """
                     SELECT * FROM contratacion_ingresos
-                    WHERE dni=? AND COALESCE(estado,'')<>'ANULADO'
+                    WHERE dni=? AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
                     ORDER BY id DESC LIMIT 1
                 """, (dni,))
 
-            t = first_row(con, "SELECT * FROM trabajadores WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
-            fc = first_row(con, "SELECT * FROM contratacion_fotocheck WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
+            if not r:
+                return jsonify({'ok': False, 'mensaje': 'DNI no encontrado en Postulantes. Registre primero el postulante en el requerimiento seleccionado.'})
 
-            if not r and not t and not fc:
-                return jsonify({'ok': False, 'mensaje': 'DNI no encontrado en Postulantes/Trabajadores. Registre primero el postulante.'})
+            t = first_row(con, "SELECT * FROM trabajadores WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
+            fc = None
 
             med = first_row(con, """
                 SELECT * FROM contratacion_medica
@@ -13268,16 +13171,15 @@ def api_contratacion_medica_postulante():
                 for k in med.keys():
                     data_med[k] = rg(med, k)
 
-            trabajador = (clean(rg(r, 'trabajador')) or clean(rg(r, 'nombre')) or
-                          clean(rg(t, 'nombre')) or clean(rg(fc, 'trabajador')) or 'PENDIENTE COMPLETAR')
-            empresa = clean(rg(r, 'empresa')) or clean(rg(fc, 'empresa')) or clean(rg(t, 'empresa'))
-            area = clean(rg(r, 'area')) or clean(rg(fc, 'area')) or clean(rg(t, 'area'))
-            cargo = clean(rg(r, 'cargo')) or clean(rg(fc, 'cargo')) or clean(rg(t, 'cargo'))
-            actividad = clean(rg(r, 'actividad')) or clean(rg(fc, 'actividad'))
-            fecha_ingreso = clean(rg(r, 'fecha_ingreso')) or clean(rg(fc, 'fecha_ingreso')) or clean(rg(t, 'fecha_ingreso'))
-            req_real = clean(rg(r, 'requerimiento')) or clean(rg(fc, 'requerimiento')) or req
+            trabajador = (clean(rg(r, 'trabajador')) or clean(rg(r, 'nombre')) or 'PENDIENTE COMPLETAR')
+            empresa = clean(rg(r, 'empresa')) or clean(rg(t, 'empresa'))
+            area = clean(rg(r, 'area')) or clean(rg(t, 'area'))
+            cargo = clean(rg(r, 'cargo')) or clean(rg(t, 'cargo'))
+            actividad = clean(rg(r, 'actividad'))
+            fecha_ingreso = clean(rg(r, 'fecha_ingreso')) or clean(rg(t, 'fecha_ingreso'))
+            req_real = clean(rg(r, 'requerimiento')) or req
 
-            foto_ruta = clean(rg(r, 'foto_ruta')) or clean(rg(fc, 'foto_ruta')) or clean(rg(fc, 'ruta_foto'))
+            foto_ruta = clean(rg(r, 'foto_ruta')) or clean(rg(t, 'foto_ruta'))
             foto_ok = bool(foto_ruta)
 
             return jsonify({
@@ -13296,7 +13198,7 @@ def api_contratacion_medica_postulante():
                     'actividad': actividad,
                     'fecha_ingreso': fecha_ingreso,
                     'foto': foto_ok,
-                    'foto_url': (url_for('contratacion_foto_postulante', ingreso_id=rg(r, 'id')) if (foto_ok and r and rg(r, 'id')) else (url_for('contratacion_foto_postulante_dni', dni=dni) if foto_ok else '')),
+                    'foto_url': ('/foto/' + dni) if foto_ok else '',
                     'aptitud': rg(med, 'aptitud', '') or rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
                     'estado': rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
                     'medica': data_med
