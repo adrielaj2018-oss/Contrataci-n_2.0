@@ -2364,6 +2364,26 @@ def init_db():
         # PRO: campos adicionales para control completo de indumentaria.
         # No se mezcla con evaluación médica; solo controla entrega, responsable y cargo firmado.
         for col, ddl in [
+            # Compatibilidad Render: algunas BD antiguas tenían esta tabla con menos columnas;
+            # por eso agregamos por ALTER todas las columnas usadas por el módulo.
+            ('dni', 'ALTER TABLE contratacion_indumentaria ADD COLUMN dni TEXT'),
+            ('trabajador', 'ALTER TABLE contratacion_indumentaria ADD COLUMN trabajador TEXT'),
+            ('requerimiento', 'ALTER TABLE contratacion_indumentaria ADD COLUMN requerimiento TEXT'),
+            ('polo', 'ALTER TABLE contratacion_indumentaria ADD COLUMN polo TEXT'),
+            ('pantalon', 'ALTER TABLE contratacion_indumentaria ADD COLUMN pantalon TEXT'),
+            ('botas', 'ALTER TABLE contratacion_indumentaria ADD COLUMN botas TEXT'),
+            ('casaca', 'ALTER TABLE contratacion_indumentaria ADD COLUMN casaca TEXT'),
+            ('gorro', 'ALTER TABLE contratacion_indumentaria ADD COLUMN gorro TEXT'),
+            ('lentes', 'ALTER TABLE contratacion_indumentaria ADD COLUMN lentes TEXT'),
+            ('guantes', 'ALTER TABLE contratacion_indumentaria ADD COLUMN guantes TEXT'),
+            ('fotocheck', 'ALTER TABLE contratacion_indumentaria ADD COLUMN fotocheck TEXT'),
+            ('otros', 'ALTER TABLE contratacion_indumentaria ADD COLUMN otros TEXT'),
+            ('estado', "ALTER TABLE contratacion_indumentaria ADD COLUMN estado TEXT DEFAULT 'PENDIENTE'"),
+            ('cargo_pdf', 'ALTER TABLE contratacion_indumentaria ADD COLUMN cargo_pdf TEXT'),
+            ('fecha_entrega', 'ALTER TABLE contratacion_indumentaria ADD COLUMN fecha_entrega TEXT'),
+            ('observacion', 'ALTER TABLE contratacion_indumentaria ADD COLUMN observacion TEXT'),
+            ('fecha_registro', 'ALTER TABLE contratacion_indumentaria ADD COLUMN fecha_registro TEXT'),
+            ('registrado_por', 'ALTER TABLE contratacion_indumentaria ADD COLUMN registrado_por TEXT'),
             ('empresa', 'ALTER TABLE contratacion_indumentaria ADD COLUMN empresa TEXT'),
             ('area', 'ALTER TABLE contratacion_indumentaria ADD COLUMN area TEXT'),
             ('cargo', 'ALTER TABLE contratacion_indumentaria ADD COLUMN cargo TEXT'),
@@ -11281,7 +11301,7 @@ html,body{overflow-x:hidden!important;}
         avance_indum_req = round((entregados_req / total_indumentaria_req) * 100) if total_indumentaria_req else 0
 
         opt_ingresos_indumentaria = ''.join([f"<option value='{h(r['dni'])}'>{h(r['trabajador'])} | {h(row_get(r,'requerimiento'))} | {h(row_get(r,'cargo'))}</option>" for r in trabajadores_indumentaria])
-        ind_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(r['polo'])}</td><td>{h(r['pantalon'])}</td><td>{h(r['botas'])}</td><td>{h(r['fotocheck'])}</td><td><span class='ind-pill ok'>{h(r['estado'])}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td>{h(r['fecha_entrega'])}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{r['id']}'><button class='ind-btn danger mini'>Eliminar</button></form></td></tr>" for r in indumentarias_filtradas]) or "<tr><td colspan='14'>Seleccione un requerimiento o no hay entregas registradas para este ticket.</td></tr>"
+        ind_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'polo'))}</td><td>{h(row_get(r,'pantalon'))}</td><td>{h(row_get(r,'botas'))}</td><td>{h(row_get(r,'fotocheck'))}</td><td><span class='ind-pill {_ind_class(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td>{h(row_get(r,'fecha_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{row_get(r,'id')}'><button class='ind-btn danger mini'>Eliminar</button></form></td></tr>" for r in indumentarias_filtradas]) or "<tr><td colspan='14'>Seleccione un requerimiento o no hay entregas registradas para este ticket.</td></tr>"
 
         def _ind_class(v):
             vv = clean(v).upper()
