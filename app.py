@@ -8056,8 +8056,9 @@ def admin_contratacion():
                 flash('Primero seleccione/valide un postulante del requerimiento.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica'))
             with db() as con_val:
-                pertenece = con_val.execute("""SELECT * FROM contratacion_ingresos
-                    WHERE {dni_expr} AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
+                dni_expr_val = "substr('00000000' || replace(replace(replace(replace(coalesce(dni,''),' ',''),'.',''),'-',''),'\t',''), -8)=?"
+                pertenece = con_val.execute(f"""SELECT * FROM contratacion_ingresos
+                    WHERE {dni_expr_val} AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
                       AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
                     LIMIT 1""", (dni, req_medica)).fetchone()
             if not pertenece:
@@ -10689,8 +10690,9 @@ html,body{overflow-x:hidden!important;}
           <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid'>
             <input type='hidden' name='accion' value='guardar_medica'>
             <input type='hidden' id='med_trabajador_hidden' name='trabajador'>
-            <b class='med-req-star'>DNI del postulante*</b><div style='display:grid;grid-template-columns:1fr 160px;gap:10px'><input id='med_dni_lookup' name='dni' maxlength='8' required pattern='\d{8}' placeholder='Digite DNI del ticket seleccionado' oninput='buscarMedicaPorDni(this.value)' onkeyup='buscarMedicaPorDni(this.value)' onchange='buscarMedicaPorDni(this.value)' autocomplete='off'><button type='button' class='c-btn gray' onclick='debugMedicaDni()'>🔎 Debug</button></div>
+            <b class='med-req-star'>DNI del postulante*</b><div style='display:grid;grid-template-columns:1fr 170px 170px;gap:10px'><input id='med_dni_lookup' name='dni' maxlength='8' required pattern='\d{8}' placeholder='Digite DNI del ticket seleccionado' oninput='buscarMedicaPorDni(this.value)' onkeyup='buscarMedicaPorDni(this.value)' onchange='buscarMedicaPorDni(this.value)' autocomplete='off'><button type='button' class='c-btn gray' onclick='debugMedicaDni()'>🔎 Debug pantalla</button><button type='submit' class='c-btn gray' formmethod='get' formaction='/api/contratacion/medica_debug' formtarget='_blank' formnovalidate>🧪 Debug real</button></div>
             <input type='hidden' id='med_req_input' name='requerimiento' value='{h(req_actual)}'>
+            <input type='hidden' id='med_req_debug_input' name='req' value='{h(req_actual)}'>
             <div class='span-all med-req-actual'>Requerimiento seleccionado: <b>{h(req_actual) or 'Seleccione requerimiento antes de registrar'}</b></div>
 
             <b class='med-req-star'>Aptitud médica</b><select id='med_aptitud_select' name='aptitud' required><option value=''>Seleccione aptitud</option><option>PENDIENTE</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option></select>
@@ -10809,6 +10811,7 @@ html,body{overflow-x:hidden!important;}
             medEmpresa.textContent = row.empresa || '—';
             medAreaCargo.textContent = ((row.area || '—') + ' / ' + (row.cargo || '—'));
             medReqInput.value = row.requerimiento || medReqInput.value || '{h(req_actual)}';
+            const medReqDebugInput = document.getElementById('med_req_debug_input'); if(medReqDebugInput) medReqDebugInput.value = medReqInput.value || '{h(req_actual)}';
             medTrabHidden.value = row.trabajador || '';
             const apt = row.aptitud || 'PENDIENTE';
             const est = row.estado || 'PENDIENTE';
