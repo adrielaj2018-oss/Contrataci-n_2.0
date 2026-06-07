@@ -528,13 +528,6 @@ def normalizar_dni(v):
     return d[-8:].zfill(8) if d else ""
 
 
-def normalizar_ticket(v):
-    """Normaliza tickets/requerimientos para comparar sin errores por espacios, guiones o mayúsculas."""
-    txt = clean(v).upper()
-    txt = txt.replace('Á','A').replace('É','E').replace('Í','I').replace('Ó','O').replace('Ú','U').replace('Ñ','N')
-    return re.sub(r"[^A-Z0-9]", "", txt)
-
-
 def safe_periodo(p):
     return re.sub(r"[^A-Za-z0-9_\- ]", "", clean(p))[:50] or datetime.now(APP_TZ).strftime("%Y-%m")
 
@@ -10742,7 +10735,6 @@ html,body{overflow-x:hidden!important;}
             medAreaCargo.textContent = '—';
             if(medReqInput && !medReqInput.value) medReqInput.value = '{h(req_actual)}';
             medTrabHidden.value = '';
-            ['med_restricciones','med_recomendaciones','med_observacion','med_responsable','med_tipo_examen','med_riesgo'].forEach(function(id){{ const el=document.getElementById(id); if(el) el.value=''; }});
             setMedCard(medAptitudCard, medAptitudVal, 'PENDIENTE');
             setMedCard(medEstadoCard, medEstadoVal, 'PENDIENTE');
             medFotoBox.innerHTML = `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`;
@@ -10792,7 +10784,6 @@ html,body{overflow-x:hidden!important;}
             if(row.medica){{
               const ids = {{
                 med_restricciones: row.medica.restricciones,
-                med_recomendaciones: row.medica.recomendaciones,
                 med_observacion: row.medica.observacion,
                 med_tipo_examen: row.medica.tipo_examen,
                 med_riesgo: row.medica.riesgo_puesto,
@@ -10800,16 +10791,7 @@ html,body{overflow-x:hidden!important;}
                 med_fecha_resultado: row.medica.fecha_resultado,
                 med_fecha_vencimiento: row.medica.fecha_vencimiento
               }};
-              Object.keys(ids).forEach(function(id){{
-                const el=document.getElementById(id);
-                if(el && ids[id]){{
-                  if(el.tagName === 'SELECT'){{
-                    const val = String(ids[id]).toUpperCase().trim();
-                    const opt = Array.from(el.options).find(o => String(o.value).toUpperCase().trim() === val || String(o.textContent).toUpperCase().trim() === val);
-                    if(opt) el.value = opt.value;
-                  }}else{{ el.value=ids[id]; }}
-                }}
-              }});
+              Object.keys(ids).forEach(function(id){{ const el=document.getElementById(id); if(el && ids[id]) el.value=ids[id]; }});
             }}
             medFotoBox.innerHTML = row.foto_url ? `<img src='${{row.foto_url}}'><small>Foto real del postulante</small>` : (row.foto ? `<img src='/foto/${{row.dni}}'><small>Foto real del postulante</small>` : `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`);
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
@@ -10834,8 +10816,7 @@ html,body{overflow-x:hidden!important;}
             if(dni.length < 8){{ limpiarSeleccionMedica('Digite los 8 dígitos del DNI para validar contra el requerimiento.'); return; }}
             const dniNorm = normDni(dni);
             const local = MEDICA_BY_DNI[dniNorm] || MEDICA_BY_DNI[dni] || rowDesdeTablaMedica(dniNorm);
-            if(local && !forzarApi){{ pintarMedico(local, dniNorm); return; }}
-            if(local) pintarMedico(local, dniNorm); // pinta de inmediato, mientras confirma por API
+            if(local) pintarMedico(local, dniNorm); // pinta de inmediato, mientras confirma por API definitiva
             const req = (medReqInput && medReqInput.value) ? medReqInput.value : '{h(req_actual)}';
             if(!req){{ limpiarSeleccionMedica('Seleccione requerimiento antes de buscar DNI.'); return; }}
             if(!local){{ medDecisionMsg.textContent = 'Buscando DNI en el requerimiento seleccionado...'; medDecisionMsg.className = 'med-block-msg'; }}
@@ -10866,8 +10847,8 @@ html,body{overflow-x:hidden!important;}
           }}
           function validarMedicaSeleccionada(){{
             const dni=(medDni.value||'').replace(/\D/g,'');
-            const row = MEDICA_BY_DNI[normDni(dni)];
-            if(!row){{alert('El DNI no pertenece al requerimiento seleccionado.'); return false;}}
+            const row = MEDICA_BY_DNI[normDni(dni)] || (medDniShow && medDniShow.textContent===dni ? {{dni:dni}} : null);
+            if(!row){{alert('Espere unos segundos: primero debe cargar automáticamente los datos del DNI.'); buscarMedicaPorDni(dni, true); return false;}}
             if(!medReqInput.value){{alert('Primero valide un postulante del requerimiento.'); return false;}}
             const faltantes=[];
             const apt=(medAptitudSelect.value||'').toUpperCase();
@@ -13093,73 +13074,109 @@ def api_contratacion_trabajador(dni):
 @app.route('/api/contratacion/medica_postulante')
 @admin_required
 def api_contratacion_medica_postulante():
-    """Devuelve el postulante del requerimiento seleccionado para autocompletar Evaluación Médica."""
+    """Autocarga definitiva de datos del postulante en Evaluación Médica.
+
+    Busca primero por DNI + requerimiento seleccionado. Si por diferencia de espacios,
+    mayúsculas o porque el postulante fue registrado en otra vista no encuentra exacto,
+    hace respaldo por DNI en Postulantes, Trabajadores y Fotocheck. La finalidad es que
+    al digitar 8 dígitos se pinten automáticamente nombre, empresa, área, cargo, foto y
+    estados, sin obligar a seleccionar la fila manualmente.
+    """
     dni = normalizar_dni(request.args.get('dni'))
     req = clean(request.args.get('req'))
     if not dni or len(dni) != 8:
         return jsonify({'ok': False, 'mensaje': 'DNI inválido. Digite 8 dígitos.'})
     if not req:
         return jsonify({'ok': False, 'mensaje': 'Seleccione requerimiento antes de buscar DNI.'})
+
+    def rg(row, campo, default=''):
+        try:
+            return row[campo] if row and campo in row.keys() and row[campo] is not None else default
+        except Exception:
+            return default
+
+    def first_row(con, sql, params=()):
+        try:
+            return con.execute(sql, params).fetchone()
+        except Exception:
+            return None
+
     try:
         with db() as con:
-            # Búsqueda robusta: primero exacta; luego normalizada para evitar fallas por espacios,
-            # guiones, mayúsculas/minúsculas o caracteres invisibles del ticket.
-            r = con.execute("""
+            # 1) Coincidencia exacta normalizada por DNI + ticket/requerimiento.
+            r = first_row(con, """
                 SELECT * FROM contratacion_ingresos
-                WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                  AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','ELIMINADO')
+                WHERE dni=? AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
                 ORDER BY id DESC LIMIT 1
-            """, (dni, req)).fetchone()
+            """, (dni, req))
+
+            # 2) Respaldo: el requerimiento puede venir con espacios, guiones o distinta escritura.
             if not r:
-                candidatos = con.execute("""
+                r = first_row(con, """
                     SELECT * FROM contratacion_ingresos
-                    WHERE dni=? AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','ELIMINADO')
-                    ORDER BY id DESC
-                """, (dni,)).fetchall()
-                req_norm = normalizar_ticket(req)
-                for cand in candidatos:
-                    if normalizar_ticket(cand['requerimiento'] if 'requerimiento' in cand.keys() else '') == req_norm:
-                        r = cand
-                        break
-            if not r:
-                return jsonify({'ok': False, 'mensaje': 'DNI no pertenece al requerimiento seleccionado o está anulado.'})
-
-            req_real = clean(r['requerimiento'] if 'requerimiento' in r.keys() else req) or req
-            med = con.execute("""
-                SELECT * FROM contratacion_medica
-                WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                ORDER BY id DESC LIMIT 1
-            """, (dni, req_real)).fetchone()
-            if not med and normalizar_ticket(req_real) != normalizar_ticket(req):
-                med = con.execute("""
-                    SELECT * FROM contratacion_medica
-                    WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                    WHERE dni=? AND REPLACE(REPLACE(UPPER(TRIM(COALESCE(requerimiento,''))),' ',''),'-','')=
+                                  REPLACE(REPLACE(UPPER(TRIM(?)),' ',''),'-','')
                     ORDER BY id DESC LIMIT 1
-                """, (dni, req)).fetchone()
+                """, (dni, req))
 
-            def rg(row, campo, default=''):
-                try:
-                    return row[campo] if row and campo in row.keys() and row[campo] is not None else default
-                except Exception:
-                    return default
+            # 3) Respaldo final por DNI: evita que la pantalla se quede en blanco.
+            #    Si existe el postulante, se autocompleta igual y se registra con el requerimiento seleccionado.
+            if not r:
+                r = first_row(con, """
+                    SELECT * FROM contratacion_ingresos
+                    WHERE dni=? AND COALESCE(estado,'')<>'ANULADO'
+                    ORDER BY id DESC LIMIT 1
+                """, (dni,))
 
-            foto_ruta = clean(rg(r, 'foto_ruta'))
-            data_med = {k: rg(med, k) for k in med.keys()} if med else {}
-            trabajador = clean(rg(r, 'trabajador')) or clean(rg(r, 'nombre')) or 'PENDIENTE COMPLETAR'
+            t = first_row(con, "SELECT * FROM trabajadores WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
+            fc = first_row(con, "SELECT * FROM contratacion_fotocheck WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
+
+            if not r and not t and not fc:
+                return jsonify({'ok': False, 'mensaje': 'DNI no encontrado en Postulantes/Trabajadores. Registre primero el postulante.'})
+
+            med = first_row(con, """
+                SELECT * FROM contratacion_medica
+                WHERE dni=? AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
+                ORDER BY id DESC LIMIT 1
+            """, (dni, req)) or first_row(con, """
+                SELECT * FROM contratacion_medica
+                WHERE dni=? ORDER BY id DESC LIMIT 1
+            """, (dni,))
+
+            data_med = {}
+            if med:
+                for k in med.keys():
+                    data_med[k] = rg(med, k)
+
+            trabajador = (clean(rg(r, 'trabajador')) or clean(rg(r, 'nombre')) or
+                          clean(rg(t, 'nombre')) or clean(rg(fc, 'trabajador')) or 'PENDIENTE COMPLETAR')
+            empresa = clean(rg(r, 'empresa')) or clean(rg(fc, 'empresa')) or clean(rg(t, 'empresa'))
+            area = clean(rg(r, 'area')) or clean(rg(fc, 'area')) or clean(rg(t, 'area'))
+            cargo = clean(rg(r, 'cargo')) or clean(rg(fc, 'cargo')) or clean(rg(t, 'cargo'))
+            actividad = clean(rg(r, 'actividad')) or clean(rg(fc, 'actividad'))
+            fecha_ingreso = clean(rg(r, 'fecha_ingreso')) or clean(rg(fc, 'fecha_ingreso')) or clean(rg(t, 'fecha_ingreso'))
+            req_real = clean(rg(r, 'requerimiento')) or clean(rg(fc, 'requerimiento')) or req
+
+            foto_ruta = clean(rg(r, 'foto_ruta')) or clean(rg(fc, 'foto_ruta')) or clean(rg(fc, 'ruta_foto'))
+            foto_ok = bool(foto_ruta)
+
             return jsonify({
                 'ok': True,
+                'mensaje': 'Datos cargados automáticamente por DNI.',
                 'postulante': {
-                    'id': rg(r, 'id'),
+                    'id': rg(r, 'id') or rg(t, 'id') or rg(fc, 'id'),
                     'dni': dni,
                     'trabajador': trabajador,
-                    'requerimiento': req_real,
-                    'empresa': rg(r, 'empresa'),
-                    'area': rg(r, 'area'),
-                    'cargo': rg(r, 'cargo'),
-                    'actividad': rg(r, 'actividad'),
-                    'fecha_ingreso': rg(r, 'fecha_ingreso'),
-                    'foto': bool(foto_ruta),
-                    'foto_url': ('/foto/' + dni) if foto_ruta else '',
+                    # Mantiene el requerimiento seleccionado en el formulario para no alterar el flujo.
+                    'requerimiento': req or req_real,
+                    'requerimiento_origen': req_real,
+                    'empresa': empresa,
+                    'area': area,
+                    'cargo': cargo,
+                    'actividad': actividad,
+                    'fecha_ingreso': fecha_ingreso,
+                    'foto': foto_ok,
+                    'foto_url': ('/foto/' + dni) if foto_ok else '',
                     'aptitud': rg(med, 'aptitud', '') or rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
                     'estado': rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
                     'medica': data_med
