@@ -11228,7 +11228,7 @@ html,body{overflow-x:hidden!important;}
         ]) or "<tr><td colspan='11' style='padding:26px;text-align:center;color:#64748b;font-weight:900'>No hay postulantes aptos para inducción general.</td></tr>"
         control_induccion_html = f"""
         <style>
-        .ind-general-badge{background:#e8fff2;border:1px solid #b8f0d2;border-radius:14px;padding:14px 16px;font-weight:1000;color:#007a3d}.ctrl360{{background:#fff;border:1px solid #dbeafe;border-radius:24px;padding:22px;margin:18px 0 24px;box-shadow:0 18px 42px rgba(15,23,42,.07)}}
+        .ind-general-badge{{background:#e8fff2;border:1px solid #b8f0d2;border-radius:14px;padding:14px 16px;font-weight:1000;color:#007a3d}}.ctrl360{{background:#fff;border:1px solid #dbeafe;border-radius:24px;padding:22px;margin:18px 0 24px;box-shadow:0 18px 42px rgba(15,23,42,.07)}}
         .ctrl360-kpis{{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:18px;margin-bottom:22px}}
         .ctrl360-card{{background:#fff;border:1px solid #dbe3ec;border-radius:16px;padding:18px;display:flex;gap:14px;align-items:center;min-height:118px;box-shadow:0 10px 26px rgba(15,23,42,.06)}}
         .ctrl360-card i{{width:52px;height:52px;border-radius:50%;background:#008f4c;color:#fff;display:grid;place-items:center;font-size:24px;font-style:normal;box-shadow:0 14px 24px rgba(0,143,76,.23)}}
