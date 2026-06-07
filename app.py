@@ -5259,19 +5259,18 @@ def flashes():
         hay_error = hay_error or es_error
         icono = '🚨' if es_error else '✅'
         html_msgs.append(f"<div class='flash {'err alarm-flash' if es_error else 'ok-flash'}'>{icono} {m}</div>")
-    script = ""
-    if hay_error:
-        script = """<script>
-        document.addEventListener('DOMContentLoaded',function(){
-          try{
-            const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC();
-            const seq=[620,420,620]; let t=ctx.currentTime;
-            seq.forEach((f,i)=>{const o=ctx.createOscillator(); const g=ctx.createGain(); o.frequency.value=f; o.type='square'; g.gain.setValueAtTime(0.001,t); g.gain.exponentialRampToValueAtTime(0.08,t+0.02); g.gain.exponentialRampToValueAtTime(0.001,t+0.18); o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+0.2); t+=0.23;});
-            setTimeout(()=>ctx.close(),900);
-          }catch(e){}
-          try{ if(navigator.vibrate) navigator.vibrate([180,80,180]); }catch(e){}
-        });
-        </script>"""
+    script = """<script>
+    document.addEventListener('DOMContentLoaded',function(){
+      try{
+        const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC();
+        const seq = %s ? [620,420,620] : [520,660,820];
+        let t=ctx.currentTime;
+        seq.forEach((f,i)=>{const o=ctx.createOscillator(); const g=ctx.createGain(); o.frequency.value=f; o.type=%s ? 'square' : 'sine'; g.gain.setValueAtTime(0.001,t); g.gain.exponentialRampToValueAtTime(%s,t+0.02); g.gain.exponentialRampToValueAtTime(0.001,t+0.16); o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+0.18); t+=0.19;});
+        setTimeout(()=>ctx.close(),900);
+      }catch(e){}
+      try{ if(%s && navigator.vibrate) navigator.vibrate([180,80,180]); }catch(e){}
+    });
+    </script>""" % ('true' if hay_error else 'false', 'true' if hay_error else 'false', '0.08' if hay_error else '0.045', 'true' if hay_error else 'false')
     return "".join(html_msgs) + script
 
 
@@ -8124,6 +8123,9 @@ def admin_contratacion():
                 ('Observación', 'observacion'),
             ]
             faltantes_med = [etq for etq, campo in obligatorios_med if not clean(request.form.get(campo))]
+            f_pre = request.files.get('archivo')
+            if not f_pre or not clean(getattr(f_pre, 'filename', '')):
+                faltantes_med.append('Resultado PDF/imagen')
             if aptitud_med in ('', 'PENDIENTE'):
                 faltantes_med.append('Aptitud médica distinta a PENDIENTE')
             if ('RESTRICC' in aptitud_med or 'NO APTO' in aptitud_med) and not clean(request.form.get('restricciones')):
@@ -8228,7 +8230,7 @@ def admin_contratacion():
             dni = normalizar_dni(request.form.get('dni'))
             req_ind = clean(request.form.get('requerimiento'))
             if not req_ind:
-                flash('Primero seleccione requerimiento/ticket antes de registrar indumentaria.', 'error')
+                flash('Debe seleccionar un requerimiento antes de registrar indumentaria.', 'error')
                 return redirect(url_for('admin_contratacion', sec='indumentaria'))
             with db() as con_val_ind:
                 ok_req, msg_req, ing_ind = validar_dni_en_requerimiento(con_val_ind, dni, req_ind)
@@ -10635,7 +10637,13 @@ html,body{overflow-x:hidden!important;}
           .med-history-table th:nth-child(10),.med-history-table td:nth-child(10){{width:160px!important}}
           .med-pdf-btn{{cursor:pointer;color:#007a3d;font-weight:1000;background:#e8fff2;border:1px solid #b8f0d2;border-radius:999px;padding:7px 12px;display:inline-block;text-decoration:none}}
           .med-pdf-btn:hover{{background:#00a862;color:#fff;box-shadow:0 10px 18px rgba(0,168,98,.18)}}
+          .med-req-star{{background:#dcfce7!important;border:1.5px solid #86efac!important;color:#064e3b!important}}
           .med-req-star::after{{content:' *';color:#e11d48;font-weight:1000}}
+          .med-form-grid input[required],.med-form-grid select[required],.med-form-grid textarea[required]{{border-color:#86efac!important;background:#fbfffd!important}}
+          .med-form-grid input[required]:focus,.med-form-grid select[required]:focus,.med-form-grid textarea[required]:focus{{border-color:#00a862!important;box-shadow:0 0 0 4px rgba(0,168,98,.16)!important}}
+          .med-form-grid .campo-error{{border-color:#ef4444!important;background:#fff7f7!important;box-shadow:0 0 0 4px rgba(239,68,68,.14)!important}}
+          .med-toast-sound{{position:fixed;left:50%;top:22px;transform:translateX(-50%);z-index:10080;max-width:min(760px,92vw);background:#fee2e2;color:#7f1d1d;border:2px solid #ef4444;border-left:12px solid #dc2626;border-radius:18px;padding:16px 20px;font-weight:1000;box-shadow:0 22px 60px rgba(220,38,38,.28);animation:alarmShake .35s ease-in-out 0s 3}}
+          .med-toast-sound.ok{{background:#dcfce7;color:#065f46;border-color:#86efac;border-left-color:#16a34a;animation:none}}
           .med-grid-table tr{{height:72px;max-height:72px}}
           .med-grid-table tr:hover td{{background:#f0fff7}}
           .med-grid-table th:nth-child(1),.med-grid-table td:nth-child(1){{width:76px;min-width:76px;max-width:76px}}
@@ -10751,7 +10759,7 @@ html,body{overflow-x:hidden!important;}
             <b>Recomendaciones</b><input id='med_recomendaciones' class='full' name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'>
 
             <b class='med-req-star'>Responsable seguimiento</b><input id='med_responsable' name='responsable_seguimiento' required placeholder='RRHH / SST / Médico ocupacional'>
-            <b>Resultado PDF/imagen</b><input type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'>
+            <b class='med-req-star'>Resultado PDF/imagen</b><input id='med_archivo_resultado' type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg' required>
 
             <b class='med-req-star'>Observación</b><textarea id='med_observacion' class='full' name='observacion' rows='2' required placeholder='Obligatorio: sustento del resultado. Para NO APTO/BLOQUEADO indique motivo y acción de seguimiento'></textarea>
             <div class='span-all' style='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap'>
@@ -10792,6 +10800,25 @@ html,body{overflow-x:hidden!important;}
           const medEstadoVal = document.getElementById('med_estado_val');
           const medDecisionMsg = document.getElementById('med_decision_msg');
           const medFotoBox = document.getElementById('med_foto_box');
+          function portalSound(tipo){{
+            try{{
+              const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC();
+              const seq = tipo==='ok' ? [520,660,820] : (tipo==='warn' ? [520,520] : [620,420,620]);
+              let t=ctx.currentTime;
+              seq.forEach(function(f){{ const o=ctx.createOscillator(); const g=ctx.createGain(); o.frequency.value=f; o.type=(tipo==='ok')?'sine':'square'; g.gain.setValueAtTime(0.001,t); g.gain.exponentialRampToValueAtTime((tipo==='ok')?0.045:0.075,t+0.02); g.gain.exponentialRampToValueAtTime(0.001,t+0.16); o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+0.18); t+=0.19; }});
+              setTimeout(function(){{try{{ctx.close();}}catch(e){{}}}},900);
+            }}catch(e){{}}
+            try{{ if(tipo!=='ok' && navigator.vibrate) navigator.vibrate(tipo==='warn'?[90,60,90]:[180,80,180]); }}catch(e){{}}
+          }}
+          function medAlert(msg,tipo){{
+            portalSound(tipo || 'error');
+            let box=document.getElementById('med_toast_sound');
+            if(!box){{ box=document.createElement('div'); box.id='med_toast_sound'; document.body.appendChild(box); }}
+            box.className='med-toast-sound ' + ((tipo==='ok')?'ok':'');
+            box.innerHTML=(tipo==='ok'?'✅ ':'🚨 ') + (msg || 'Revise la información.');
+            clearTimeout(window.__medToastTimer);
+            window.__medToastTimer=setTimeout(function(){{ if(box) box.remove(); }},5200);
+          }}
           function medClass(v){{
             v = (v || '').toUpperCase();
             if(v.includes('NO APTO') || v.includes('BLOQUEADO')) return 'danger';
@@ -10900,7 +10927,7 @@ html,body{overflow-x:hidden!important;}
             const local = MEDICA_BY_DNI[dniNorm] || MEDICA_BY_DNI[dni] || rowDesdeTablaMedica(dniNorm);
             if(local) pintarMedico(local, dniNorm); // pinta de inmediato, mientras confirma por API definitiva
             const req = (medReqInput && medReqInput.value) ? medReqInput.value : '{h(req_actual)}';
-            if(!req){{ limpiarSeleccionMedica('Seleccione requerimiento antes de buscar DNI.'); return; }}
+            if(!req){{ limpiarSeleccionMedica('Seleccione requerimiento antes de buscar DNI.'); medAlert('Debe seleccionar un requerimiento antes de buscar o registrar evaluación médica.', 'error'); return; }}
             if(!local){{ medDecisionMsg.textContent = 'Buscando DNI en el requerimiento seleccionado...'; medDecisionMsg.className = 'med-block-msg'; }}
             clearTimeout(medicaFetchTimer);
             medicaFetchTimer = setTimeout(async function(){{
@@ -10910,7 +10937,9 @@ html,body{overflow-x:hidden!important;}
                 if(data && data.ok && data.postulante){{
                   pintarMedico(data.postulante, dniNorm);
                 }}else if(!local){{
-                  limpiarSeleccionMedica((data && data.mensaje) ? data.mensaje : 'DNI no pertenece al requerimiento seleccionado.');
+                  const msg=(data && data.mensaje) ? data.mensaje : 'DNI no pertenece al requerimiento seleccionado.';
+                  limpiarSeleccionMedica(msg);
+                  medAlert(msg, 'error');
                 }}
               }}catch(e){{
                 if(!local) limpiarSeleccionMedica('No se pudo consultar el DNI. Revise conexión o recargue la página.');
@@ -10930,8 +10959,8 @@ html,body{overflow-x:hidden!important;}
           function validarMedicaSeleccionada(){{
             const dni=(medDni.value||'').replace(/\D/g,'');
             const row = MEDICA_BY_DNI[normDni(dni)] || (medDniShow && medDniShow.textContent===dni ? {{dni:dni}} : null);
-            if(!row){{alert('Espere unos segundos: primero debe cargar automáticamente los datos del DNI.'); buscarMedicaPorDni(dni, true); return false;}}
-            if(!medReqInput.value){{alert('Primero valide un postulante del requerimiento.'); return false;}}
+            if(!row){{medAlert('Espere unos segundos: primero debe cargar automáticamente los datos del DNI.', 'error'); buscarMedicaPorDni(dni, true); return false;}}
+            if(!medReqInput.value){{medAlert('Debe seleccionar un requerimiento antes de registrar la evaluación médica.', 'error'); return false;}}
             const faltantes=[];
             const apt=(medAptitudSelect.value||'').toUpperCase();
             let est=(medEstadoSelect.value||'').toUpperCase();
@@ -10945,7 +10974,8 @@ html,body{overflow-x:hidden!important;}
               ['Fecha resultado', document.getElementById('med_fecha_resultado')],
               ['Fecha vencimiento', document.getElementById('med_fecha_vencimiento')],
               ['Responsable seguimiento', document.getElementById('med_responsable')],
-              ['Observación', document.getElementById('med_observacion')]
+              ['Observación', document.getElementById('med_observacion')],
+              ['Resultado PDF/imagen', document.getElementById('med_archivo_resultado')]
             ];
             reqs.forEach(([label, el])=>{{ if(!el || !(el.value||'').trim()) faltantes.push(label); }});
             if(apt==='PENDIENTE') faltantes.push('Aptitud médica distinta a PENDIENTE');
@@ -10955,12 +10985,12 @@ html,body{overflow-x:hidden!important;}
               faltantes.push('Restricciones');
             }}
             if(faltantes.length){{
-              const mapa = {{'Aptitud médica':medAptitudSelect,'Tipo examen':document.getElementById('med_tipo_examen'),'Riesgo del puesto':document.getElementById('med_riesgo'),'Fecha resultado':document.getElementById('med_fecha_resultado'),'Fecha vencimiento':document.getElementById('med_fecha_vencimiento'),'Responsable seguimiento':document.getElementById('med_responsable'),'Observación':document.getElementById('med_observacion'),'Restricciones':document.getElementById('med_restricciones')}};
+              const mapa = {{'Aptitud médica':medAptitudSelect,'Tipo examen':document.getElementById('med_tipo_examen'),'Riesgo del puesto':document.getElementById('med_riesgo'),'Fecha resultado':document.getElementById('med_fecha_resultado'),'Fecha vencimiento':document.getElementById('med_fecha_vencimiento'),'Responsable seguimiento':document.getElementById('med_responsable'),'Observación':document.getElementById('med_observacion'),'Restricciones':document.getElementById('med_restricciones'),'Resultado PDF/imagen':document.getElementById('med_archivo_resultado')}};
               Object.values(mapa).forEach(el=>{{ if(el) el.classList.remove('campo-error'); }});
               const primero = mapa[faltantes[0]];
               faltantes.forEach(x=>{{ if(mapa[x]) mapa[x].classList.add('campo-error'); }});
               if(primero){{ primero.scrollIntoView({{behavior:'smooth', block:'center'}}); setTimeout(()=>primero.focus&&primero.focus(),250); }}
-              alert('Faltan completar estos campos:\n- ' + [...new Set(faltantes)].join('\n- '));
+              medAlert('Falta completar: ' + [...new Set(faltantes)].join(', '), 'error');
               return false;
             }}
             return true;
@@ -11332,7 +11362,7 @@ html,body{overflow-x:hidden!important;}
 
         content=wrap(f"""
         <style>
-        .ind-page{{display:flex;flex-direction:column;gap:18px;color:#071b34}}.ind-hero{{background:linear-gradient(135deg,#ffffff,#effff7);border:1px solid #b8f0d2;border-radius:26px;padding:24px 28px;display:grid;grid-template-columns:1.2fr .9fr;gap:22px;align-items:center;box-shadow:0 18px 44px rgba(4,120,87,.08)}}.ind-title{{display:flex;gap:18px;align-items:center}}.ind-icon{{width:66px;height:66px;border-radius:22px;background:#dcfce7;border:1px solid #86efac;display:grid;place-items:center;font-size:32px}}.ind-title h1{{margin:0;font-size:34px;line-height:1.05;font-weight:1000;color:#071b34}}.ind-title p{{margin:8px 0 0;color:#50627c;font-size:17px;font-weight:800;line-height:1.35}}.ind-ticket label,.ind-tools label{{display:block;color:#071b34;text-transform:uppercase;font-size:12px;font-weight:1000;margin-bottom:8px}}.ind-ticket select,.ind-tools input,.ind-tools select,.ind-form input,.ind-form select,.ind-form textarea{{width:100%;border:1px solid #cfe0ec;border-radius:14px;background:#fff;color:#071b34;font-weight:900;font-size:14px;padding:0 14px;min-height:42px}}.ind-form textarea{{padding-top:14px;min-height:86px}}.ind-tools{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px 22px;display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-actions{{display:flex;gap:10px;flex-wrap:wrap}}.ind-btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:15px;padding:0 22px;text-decoration:none;border:0;font-weight:1000;cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;box-shadow:0 12px 22px rgba(0,138,72,.20)}}.ind-btn.green{{background:linear-gradient(135deg,#00964f,#0bbf72)}}.ind-btn.light{{background:#fff;color:#071b34;border:1px solid #dbe7ef;box-shadow:none}}.ind-btn.danger{{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;box-shadow:none}}.ind-btn.mini{{min-height:38px;padding:0 12px;font-size:12px}}.ind-kpis{{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:16px}}.ind-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:20px;padding:18px;display:flex;align-items:center;gap:15px;min-height:105px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-kpi .ico{{width:54px;height:54px;border-radius:50%;background:#008a48;color:#fff;display:grid;place-items:center;font-size:24px}}.ind-kpi b{{font-size:32px;color:#071b34;line-height:1;font-weight:1000}}.ind-kpi h4{{margin:0 0 4px;font-size:14px;color:#071b34;font-weight:1000}}.ind-kpi small{{display:block;color:#53627a;font-weight:850}}.ind-control{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:22px;display:grid;grid-template-columns:260px repeat(5,1fr);gap:18px;box-shadow:0 16px 34px rgba(15,23,42,.06)}}.ind-radial h2{{margin:0;color:#071b34;font-size:28px;line-height:1.05;font-weight:1000}}.ind-radial p{{color:#53627a;font-weight:850;line-height:1.35}}.ind-ring{{width:132px;height:132px;border-radius:50%;background:conic-gradient(#008a48 {avance_indum_req}%,#e5e7eb 0);display:grid;place-items:center;margin:auto}}.ind-ring div{{width:98px;height:98px;background:#fff;border-radius:50%;display:grid;place-items:center;text-align:center;color:#071b34;font-weight:1000}}.ind-ring span{{display:block;font-size:13px;color:#53627a}}.ind-stage{{border:1px solid #dbe7ef;border-radius:18px;padding:20px 12px;text-align:center;background:linear-gradient(180deg,#fff,#fcfffd);border-bottom:4px solid #008a48;min-height:158px}}.ind-stage .sico{{width:60px;height:60px;border-radius:50%;background:#dcfce7;display:grid;place-items:center;margin:0 auto 12px;font-size:26px}}.ind-stage h4{{margin:0;color:#071b34;font-weight:1000}}.ind-stage b{{font-size:31px;color:#071b34;display:block}}.ind-stage small{{color:#53627a;font-weight:850}}.ind-table-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.06)}}.ind-table-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;flex-wrap:wrap}}.ind-table-head h2{{margin:0;color:#071b34;font-size:22px;font-weight:1000}}.ind-table-wrap{{overflow:auto}}.ind-table{{width:100%;min-width:1100px;border-collapse:separate;border-spacing:0}}.ind-table th{{background:#008a48;color:#fff;padding:14px;text-align:center;font-weight:1000;border-right:1px solid rgba(255,255,255,.22)}}.ind-table td{{padding:14px;border-bottom:1px solid #e1ebf3;border-right:1px solid #e1ebf3;text-align:center;vertical-align:middle;font-weight:850;color:#071b34}}.ind-table tr:hover td{{background:#f0fff7}}.avatar-mini{{display:inline-grid;place-items:center;width:52px;height:52px;border-radius:15px;background:#ecfdf5;border:1px solid #86efac;font-size:25px}}.name-cell{{font-weight:1000;text-align:left!important}}.ind-pill{{display:inline-flex;border-radius:999px;padding:8px 14px;font-weight:1000;font-size:12px;border:1px solid transparent}}.ind-pill.ok{{background:#dcfce7;color:#047857;border-color:#86efac}}.ind-pill.warn{{background:#fef3c7;color:#b45309;border-color:#fde68a}}.ind-pill.danger{{background:#fee2e2;color:#991b1b;border-color:#fecaca}}.ind-pill.muted{{background:#f1f5f9;color:#475569;border-color:#e2e8f0}}.ind-bar{{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px}}.ind-bar span{{display:block;height:100%;background:#008a48;border-radius:999px}}.empty-row{{padding:26px!important;text-align:center!important;color:#64748b!important;font-weight:900!important}}.ind-modal-check{{display:none}}.ind-modal{{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:28px 22px;overflow:auto}}.ind-modal-check:checked + .ind-modal{{display:flex}}.ind-modal-card{{width:min(980px,94vw);max-height:92vh;background:#fff;border-radius:22px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.35);overflow:auto}}.ind-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border-bottom:1px solid #e5eef6;background:#fbfffd}}.ind-modal-head h2{{margin:0;color:#071b34;font-weight:1000}}.ind-close{{cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;border-radius:12px;padding:10px 16px;font-weight:1000;box-shadow:0 10px 20px rgba(0,138,72,.18)}}.ind-alert{{margin:18px 24px 0;background:linear-gradient(135deg,#ecfdf5,#f8fffd);border:1px solid #a7f3d0;border-radius:18px;padding:16px 18px;color:#064e3b;font-weight:900;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}}.ind-form{{padding:18px 24px 24px;display:grid;grid-template-columns:150px 1fr 150px 1fr;gap:10px;align-items:center}}.ind-form b{{background:#eef6f3;border-radius:10px;padding:10px 12px;text-align:right;color:#071b34;font-weight:1000;font-size:13px}}.ind-form .section{{grid-column:1/-1;margin:8px 0 0;font-size:18px;font-weight:1000;color:#071b34}}.ind-form .field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.15)!important}}.ind-form b.req{{background:#dcfce7;border:1px solid #86efac;color:#064e3b}}.ind-form b.req:after{{content:' *';color:#ef4444;font-weight:1000}}.ind-form select{{height:48px;border:1px solid #cfe0ec;border-radius:13px;padding:0 14px;font-weight:850;background:#fff}}.ind-form .full{{grid-column:1/-1}}@media(max-width:1200px){{.ind-control{{grid-template-columns:1fr 1fr 1fr}}.ind-kpis{{grid-template-columns:repeat(3,1fr)}}.ind-hero,.ind-tools,.ind-form{{grid-template-columns:1fr 1fr}}}}@media(max-width:760px){{.ind-hero,.ind-tools,.ind-control,.ind-form{{grid-template-columns:1fr}}.ind-kpis{{grid-template-columns:1fr 1fr}}.ind-form b{{text-align:left}}}}
+        .ind-page{{display:flex;flex-direction:column;gap:18px;color:#071b34}}.ind-hero{{background:linear-gradient(135deg,#ffffff,#effff7);border:1px solid #b8f0d2;border-radius:26px;padding:24px 28px;display:grid;grid-template-columns:1.2fr .9fr;gap:22px;align-items:center;box-shadow:0 18px 44px rgba(4,120,87,.08)}}.ind-title{{display:flex;gap:18px;align-items:center}}.ind-icon{{width:66px;height:66px;border-radius:22px;background:#dcfce7;border:1px solid #86efac;display:grid;place-items:center;font-size:32px}}.ind-title h1{{margin:0;font-size:34px;line-height:1.05;font-weight:1000;color:#071b34}}.ind-title p{{margin:8px 0 0;color:#50627c;font-size:17px;font-weight:800;line-height:1.35}}.ind-ticket label,.ind-tools label{{display:block;color:#071b34;text-transform:uppercase;font-size:12px;font-weight:1000;margin-bottom:8px}}.ind-ticket select,.ind-tools input,.ind-tools select,.ind-form input,.ind-form select,.ind-form textarea{{width:100%;border:1px solid #cfe0ec;border-radius:14px;background:#fff;color:#071b34;font-weight:900;font-size:14px;padding:0 14px;min-height:42px}}.ind-form textarea{{padding-top:14px;min-height:86px}}.ind-tools{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px 22px;display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-actions{{display:flex;gap:10px;flex-wrap:wrap}}.ind-btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:15px;padding:0 22px;text-decoration:none;border:0;font-weight:1000;cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;box-shadow:0 12px 22px rgba(0,138,72,.20)}}.ind-btn.green{{background:linear-gradient(135deg,#00964f,#0bbf72)}}.ind-btn.light{{background:#fff;color:#071b34;border:1px solid #dbe7ef;box-shadow:none}}.ind-btn.danger{{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;box-shadow:none}}.ind-btn.mini{{min-height:38px;padding:0 12px;font-size:12px}}.ind-kpis{{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:16px}}.ind-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:20px;padding:18px;display:flex;align-items:center;gap:15px;min-height:105px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-kpi .ico{{width:54px;height:54px;border-radius:50%;background:#008a48;color:#fff;display:grid;place-items:center;font-size:24px}}.ind-kpi b{{font-size:32px;color:#071b34;line-height:1;font-weight:1000}}.ind-kpi h4{{margin:0 0 4px;font-size:14px;color:#071b34;font-weight:1000}}.ind-kpi small{{display:block;color:#53627a;font-weight:850}}.ind-control{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:22px;display:grid;grid-template-columns:260px repeat(5,1fr);gap:18px;box-shadow:0 16px 34px rgba(15,23,42,.06)}}.ind-radial h2{{margin:0;color:#071b34;font-size:28px;line-height:1.05;font-weight:1000}}.ind-radial p{{color:#53627a;font-weight:850;line-height:1.35}}.ind-ring{{width:132px;height:132px;border-radius:50%;background:conic-gradient(#008a48 {avance_indum_req}%,#e5e7eb 0);display:grid;place-items:center;margin:auto}}.ind-ring div{{width:98px;height:98px;background:#fff;border-radius:50%;display:grid;place-items:center;text-align:center;color:#071b34;font-weight:1000}}.ind-ring span{{display:block;font-size:13px;color:#53627a}}.ind-stage{{border:1px solid #dbe7ef;border-radius:18px;padding:20px 12px;text-align:center;background:linear-gradient(180deg,#fff,#fcfffd);border-bottom:4px solid #008a48;min-height:158px}}.ind-stage .sico{{width:60px;height:60px;border-radius:50%;background:#dcfce7;display:grid;place-items:center;margin:0 auto 12px;font-size:26px}}.ind-stage h4{{margin:0;color:#071b34;font-weight:1000}}.ind-stage b{{font-size:31px;color:#071b34;display:block}}.ind-stage small{{color:#53627a;font-weight:850}}.ind-table-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.06)}}.ind-table-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;flex-wrap:wrap}}.ind-table-head h2{{margin:0;color:#071b34;font-size:22px;font-weight:1000}}.ind-table-wrap{{overflow:auto}}.ind-table{{width:100%;min-width:1100px;border-collapse:separate;border-spacing:0}}.ind-table th{{background:#008a48;color:#fff;padding:14px;text-align:center;font-weight:1000;border-right:1px solid rgba(255,255,255,.22)}}.ind-table td{{padding:14px;border-bottom:1px solid #e1ebf3;border-right:1px solid #e1ebf3;text-align:center;vertical-align:middle;font-weight:850;color:#071b34}}.ind-table tr:hover td{{background:#f0fff7}}.avatar-mini{{display:inline-grid;place-items:center;width:52px;height:52px;border-radius:15px;background:#ecfdf5;border:1px solid #86efac;font-size:25px}}.name-cell{{font-weight:1000;text-align:left!important}}.ind-pill{{display:inline-flex;border-radius:999px;padding:8px 14px;font-weight:1000;font-size:12px;border:1px solid transparent}}.ind-pill.ok{{background:#dcfce7;color:#047857;border-color:#86efac}}.ind-pill.warn{{background:#fef3c7;color:#b45309;border-color:#fde68a}}.ind-pill.danger{{background:#fee2e2;color:#991b1b;border-color:#fecaca}}.ind-pill.muted{{background:#f1f5f9;color:#475569;border-color:#e2e8f0}}.ind-bar{{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px}}.ind-bar span{{display:block;height:100%;background:#008a48;border-radius:999px}}.empty-row{{padding:26px!important;text-align:center!important;color:#64748b!important;font-weight:900!important}}.ind-modal-check{{display:none}}.ind-modal{{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:28px 22px;overflow:auto}}.ind-modal-check:checked + .ind-modal{{display:flex}}.ind-modal-card{{width:min(980px,94vw);max-height:92vh;background:#fff;border-radius:22px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.35);overflow:auto}}.ind-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border-bottom:1px solid #e5eef6;background:#fbfffd}}.ind-modal-head h2{{margin:0;color:#071b34;font-weight:1000}}.ind-close{{cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;border-radius:12px;padding:10px 16px;font-weight:1000;box-shadow:0 10px 20px rgba(0,138,72,.18)}}.ind-alert{{margin:18px 24px 0;background:linear-gradient(135deg,#ecfdf5,#f8fffd);border:1px solid #a7f3d0;border-radius:18px;padding:16px 18px;color:#064e3b;font-weight:900;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}}.ind-form{{padding:18px 24px 24px;display:grid;grid-template-columns:150px 1fr 150px 1fr;gap:10px;align-items:center}}.ind-form b{{background:#eef6f3;border-radius:10px;padding:10px 12px;text-align:right;color:#071b34;font-weight:1000;font-size:13px}}.ind-form .section{{grid-column:1/-1;margin:8px 0 0;font-size:18px;font-weight:1000;color:#071b34}}.ind-form .field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.15)!important}}.ind-alert.danger{{background:#fef2f2;border-color:#fca5a5;color:#7f1d1d}}.ind-form input:disabled,.ind-form select:disabled{{background:#f1f5f9;color:#64748b;cursor:not-allowed}}.ind-form b.req{{background:#dcfce7;border:1px solid #86efac;color:#064e3b}}.ind-form b.req:after{{content:' *';color:#ef4444;font-weight:1000}}.ind-form select{{height:48px;border:1px solid #cfe0ec;border-radius:13px;padding:0 14px;font-weight:850;background:#fff}}.ind-form .full{{grid-column:1/-1}}@media(max-width:1200px){{.ind-control{{grid-template-columns:1fr 1fr 1fr}}.ind-kpis{{grid-template-columns:repeat(3,1fr)}}.ind-hero,.ind-tools,.ind-form{{grid-template-columns:1fr 1fr}}}}@media(max-width:760px){{.ind-hero,.ind-tools,.ind-control,.ind-form{{grid-template-columns:1fr}}.ind-kpis{{grid-template-columns:1fr 1fr}}.ind-form b{{text-align:left}}}}
         </style>
         <section class='ind-page'>
           <div class='ind-hero'>
@@ -11343,33 +11373,76 @@ html,body{overflow-x:hidden!important;}
           <div class='ind-kpis'><div class='ind-kpi'><span class='ico'>👥</span><div><h4>Seleccionados</h4><b>{total_indumentaria_req}</b><small>Postulantes aptos</small></div></div><div class='ind-kpi'><span class='ico'>🦺</span><div><h4>Entregados</h4><b>{entregados_req}</b><small>Cargo completo</small></div></div><div class='ind-kpi'><span class='ico'>⏳</span><div><h4>Pendientes</h4><b>{pendientes_req}</b><small>Sin entrega</small></div></div><div class='ind-kpi'><span class='ico'>⚠️</span><div><h4>Observados</h4><b>{observados_req}</b><small>Requiere atención</small></div></div></div>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Lista de postulantes del requerimiento</h2><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn green'>🧥 Registrar entrega</label><button type='button' class='ind-btn light' onclick='window.print()'>🖨️ Imprimir</button></div></div><div class='ind-table-wrap'><table id='tabla_indumentaria_360' class='ind-table'><tr><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Actividad</th><th>Estado</th><th>%</th><th>Acción</th></tr>{indumentaria_control_rows}</table></div></div>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Cargos de entrega registrados</h2><small>{len(indumentarias_filtradas)} registro(s)</small></div><div class='ind-table-wrap'><table class='ind-table'><tr><th>Fecha registro</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Estado</th><th>Responsable</th><th>Fecha entrega</th><th>Acción</th></tr>{ind_rows}</table></div></div>
-          <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card'><div class='ind-modal-head'><h2>Registrar entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar</label></div><div class='ind-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span><span>Primero elija requerimiento y DNI.</span></div><form method='post' enctype='multipart/form-data' class='ind-form' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><div class='section'>1. Requerimiento y postulante</div><b class='req'>Requerimiento</b><select name='requerimiento' id='ind_requerimiento' required><option value='{h(req_filtro_indumentaria)}'>{h(req_filtro_indumentaria) or 'Seleccione requerimiento'}</option>{req_options_indumentaria}</select><b class='req'>DNI</b><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI' required><div class='full' style='font-weight:900;color:#047857;padding:4px 0 8px'>Al digitar 8 números, los datos se cargan automáticamente.</div><div class='section'>2. Datos del trabajador</div><b class='req'>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b>Área</b><input id='ind_area' name='area' placeholder='Área'><b>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'>3. Detalle de prendas / EPP</div><b class='req'>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req'>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req'>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req'>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><b class='req'>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='ind-btn green' type='submit'>✅ Registrar entrega</button></div></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>
+          <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card'><div class='ind-modal-head'><h2>Registrar entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar</label></div><div class='ind-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span><span>Primero elija requerimiento y DNI.</span></div><form method='post' enctype='multipart/form-data' class='ind-form' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><div class='section'>1. Requerimiento y postulante</div><b class='req'>Requerimiento</b><select name='requerimiento' id='ind_requerimiento' required onchange='actualizarBloqueoIndumentaria(true)'><option value='{h(req_filtro_indumentaria)}'>{h(req_filtro_indumentaria) or 'Seleccione requerimiento'}</option>{req_options_indumentaria}</select><b class='req'>DNI</b><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Primero seleccione requerimiento' required><div class='full' style='font-weight:900;color:#047857;padding:4px 0 8px'>Al digitar 8 números, los datos se cargan automáticamente.</div><div class='section'>2. Datos del trabajador</div><b class='req'>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b>Área</b><input id='ind_area' name='area' placeholder='Área'><b>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'>3. Detalle de prendas / EPP</div><b class='req'>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req'>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req'>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req'>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><b class='req'>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='ind-btn green' type='submit'>✅ Registrar entrega</button></div></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>
         </section>
         <script>
         const trabajadoresIndumentaria = {trabajadores_js};
+        function setAlertaIndumentaria(txt, peligro=false){{
+          const msg=document.getElementById('ind_estado_msg');
+          const box=msg ? msg.closest('.ind-alert') : null;
+          if(msg) msg.innerText=txt;
+          if(box) box.classList.toggle('danger', !!peligro);
+        }}
+        function limpiarDatosIndumentaria(){{
+          ['ind_trabajador','ind_empresa','ind_area','ind_cargo','ind_actividad','ind_fecha_ingreso'].forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=''; }});
+        }}
+        function actualizarBloqueoIndumentaria(limpiarDni=false){{
+          const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
+          const dniEl=document.getElementById('ind_dni');
+          if(!dniEl) return false;
+          if(!req){{
+            dniEl.value='';
+            dniEl.disabled=true;
+            dniEl.placeholder='Primero seleccione requerimiento';
+            limpiarDatosIndumentaria();
+            setAlertaIndumentaria('Debe seleccionar un requerimiento antes de registrar indumentaria.', true);
+            return false;
+          }}
+          dniEl.disabled=false;
+          dniEl.placeholder='Digite DNI';
+          if(limpiarDni){{ dniEl.value=''; limpiarDatosIndumentaria(); }}
+          setAlertaIndumentaria('Digite DNI de 8 números. Los datos se cargarán solo del requerimiento seleccionado.', false);
+          return true;
+        }}
         async function buscarIndumentariaDNI(){{
+          const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
+          if(!req){{
+            actualizarBloqueoIndumentaria();
+            document.getElementById('ind_requerimiento')?.focus();
+            return;
+          }}
           const dni=(document.getElementById('ind_dni')?.value||'').replace(/\D/g,'');
-          if(dni.length!==8){{ alert('Digite un DNI válido de 8 dígitos.'); return; }}
+          if(dni.length!==8){{ setAlertaIndumentaria('Digite un DNI válido de 8 dígitos.', true); return; }}
           let t=trabajadoresIndumentaria[dni]||null;
           if(!t){{
-            try{{const r=await fetch('/api/contratacion/trabajador/'+dni); const j=await r.json(); if(j.ok) t=j.trabajador;}}catch(e){{}}
+            limpiarDatosIndumentaria();
+            setAlertaIndumentaria('DNI no encontrado en el requerimiento seleccionado. Seleccione el ticket correcto o registre primero al postulante.', true);
+            return;
           }}
-          if(!t){{ document.getElementById('ind_estado_msg').innerText='DNI no encontrado en el ticket seleccionado. Complete ficha o seleccione otro requerimiento.'; return; }}
-          const map={{ind_trabajador:(t.nombre||t.trabajador||''), ind_empresa:(t.empresa||''), ind_area:(t.area||''), ind_cargo:(t.cargo||''), ind_actividad:(t.actividad||''), ind_requerimiento:(t.requerimiento||''), ind_fecha_ingreso:(t.fecha_ingreso||'')}};
+          const map={{ind_trabajador:(t.nombre||t.trabajador||''), ind_empresa:(t.empresa||''), ind_area:(t.area||''), ind_cargo:(t.cargo||''), ind_actividad:(t.actividad||''), ind_fecha_ingreso:(t.fecha_ingreso||'')}};
           Object.keys(map).forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=map[id]||''; }});
-          document.getElementById('ind_estado_msg').innerText='Datos cargados correctamente. Registre prendas, responsable y cargo firmado.';
+          setAlertaIndumentaria('Datos cargados correctamente. Complete prendas obligatorias y responsable.', false);
         }}
         function actualizarEstadoIndumentaria(){{
-          const msg=document.getElementById('ind_estado_msg'); if(!msg) return;
-          msg.innerText='Complete los campos obligatorios resaltados. Al registrar, el estado será ENTREGADO.';
+          const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
+          if(!req){{ actualizarBloqueoIndumentaria(false); return; }}
+          setAlertaIndumentaria('Complete los campos obligatorios resaltados. Al registrar, el estado será ENTREGADO.', false);
         }}
         function validarFormularioIndumentaria(ev){{
+          const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
+          if(!req){{
+            if(ev) ev.preventDefault();
+            setAlertaIndumentaria('Debe seleccionar un requerimiento antes de registrar indumentaria.', true);
+            document.getElementById('ind_requerimiento')?.classList.add('field-error');
+            document.getElementById('ind_requerimiento')?.focus();
+            return false;
+          }}
           const campos=[['ind_requerimiento','Requerimiento'],['ind_dni','DNI'],['ind_trabajador','Trabajador'],['ind_polo','Polo'],['ind_pantalon','Pantalón'],['ind_botas','Botas'],['ind_fecha_entrega','Fecha de entrega'],['ind_responsable_entrega','Responsable de entrega']];
           const faltan=[];
           document.querySelectorAll('#form_indumentaria_entrega .field-error').forEach(x=>x.classList.remove('field-error'));
           campos.forEach(([id,nom])=>{{ const el=document.getElementById(id); if(el && !(el.value||'').trim()){{ faltan.push(nom); el.classList.add('field-error'); }} }});
           if(faltan.length){{
-            const msg=document.getElementById('ind_estado_msg'); if(msg) msg.innerText='Falta completar: '+faltan.join(', ');
+            setAlertaIndumentaria('Falta completar: '+faltan.join(', '), true);
             if(ev) ev.preventDefault();
             const first=document.querySelector('#form_indumentaria_entrega .field-error'); if(first) first.focus();
             return false;
@@ -11382,6 +11455,7 @@ html,body{overflow-x:hidden!important;}
           clearTimeout(indDniTimer);
           if(this.value.length===8) indDniTimer=setTimeout(buscarIndumentariaDNI, 250);
         }});
+        actualizarBloqueoIndumentaria(false);
         actualizarEstadoIndumentaria();
         </script>
         """)
