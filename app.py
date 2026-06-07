@@ -528,6 +528,13 @@ def normalizar_dni(v):
     return d[-8:].zfill(8) if d else ""
 
 
+def normalizar_ticket(v):
+    """Normaliza tickets/requerimientos para comparar sin errores por espacios, guiones o mayúsculas."""
+    txt = clean(v).upper()
+    txt = txt.replace('Á','A').replace('É','E').replace('Í','I').replace('Ó','O').replace('Ú','U').replace('Ñ','N')
+    return re.sub(r"[^A-Z0-9]", "", txt)
+
+
 def safe_periodo(p):
     return re.sub(r"[^A-Za-z0-9_\- ]", "", clean(p))[:50] or datetime.now(APP_TZ).strftime("%Y-%m")
 
@@ -2865,7 +2872,7 @@ def datos_unificados_contratacion(dni, requerimiento=''):
         trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
         ing = None
         if requerimiento:
-            ing = con.execute("SELECT * FROM contratacion_ingresos WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?) ORDER BY id DESC LIMIT 1", (dni, requerimiento)).fetchone()
+            ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? AND requerimiento=? ORDER BY id DESC LIMIT 1', (dni, requerimiento)).fetchone()
         if not ing:
             ing = con.execute('SELECT * FROM contratacion_ingresos WHERE dni=? ORDER BY id DESC LIMIT 1', (dni,)).fetchone()
     base = row_to_dict(trab); post = row_to_dict(ing); merged = dict(base)
@@ -8073,8 +8080,7 @@ def admin_contratacion():
                 if val: obs_extra.append(f'{etiqueta}: {val}')
             obs_final = (obs_base + (' | ' if obs_base and obs_extra else '') + ' | '.join(obs_extra)).strip()
             with db() as con:
-                nombre_medica = (clean(row_get(pertenece, 'trabajador')) or clean(row_get(pertenece, 'nombre')) or (clean(trab['nombre']) if trab and 'nombre' in trab.keys() else '') or clean(request.form.get('trabajador')) or 'PENDIENTE COMPLETAR')
-                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por,tipo_examen,protocolo,riesgo_puesto,aptitud,restricciones,recomendaciones,fecha_vencimiento,responsable_seguimiento,proveedor_contacto,costo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, nombre_medica, req_medica, clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), '', nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_examen')), clean(request.form.get('protocolo')), clean(request.form.get('riesgo_puesto')), clean(request.form.get('aptitud')), clean(request.form.get('restricciones')), clean(request.form.get('recomendaciones')), fecha_sin_hora(request.form.get('fecha_vencimiento')), clean(request.form.get('responsable_seguimiento')), '', ''))
+                con.execute('''INSERT INTO contratacion_medica(dni,trabajador,requerimiento,estado,fecha_programada,fecha_resultado,clinica,archivo_nombre,ruta_archivo,observacion,fecha_registro,registrado_por,tipo_examen,protocolo,riesgo_puesto,aptitud,restricciones,recomendaciones,fecha_vencimiento,responsable_seguimiento,proveedor_contacto,costo) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (dni, trab['nombre'] if trab else clean(request.form.get('trabajador')), req_medica, clean(request.form.get('estado')) or 'PENDIENTE', fecha_sin_hora(request.form.get('fecha_programada')), fecha_sin_hora(request.form.get('fecha_resultado')), '', nombre_arch, ruta, obs_final, now_txt(), session.get('admin_user','admin'), clean(request.form.get('tipo_examen')), clean(request.form.get('protocolo')), clean(request.form.get('riesgo_puesto')), clean(request.form.get('aptitud')), clean(request.form.get('restricciones')), clean(request.form.get('recomendaciones')), fecha_sin_hora(request.form.get('fecha_vencimiento')), clean(request.form.get('responsable_seguimiento')), '', ''))
                 con.execute('UPDATE contratacion_ingresos SET estado_medico=? WHERE dni=? AND TRIM(requerimiento)=TRIM(?)', (clean(request.form.get('estado')) or 'PENDIENTE', dni, req_medica))
                 con.commit()
             flash('Evaluación médica registrada.', 'ok')
@@ -10443,7 +10449,7 @@ html,body{overflow-x:hidden!important;}
                 return 'ok'
             return 'pending'
 
-        lista_med = [r for r in trabajadores_proceso_mostrar if clean(row_get(r, 'dni')) and clean(row_get(r, 'requerimiento'))] if req_actual else []
+        lista_med = [r for r in trabajadores_proceso_mostrar if flujo_postulante_completo(r)] if req_actual else []
         total_med_req = len(lista_med)
         aptos_med_req = 0
         no_aptos_med_req = 0
@@ -10477,7 +10483,7 @@ html,body{overflow-x:hidden!important;}
                     pass
             foto_r = clean(row_get(r, 'foto_ruta'))
             foto_html = f"<img class='med-photo' src='/foto/{h(dni_r)}'>" if foto_r else "<span class='med-no-photo'>SIN FOTO</span>"
-            trabajador_r = clean(row_get(r, 'trabajador')) or clean(row_get(r, 'nombre')) or clean(row_get(r, 'nombre_completo')) or 'PENDIENTE COMPLETAR'
+            trabajador_r = clean(row_get(r, 'trabajador')) or 'PENDIENTE COMPLETAR'
             medica_data.append({
                 'id': row_get(r, 'id'),
                 'dni': dni_r,
@@ -10736,6 +10742,7 @@ html,body{overflow-x:hidden!important;}
             medAreaCargo.textContent = '—';
             if(medReqInput && !medReqInput.value) medReqInput.value = '{h(req_actual)}';
             medTrabHidden.value = '';
+            ['med_restricciones','med_recomendaciones','med_observacion','med_responsable','med_tipo_examen','med_riesgo'].forEach(function(id){{ const el=document.getElementById(id); if(el) el.value=''; }});
             setMedCard(medAptitudCard, medAptitudVal, 'PENDIENTE');
             setMedCard(medEstadoCard, medEstadoVal, 'PENDIENTE');
             medFotoBox.innerHTML = `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`;
@@ -10785,6 +10792,7 @@ html,body{overflow-x:hidden!important;}
             if(row.medica){{
               const ids = {{
                 med_restricciones: row.medica.restricciones,
+                med_recomendaciones: row.medica.recomendaciones,
                 med_observacion: row.medica.observacion,
                 med_tipo_examen: row.medica.tipo_examen,
                 med_riesgo: row.medica.riesgo_puesto,
@@ -10792,7 +10800,16 @@ html,body{overflow-x:hidden!important;}
                 med_fecha_resultado: row.medica.fecha_resultado,
                 med_fecha_vencimiento: row.medica.fecha_vencimiento
               }};
-              Object.keys(ids).forEach(function(id){{ const el=document.getElementById(id); if(el && ids[id]) el.value=ids[id]; }});
+              Object.keys(ids).forEach(function(id){{
+                const el=document.getElementById(id);
+                if(el && ids[id]){{
+                  if(el.tagName === 'SELECT'){{
+                    const val = String(ids[id]).toUpperCase().trim();
+                    const opt = Array.from(el.options).find(o => String(o.value).toUpperCase().trim() === val || String(o.textContent).toUpperCase().trim() === val);
+                    if(opt) el.value = opt.value;
+                  }}else{{ el.value=ids[id]; }}
+                }}
+              }});
             }}
             medFotoBox.innerHTML = row.foto_url ? `<img src='${{row.foto_url}}'><small>Foto real del postulante</small>` : (row.foto ? `<img src='/foto/${{row.dni}}'><small>Foto real del postulante</small>` : `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`);
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
@@ -13076,80 +13093,76 @@ def api_contratacion_trabajador(dni):
 @app.route('/api/contratacion/medica_postulante')
 @admin_required
 def api_contratacion_medica_postulante():
-    """Autocompleta Evaluación Médica al digitar DNI.
-
-    Corrección definitiva:
-    - Normaliza DNI a 8 dígitos.
-    - Valida el requerimiento con TRIM/UPPER para evitar fallas por espacios o mayúsculas.
-    - Devuelve datos del postulante aunque aún no tenga evaluación médica registrada.
-    - Usa respaldo de la tabla trabajadores si algún campo del postulante está vacío.
-    """
+    """Devuelve el postulante del requerimiento seleccionado para autocompletar Evaluación Médica."""
     dni = normalizar_dni(request.args.get('dni'))
     req = clean(request.args.get('req'))
     if not dni or len(dni) != 8:
-        return jsonify({'ok': False, 'mensaje': 'DNI inválido. Digite 8 números.'})
+        return jsonify({'ok': False, 'mensaje': 'DNI inválido. Digite 8 dígitos.'})
     if not req:
         return jsonify({'ok': False, 'mensaje': 'Seleccione requerimiento antes de buscar DNI.'})
     try:
         with db() as con:
+            # Búsqueda robusta: primero exacta; luego normalizada para evitar fallas por espacios,
+            # guiones, mayúsculas/minúsculas o caracteres invisibles del ticket.
             r = con.execute("""
                 SELECT * FROM contratacion_ingresos
-                WHERE dni=?
-                  AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
-                  AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                  AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','ELIMINADO')
                 ORDER BY id DESC LIMIT 1
             """, (dni, req)).fetchone()
             if not r:
-                req_comp = re.sub(r'\s+', '', req).upper()
                 candidatos = con.execute("""
                     SELECT * FROM contratacion_ingresos
-                    WHERE dni=? AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
-                    ORDER BY id DESC LIMIT 20
+                    WHERE dni=? AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','ELIMINADO')
+                    ORDER BY id DESC
                 """, (dni,)).fetchall()
+                req_norm = normalizar_ticket(req)
                 for cand in candidatos:
-                    if re.sub(r'\s+', '', clean(row_get(cand, 'requerimiento'))).upper() == req_comp:
+                    if normalizar_ticket(cand['requerimiento'] if 'requerimiento' in cand.keys() else '') == req_norm:
                         r = cand
                         break
             if not r:
-                return jsonify({'ok': False, 'mensaje': f'El DNI {dni} no pertenece al requerimiento seleccionado {req}.'})
+                return jsonify({'ok': False, 'mensaje': 'DNI no pertenece al requerimiento seleccionado o está anulado.'})
 
-            req_real = clean(row_get(r, 'requerimiento')) or req
+            req_real = clean(r['requerimiento'] if 'requerimiento' in r.keys() else req) or req
             med = con.execute("""
                 SELECT * FROM contratacion_medica
-                WHERE dni=? AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
+                WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
                 ORDER BY id DESC LIMIT 1
             """, (dni, req_real)).fetchone()
-            trabajador_base = con.execute('SELECT * FROM trabajadores WHERE dni=? LIMIT 1', (dni,)).fetchone()
+            if not med and normalizar_ticket(req_real) != normalizar_ticket(req):
+                med = con.execute("""
+                    SELECT * FROM contratacion_medica
+                    WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                    ORDER BY id DESC LIMIT 1
+                """, (dni, req)).fetchone()
 
-            def pick(*vals):
-                for val in vals:
-                    if not es_valor_incompleto(val):
-                        return clean(val)
-                return ''
+            def rg(row, campo, default=''):
+                try:
+                    return row[campo] if row and campo in row.keys() and row[campo] is not None else default
+                except Exception:
+                    return default
 
-            foto_ruta = pick(row_get(r, 'foto_ruta'), row_get(trabajador_base, 'foto_ruta'))
-            trabajador = pick(row_get(r, 'trabajador'), row_get(r, 'nombre'), row_get(r, 'nombre_completo'), row_get(trabajador_base, 'nombre'), row_get(trabajador_base, 'trabajador'))
-            empresa = pick(row_get(r, 'empresa'), row_get(trabajador_base, 'empresa'))
-            area = pick(row_get(r, 'area'), row_get(trabajador_base, 'area'))
-            cargo = pick(row_get(r, 'cargo'), row_get(trabajador_base, 'cargo'))
-
+            foto_ruta = clean(rg(r, 'foto_ruta'))
+            data_med = {k: rg(med, k) for k in med.keys()} if med else {}
+            trabajador = clean(rg(r, 'trabajador')) or clean(rg(r, 'nombre')) or 'PENDIENTE COMPLETAR'
             return jsonify({
                 'ok': True,
                 'postulante': {
-                    'id': row_get(r, 'id'),
+                    'id': rg(r, 'id'),
                     'dni': dni,
-                    'trabajador': trabajador or 'PENDIENTE COMPLETAR',
+                    'trabajador': trabajador,
                     'requerimiento': req_real,
-                    'empresa': empresa,
-                    'area': area,
-                    'cargo': cargo,
-                    'actividad': pick(row_get(r, 'actividad'), row_get(trabajador_base, 'actividad')),
-                    'fecha_ingreso': pick(row_get(r, 'fecha_ingreso'), row_get(trabajador_base, 'fecha_ingreso')),
+                    'empresa': rg(r, 'empresa'),
+                    'area': rg(r, 'area'),
+                    'cargo': rg(r, 'cargo'),
+                    'actividad': rg(r, 'actividad'),
+                    'fecha_ingreso': rg(r, 'fecha_ingreso'),
                     'foto': bool(foto_ruta),
                     'foto_url': ('/foto/' + dni) if foto_ruta else '',
-                    'aptitud': pick(row_get(med, 'aptitud'), row_get(med, 'estado'), row_get(r, 'estado_medico')) or 'PENDIENTE',
-                    'estado': pick(row_get(med, 'estado'), row_get(r, 'estado_medico')) or 'PENDIENTE',
-                    'medica': row_to_dict(med) if med else {}
+                    'aptitud': rg(med, 'aptitud', '') or rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
+                    'estado': rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
+                    'medica': data_med
                 }
             })
     except Exception as e:
