@@ -10151,6 +10151,7 @@ html,body{overflow-x:hidden!important;}
         except Exception:
             pass
         content=wrap(f"""
+        {estilos_tabla_estandar_postulantes()}
         <style>
           .ia-hero{{display:flex;justify-content:space-between;gap:18px;align-items:center;background:linear-gradient(135deg,#062b24,#0f766e);color:white;border-radius:24px;padding:26px;margin-bottom:18px;box-shadow:0 18px 38px rgba(15,118,110,.22)}}
           .ia-hero h1{{color:white!important;margin:0;font-size:30px}} .ia-hero p{{color:#d9fff6;margin:8px 0 0}}
@@ -10748,7 +10749,7 @@ html,body{overflow-x:hidden!important;}
                 f"data-empresa='{h(row_get(r,'empresa'))}' data-area='{h(row_get(r,'area'))}' data-cargo='{h(row_get(r,'cargo'))}' "
                 f"data-foto-url='{h(foto_url_r) if foto_r else ''}' onclick=\"event.stopPropagation();abrirModalMedica('{h(dni_r)}');return false;\">➕</label>"
             )
-            med_table_rows.append(fila_estandar_postulante(r, req=req_r, medico_ok=med_ok, checkbox_name='ingreso_ids', extra_action=extra_med))
+            med_table_rows.append(fila_estandar_postulante(r, req=req_r, medico_ok=med_ok, checkbox_name='ingreso_ids', extra_action=extra_med, idx=len(med_table_rows)+1))
 
         medica_json = json.dumps(medica_data, ensure_ascii=False)
         if req_actual:
@@ -10759,8 +10760,9 @@ html,body{overflow-x:hidden!important;}
         med_rows=''.join([f"""\n          <tr>\n            <td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td>\n            <td>{h(row_get(r,'fecha_registro'))}</td>\n            <td><b>{h(row_get(r,'dni'))}</b></td>\n            <td><b>{h(row_get(r,'trabajador'))}</b></td>\n            <td>{h(row_get(r,'requerimiento'))}</td>\n            <td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td>\n            <td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td>\n            <td>{h(row_get(r,'fecha_resultado'))}</td>\n            <td>{h(row_get(r,'fecha_vencimiento'))}</td>\n            <td><a class='med-pdf-btn' target='_blank' href='/admin/contratacion/medica/{r['id']}/pdf'>📄 Ver PDF</a></td>\n          </tr>\n        """ for r in medicas]) or "<tr><td colspan='10'>Sin evaluaciones médicas.</td></tr>"
 
         content=wrap(f"""
+        {estilos_tabla_estandar_postulantes()}
         <style>
-          .med-page-pro{{display:flex;flex-direction:column;gap:16px}}.std-actions{{display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap}}.std-ico{{width:32px;height:32px;border-radius:10px;border:1px solid #b8f0d2;background:#ecfdf5;color:#047857;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-weight:1000}}.std-ico:hover{{background:#008a48;color:#fff}}
+          .med-page-pro{{display:flex;flex-direction:column;gap:16px}}.med-filter-control{{height:50px;border:1px solid #dbe7ef;border-radius:14px;background:#fff;color:#071b34;padding:0 16px;font-weight:950;min-width:170px}}.med-postulantes-card{{margin-top:0!important}}.std-actions{{display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap}}.std-ico{{width:32px;height:32px;border-radius:10px;border:1px solid #b8f0d2;background:#ecfdf5;color:#047857;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-weight:1000}}.std-ico:hover{{background:#008a48;color:#fff}}
           .med-page-pro .dash-hero{{background:#fff;border:1px solid #d7e5ef;border-radius:24px;padding:26px 30px;box-shadow:0 16px 35px rgba(15,23,42,.06)}}
           .med-page-pro .dash-hero h1{{color:#007a3d;font-size:34px;margin:0 0 8px;font-weight:1000;letter-spacing:-.5px}}
           .med-filter-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:16px 18px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}
@@ -10843,14 +10845,6 @@ html,body{overflow-x:hidden!important;}
           .med-form-grid input:focus,.med-form-grid select:focus,.med-form-grid textarea:focus{{border-color:#00a862;box-shadow:0 0 0 4px rgba(0,168,98,.10)}}
           .med-form-grid .full,.med-form-grid .span-all{{grid-column:1/-1}}
           .med-modal-check{{display:none}}.med-modal{{position:fixed;inset:0;background:rgba(15,23,42,.58);z-index:9999;display:none;align-items:center;justify-content:center;padding:28px 22px;overflow:auto}}.med-modal-check:checked + .med-modal{{display:flex}}.med-modal-card{{width:min(1120px,96vw);max-height:92vh;background:#fff;border-radius:24px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.35);overflow:auto}}.med-modal-head{{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border-bottom:1px solid #e5eef6;background:#fbfffd}}.med-modal-head h2{{margin:0;color:#071b34;font-weight:1000}}.med-close{{cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;border-radius:12px;padding:10px 16px;font-weight:1000;box-shadow:0 10px 20px rgba(0,138,72,.18)}}.med-modal-card .med-selected{{margin:18px 24px}}.med-modal-card #form_medica{{margin:18px 24px 24px!important}}
-
-          /* ===== Evaluación médica alineada a Indumentaria/EPP ===== */
-          .med-toolbar-card{background:#fff;border:1px solid #dbe7ef;border-radius:28px;padding:26px 28px;box-shadow:0 16px 38px rgba(15,23,42,.06);display:grid;grid-template-columns:minmax(280px,1fr) minmax(300px,1fr) 160px;gap:22px;align-items:end}
-          .med-toolbar-field{display:grid;gap:10px}.med-toolbar-field label{font-size:14px;text-transform:uppercase;color:#062b54;font-weight:1000;letter-spacing:-.2px}.med-toolbar-field input,.med-toolbar-field select{height:54px;border:1.5px solid #c8d9ee;border-radius:16px;padding:0 18px;font-weight:850;color:#0b2742;background:#fff;outline:none}.med-toolbar-field input:focus,.med-toolbar-field select:focus{border-color:#0bbf72;box-shadow:0 0 0 4px rgba(11,191,114,.12)}
-          .med-toolbar-action label{font-size:14px;text-transform:uppercase;color:#062b54;font-weight:1000;display:block;margin-bottom:10px}.med-btn-green{height:64px;min-width:140px;border:0;border-radius:18px;background:#0cab66;color:#fff;font-weight:1000;font-size:16px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;cursor:pointer;box-shadow:0 18px 34px rgba(11,171,102,.24)}.med-btn-green:hover{background:#008a48;color:#fff}
-          .med-table-card{padding:22px 18px 0!important;border-radius:28px!important}.med-table-head{padding:0 8px 14px!important;margin-bottom:8px!important}.med-table-head h3{color:#062b54!important;font-size:26px!important;letter-spacing:-.7px!important}.med-scroll{border-radius:14px!important;border:1px solid #dbe7ef!important;overflow:auto!important}.med-grid-table{min-width:1450px!important;font-size:13px!important}.med-grid-table th{background:#058843!important;color:#fff!important;font-size:15px!important;padding:18px 12px!important;text-align:center!important}.med-grid-table td{font-size:13px!important;padding:14px 10px!important}.med-grid-table tr{height:auto!important;max-height:none!important}.med-grid-table .std-sel{width:54px!important;min-width:54px!important;max-width:54px!important}.med-grid-table th:nth-child(1),.med-grid-table td:nth-child(1){width:54px!important;min-width:54px!important;max-width:54px!important}.med-grid-table th:nth-child(2),.med-grid-table td:nth-child(2){width:70px!important;min-width:70px!important;max-width:70px!important}.med-grid-table th:nth-child(3),.med-grid-table td:nth-child(3){width:76px!important;min-width:76px!important;max-width:76px!important}.med-grid-table th:nth-child(5),.med-grid-table td:nth-child(5){width:180px!important;min-width:180px!important;max-width:180px!important}
-          @media(max-width:1100px){{.med-toolbar-card{{grid-template-columns:1fr}}.med-toolbar-action .med-btn-green{{width:100%}}}}
-
           @media(max-width:1100px){{.med-kpis{{grid-template-columns:repeat(2,1fr)}}.med-filter-grid,.med-form-grid,.med-selected,.med-person{{grid-template-columns:1fr}}.med-form-grid b,.med-filter-grid b{{text-align:left}}}}
         </style>
 
@@ -10865,16 +10859,17 @@ html,body{overflow-x:hidden!important;}
             <div class='med-kpi danger'><span class='med-ico'><svg viewBox='0 0 24 24'><path d='m15 9-6 6'/><path d='m9 9 6 6'/><path d='M7.8 2h8.4L22 7.8v8.4L16.2 22H7.8L2 16.2V7.8Z'/></svg></span><div><small>No aptos/vencidos</small><b>{no_aptos_med_req + vencidos_med_req}</b></div></div>
           </div>
 
-          <div class='med-toolbar-card'>
-            <div class='med-toolbar-field'><label>Buscar por DNI</label><input id='med_buscar_tabla' oninput="filtrarTabla(this,'tabla_medica_postulantes')" placeholder='Buscar por DNI'></div>
-            <div class='med-toolbar-field'><label>Filtrar por estado</label><select onchange="filtrarTabla(this,'tabla_medica_postulantes')"><option>Todos los estados</option><option>APTO</option><option>PENDIENTE</option><option>NO APTO</option><option>RESTRICCIÓN</option><option>OBSERVADO</option><option>HABILITADO</option></select></div>
-            <div class='med-toolbar-action'><label>Registrar</label><button type='button' class='med-btn-green' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(window.MEDICA_POSTULANTES && window.MEDICA_POSTULANTES.length===1){{seleccionarMedico(window.MEDICA_POSTULANTES[0].dni);}} if(x){{x.focus(); if((x.value||"").replace(/\D/g,"").length===8) buscarMedicaPorDni(x.value);}}}},80)'>Registrar</button></div>
-          </div>
-
-          <div class='med-table-card'>
-            <div class='med-table-head'><h3>LISTA DE POSTULANTES</h3><button type='button' class='med-btn-green' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(x) x.focus();}},80)'>Registrar</button></div>
-            <div class='med-scroll'>
-              <table id='tabla_medica_postulantes' class='med-grid-table'>
+          <div class='std-card med-postulantes-card'>
+            <div class='std-card-head'>
+              <h3>LISTA DE POSTULANTES</h3>
+              <div class='std-head-actions'>
+                <input id='med_buscar_tabla' oninput="filtrarTabla(this,'tabla_medica_postulantes')" placeholder='Buscar por DNI' class='med-filter-control'>
+                <select onchange="filtrarTabla(this,'tabla_medica_postulantes')" class='med-filter-control'><option>Todos los estados</option><option>APTO</option><option>PENDIENTE</option><option>NO APTO</option><option>RESTRICCIÓN</option></select>
+                <button type='button' class='std-head-btn green' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(window.MEDICA_POSTULANTES && window.MEDICA_POSTULANTES.length===1){{seleccionarMedico(window.MEDICA_POSTULANTES[0].dni);}} if(x){{x.focus(); if((x.value||"").replace(/\D/g,"").length===8) buscarMedicaPorDni(x.value);}}}},80)'>Registrar</button>
+              </div>
+            </div>
+            <div class='std-table-wrap'>
+              <table id='tabla_medica_postulantes' class='std-table'>
                 {tabla_estandar_postulantes_header('tabla_medica_postulantes')}
                 {med_table_html}
               </table>
