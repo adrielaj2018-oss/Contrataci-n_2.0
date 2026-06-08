@@ -10039,6 +10039,205 @@ html,body{overflow-x:hidden!important;}
           <p>LISTO: datos completos y sin bloqueos. PENDIENTE: faltan datos, firma, checklist o validación. BLOQUEADO: observación Nivel 3 activa o DNI inválido.</p>
         </div>
         """)
+
+    # ============================================================
+    # UNIFORMIDAD GLOBAL DE MÓDULOS OPERATIVOS
+    # Aplica formato único: título + requerimiento, filtros, indicadores
+    # y lista estándar de postulantes por requerimiento.
+    # ============================================================
+    def _mod_estado_ok(nombre_mod, r, a):
+        mod = clean(nombre_mod).lower()
+        if mod == 'medica':
+            return bool(a.get('medico_ok'))
+        if mod == 'induccion':
+            return bool(a.get('induccion_ok'))
+        if mod == 'indumentaria':
+            return bool(a.get('indumentaria_ok'))
+        if mod == 'fotocheck':
+            return bool(a.get('fotocheck_ok'))
+        if mod == 'firma':
+            return _ok_estado(row_get(r,'estado_firma'))
+        if mod == 'documentos':
+            return bool(a.get('docs_ok'))
+        return a.get('avance', 0) >= 100
+
+    def _estado_txt(ok, positivo, pendiente='Pendiente'):
+        return f"<span class='u-ok'>✅ {h(positivo)}</span>" if ok else f"<span class='u-pend'>— {h(pendiente)}</span>"
+
+    def _modulos_faltantes(r, a):
+        faltan = []
+        if not a.get('medico_ok'): faltan.append('Evaluación médica')
+        if not a.get('induccion_ok'): faltan.append('Inducción')
+        if not a.get('indumentaria_ok'): faltan.append('Indumentaria')
+        if not a.get('fotocheck_ok'): faltan.append('Fotocheck')
+        if not _ok_estado(row_get(r,'estado_firma')): faltan.append('Firma contratos')
+        return ', '.join(faltan) if faltan else 'Completo'
+
+    def _uniform_module_name(sec_name):
+        nombres = {
+            'nuevos': ('Postulantes', '👥', 'Seleccione primero el requerimiento, revise postulantes y complete la ficha de ingreso.'),
+            'medica': ('Evaluación médica', '💓', 'Seleccione primero el requerimiento, revise postulantes y registre la evaluación médica.'),
+            'induccion': ('Inducción laboral', '🎓', 'Seleccione primero el requerimiento, revise postulantes y registre avance de inducción.'),
+            'indumentaria': ('Indumentaria y EPP', '🦺', 'Seleccione primero el requerimiento, revise postulantes y registre entrega.'),
+            'fotocheck': ('Fotocheck', '🪪', 'Seleccione primero el requerimiento, revise postulantes y emita fotocheck.'),
+            'firma': ('Firma contratos', '✍️', 'Seleccione primero el requerimiento, revise postulantes y gestione la firma.'),
+            'datos_completos': ('Doc. postulantes', '📁', 'Seleccione primero el requerimiento, revise postulantes y controle documentos.'),
+            'checklist': ('Doc. postulantes', '📁', 'Seleccione primero el requerimiento, revise postulantes y controle documentos.'),
+        }
+        return nombres.get(sec_name, ('Gestión del proceso', '📋', 'Seleccione primero el requerimiento y revise postulantes.'))
+
+    def _uniform_registro_url(sec_name):
+        # Mantiene el módulo actual y abre la acción principal sin botones duplicados en cabecera.
+        params = f"sec={h(sec_name)}&req={h(requerimiento_sel)}&registro=1"
+        return f"/admin/contratacion?{params}"
+
+    def _uniform_filtros_postulantes(lista):
+        q = clean(request.args.get('q')).upper()
+        est = clean(request.args.get('estado')).upper()
+        salida = []
+        for r,a in lista:
+            texto = f"{row_get(r,'dni')} {row_get(r,'trabajador')} {row_get(r,'cargo')} {row_get(r,'area')}".upper()
+            if q and q not in texto:
+                continue
+            if est:
+                ev = clean(a.get('estado_visual')).upper()
+                if est == 'COMPLETO' and a.get('avance',0) < 100:
+                    continue
+                if est == 'PENDIENTE' and a.get('avance',0) >= 100:
+                    continue
+                if est == 'OBSERVADO' and not a.get('obs'):
+                    continue
+                if est not in ('COMPLETO','PENDIENTE','OBSERVADO') and est not in ev:
+                    continue
+            salida.append((r,a))
+        return salida
+
+    def _uniform_table_rows(lista):
+        filas = []
+        for i,(r,a) in enumerate(lista[:300], 1):
+            dni = h(row_get(r,'dni'))
+            req = h(row_get(r,'requerimiento'))
+            faltan = h(_modulos_faltantes(r,a))
+            estado_cls = a.get('clase','warn')
+            estado_label = clean(a.get('estado_visual','Pendiente')).replace('🔴','').replace('🟡','').replace('🟢','').strip()
+            filas.append(f"""
+            <tr>
+              <td class='u-sel'><input type='checkbox' name='dni_sel' value='{dni}' data-dni='{dni}'></td>
+              <td><b>{dni}</b></td>
+              <td><b>{h(row_get(r,'trabajador'))}</b></td>
+              <td><b>{h(row_get(r,'cargo'))}</b></td>
+              <td><span class='estado-flujo {estado_cls}'>{h(estado_label)}</span></td>
+              <td><b>{a.get('avance',0)}%</b><div class='mini-progress'><span style='width:{a.get('avance',0)}%'></span></div></td>
+              <td>{_estado_txt(a.get('medico_ok'), 'Apto')}</td>
+              <td>{_estado_txt(a.get('induccion_ok'), 'Inducido')}</td>
+              <td>{_estado_txt(a.get('indumentaria_ok'), 'Entregado')}</td>
+              <td>{_estado_txt(a.get('fotocheck_ok'), 'Emitido')}</td>
+              <td>{_estado_txt(_ok_estado(row_get(r,'estado_firma')), 'Firmado')}</td>
+              <td><small>{faltan}</small></td>
+              <td class='actions-cell'>
+                <a class='icon-btn' title='Ver detalle del postulante' data-needselect='1' href='/admin/contratacion?sec=ficha&dni={dni}&req={req}'>👁️</a>
+                <a class='icon-btn' title='Editar / modificar' data-needselect='1' href='/admin/contratacion?sec=nuevos&dni={dni}&req={req}&edit=1'>✏️</a>
+                <a class='icon-btn' title='Ver ficha imprimible' data-needselect='1' href='/admin/contratacion?sec=ficha&dni={dni}&req={req}&print=1'>📄</a>
+                <a class='icon-btn' title='Ir a Postulantes' data-needselect='1' href='/admin/contratacion?sec=nuevos&dni={dni}&req={req}'>⋮</a>
+              </td>
+            </tr>""")
+        if not filas:
+            return "<tr><td colspan='13' class='u-empty'>Seleccione un requerimiento para visualizar postulantes.</td></tr>" if not requerimiento_sel else "<tr><td colspan='13' class='u-empty'>No hay postulantes para este requerimiento o filtro.</td></tr>"
+        return ''.join(filas)
+
+    def _render_uniform_operativo(sec_name):
+        titulo, icono, subtitulo = _uniform_module_name(sec_name)
+        # Lista filtrada solo por requerimiento seleccionado.
+        base = [(r,a) for r,a in analisis_postulantes if (not requerimiento_sel or clean(row_get(r,'requerimiento')) == requerimiento_sel)]
+        filtrados = _uniform_filtros_postulantes(base)
+        total = len(base)
+        completos = sum(1 for r,a in base if a.get('avance',0) >= 100 and not a.get('obs'))
+        pendientes = sum(1 for r,a in base if a.get('avance',0) < 100 and not a.get('obs'))
+        observados_count = sum(1 for r,a in base if a.get('obs'))
+        modulo_ok = sum(1 for r,a in base if _mod_estado_ok(sec_name, r, a))
+        opt_req_local = "<option value=''>Seleccione requerimiento</option>" + opt_req.replace(f"value='{h(requerimiento_sel)}'", f"value='{h(requerimiento_sel)}' selected")
+        filas = _uniform_table_rows(filtrados)
+        filtro_estado = clean(request.args.get('estado')).upper()
+        q = h(request.args.get('q'))
+        reg_url = _uniform_registro_url(sec_name)
+
+        return postulante_css_pro + f"""
+        <style>
+        .u-hero{{display:grid;grid-template-columns:1.2fr .95fr;gap:28px;align-items:center;background:linear-gradient(135deg,#fff,#effdf6);border:1px solid #bff3d2;border-radius:24px;padding:28px 32px;margin-bottom:22px;box-shadow:0 14px 36px rgba(6,78,59,.06)}}
+        .u-title{{display:flex;gap:18px;align-items:center}}.u-icon{{width:64px;height:64px;border-radius:22px;background:#dcfce7;border:1px solid #86efac;display:flex;align-items:center;justify-content:center;font-size:34px}}
+        .u-title h1{{margin:0;color:#062a4d;font-size:38px;font-weight:950;letter-spacing:-.8px}}.u-title p{{margin:8px 0 0;color:#415977;font-size:18px;font-weight:700;line-height:1.28}}
+        .u-req label,.u-filter label{{display:block;margin:0 0 8px;color:#052a4d;font-weight:950;font-size:13px;text-transform:uppercase}}.u-req select,.u-filter input,.u-filter select{{height:56px;width:100%;border:1px solid #d6e4f0;border-radius:16px;background:#fff;padding:0 18px;font-weight:850;color:#082344;font-size:15px}}
+        .u-filter-card{{background:#fff;border:1px solid #dceaf3;border-radius:22px;padding:22px 26px;margin-bottom:20px;box-shadow:0 12px 30px rgba(15,23,42,.06)}}.u-filter-grid{{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:end}}
+        .u-kpis{{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:18px;margin:0 0 20px}}.u-kpi{{background:#fff;border:1px solid #dceaf3;border-radius:22px;padding:22px;display:flex;gap:16px;align-items:center;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.u-kpi i{{width:58px;height:58px;border-radius:999px;background:#059669;color:#fff;display:flex;align-items:center;justify-content:center;font-size:25px;font-style:normal}}.u-kpi b{{display:block;font-size:32px;color:#082344;line-height:1}}.u-kpi span{{display:block;color:#405875;font-weight:850;margin-top:5px}}
+        .u-list-card{{background:#fff;border:1px solid #dceaf3;border-radius:22px;padding:22px 26px;box-shadow:0 12px 30px rgba(15,23,42,.06)}}.u-list-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}}.u-list-head h2{{margin:0;color:#062a4d;font-size:24px;font-weight:950}}.u-register{{text-decoration:none;border:0;border-radius:16px;background:linear-gradient(135deg,#08a95a,#047a43);color:#fff!important;padding:18px 28px;font-weight:950;box-shadow:0 14px 26px rgba(4,122,67,.22)}}
+        .u-table-wrap{{overflow:auto;border-radius:16px;border:1px solid #e2eef5}}.u-table{{width:100%;border-collapse:separate;border-spacing:0;min-width:1320px}}.u-table th{{background:#078f4d;color:white;padding:14px 12px;text-align:center;font-weight:950;font-size:13px}}.u-table td{{padding:14px 12px;border-bottom:1px solid #e3eef5;text-align:center;color:#09243d;font-weight:750;background:#fff}}.u-table td:nth-child(3),.u-table td:nth-child(4){{text-align:left}}.u-table tr:hover td{{background:#f7fffb}}.u-sel input{{width:18px;height:18px}}.u-empty{{padding:28px!important;text-align:center!important;color:#052a4d!important;font-weight:950!important;background:#f8fbfd!important}}.u-ok{{color:#057a43;font-weight:900}}.u-pend{{color:#64748b;font-weight:850}}
+        @media(max-width:900px){{.u-hero,.u-filter-grid,.u-kpis{{grid-template-columns:1fr}}.u-title h1{{font-size:30px}}}}
+        </style>
+        <section class='u-hero'>
+          <div class='u-title'><div class='u-icon'>{icono}</div><div><h1>{h(titulo)}</h1><p>{h(subtitulo)}</p></div></div>
+          <form method='get' class='u-req'>
+            <input type='hidden' name='sec' value='{h(sec_name)}'>
+            <label>1) Requerimiento</label>
+            <select name='req' onchange='this.form.submit()'>{opt_req_local}</select>
+          </form>
+        </section>
+
+        <section class='u-filter-card'>
+          <form method='get' class='u-filter-grid'>
+            <input type='hidden' name='sec' value='{h(sec_name)}'>
+            <input type='hidden' name='req' value='{h(requerimiento_sel)}'>
+            <div class='u-filter'><label>Buscar por DNI</label><input name='q' value='{q}' placeholder='DNI, trabajador, cargo, actividad...'></div>
+            <div class='u-filter'><label>Filtrar por estado</label>
+              <select name='estado' onchange='this.form.submit()'>
+                <option value='' {'selected' if not filtro_estado else ''}>Todos los estados</option>
+                <option value='COMPLETO' {'selected' if filtro_estado=='COMPLETO' else ''}>Completo</option>
+                <option value='PENDIENTE' {'selected' if filtro_estado=='PENDIENTE' else ''}>Pendiente</option>
+                <option value='OBSERVADO' {'selected' if filtro_estado=='OBSERVADO' else ''}>Observado</option>
+              </select>
+            </div>
+          </form>
+        </section>
+
+        <section class='u-kpis'>
+          <div class='u-kpi'><i>👥</i><div><b>{total}</b><span>Seleccionados</span></div></div>
+          <div class='u-kpi'><i>✅</i><div><b>{modulo_ok}</b><span>Completados del módulo</span></div></div>
+          <div class='u-kpi'><i>⏳</i><div><b>{pendientes}</b><span>Pendientes</span></div></div>
+          <div class='u-kpi'><i>⚠️</i><div><b>{observados_count}</b><span>Observados</span></div></div>
+        </section>
+
+        <section class='u-list-card'>
+          <div class='u-list-head'>
+            <h2>Lista de postulantes del requerimiento</h2>
+            <a class='u-register' href='{reg_url}'>Registrar {h(titulo.lower())}</a>
+          </div>
+          <div class='u-table-wrap'>
+            <table class='u-table'>
+              <thead><tr>
+                <th>Seleccionar</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th>
+                <th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Módulos faltantes</th><th>Acciones</th>
+              </tr></thead>
+              <tbody>{filas}</tbody>
+            </table>
+          </div>
+        </section>
+        <script>
+        document.addEventListener('click', function(e){{
+          const a = e.target.closest('[data-needselect]');
+          if(!a) return;
+          const tr = a.closest('tr');
+          const chk = tr ? tr.querySelector("input[type='checkbox']") : null;
+          if(chk && !chk.checked){{
+            e.preventDefault();
+            alert('Primero seleccione el postulante antes de realizar una acción.');
+          }}
+        }});
+        </script>
+        """
+
+    if sec in ('nuevos','medica','induccion','indumentaria','fotocheck','firma','datos_completos','checklist'):
+        content = _render_uniform_operativo(sec)
+        return render_page(content, active=f'Gestion Contratacion:{sec}')
+
     if sec=='dashboard':
         total_trab = len(trabajadores)
         total_req = len(requerimientos)
