@@ -10752,9 +10752,9 @@ html,body{overflow-x:hidden!important;}
 
         medica_json = json.dumps(medica_data, ensure_ascii=False)
         if req_actual:
-            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='14' class='std-empty'>No hay postulantes registrados para este requerimiento.</td></tr>"
+            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='8'>No hay postulantes registrados para este requerimiento.</td></tr>"
         else:
-            med_table_html = "<tr><td colspan='14' class='std-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</td></tr>"
+            med_table_html = "<tr><td colspan='8'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
 
         med_rows=''.join([f"""\n          <tr>\n            <td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td>\n            <td>{h(row_get(r,'fecha_registro'))}</td>\n            <td><b>{h(row_get(r,'dni'))}</b></td>\n            <td><b>{h(row_get(r,'trabajador'))}</b></td>\n            <td>{h(row_get(r,'requerimiento'))}</td>\n            <td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td>\n            <td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td>\n            <td>{h(row_get(r,'fecha_resultado'))}</td>\n            <td>{h(row_get(r,'fecha_vencimiento'))}</td>\n            <td><a class='med-pdf-btn' target='_blank' href='/admin/contratacion/medica/{r['id']}/pdf'>📄 Ver PDF</a></td>\n          </tr>\n        """ for r in medicas]) or "<tr><td colspan='10'>Sin evaluaciones médicas.</td></tr>"
 
@@ -10846,9 +10846,6 @@ html,body{overflow-x:hidden!important;}
           @media(max-width:1100px){{.med-kpis{{grid-template-columns:repeat(2,1fr)}}.med-filter-grid,.med-form-grid,.med-selected,.med-person{{grid-template-columns:1fr}}.med-form-grid b,.med-filter-grid b{{text-align:left}}}}
         </style>
 
-
-        {estilos_tabla_estandar_postulantes()}
-        <style>.med-mini-control{height:50px;border:1px solid #dbe7ef;border-radius:14px;background:#fff;color:#071b34;padding:0 14px;font-weight:950;min-width:170px}.medica-premium-lista{margin-top:16px}.medica-premium-lista .std-head-actions{justify-content:flex-end}</style>
         <div class='med-page-pro'>
           {modulo_requerimiento_header_html('🩺','Evaluación médica','Seleccione primero el requerimiento, revise postulantes y registre aptitud, restricciones y estado operativo.','medica', req_select_opts, req_actual)}
 
@@ -10860,24 +10857,14 @@ html,body{overflow-x:hidden!important;}
             <div class='med-kpi danger'><span class='med-ico'><svg viewBox='0 0 24 24'><path d='m15 9-6 6'/><path d='m9 9 6 6'/><path d='M7.8 2h8.4L22 7.8v8.4L16.2 22H7.8L2 16.2V7.8Z'/></svg></span><div><small>No aptos/vencidos</small><b>{no_aptos_med_req + vencidos_med_req}</b></div></div>
           </div>
 
-          <div class='std-card medica-premium-lista'>
-            <div class='std-card-head'>
-              <h3>LISTA DE POSTULANTES</h3>
-              <div class='std-head-actions'>
-                <input id='med_buscar_tabla' oninput="filtrarTabla(this,'tabla_medica_postulantes')" placeholder='Buscar por DNI' class='med-mini-control'>
-                <select onchange="filtrarTabla(this,'tabla_medica_postulantes')" class='med-mini-control'><option>Todos los estados</option><option>APTO</option><option>PENDIENTE</option><option>NO APTO</option><option>RESTRICCIÓN</option><option>Completo</option><option>En validación</option><option>Incompleto</option></select>
-                <button type='button' class='std-head-btn green' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(window.MEDICA_POSTULANTES && window.MEDICA_POSTULANTES.length===1){{seleccionarMedico(window.MEDICA_POSTULANTES[0].dni);}} if(x){{x.focus(); if((x.value||"").replace(/\D/g,"").length===8) buscarMedicaPorDni(x.value);}}}},80)'>Registrar</button>
-                <a class='std-head-btn' href='/admin/plantilla_gestion/contratacion'>▣ Exportar Excel</a>
-                <button type='button' class='std-head-btn' onclick='window.print()'>▣ Imprimir</button>
-              </div>
-            </div>
-            <div class='std-table-wrap'>
-              <table id='tabla_medica_postulantes' class='std-table'>
-                {tabla_estandar_postulantes_header('tabla_medica_postulantes')}
+          <div class='med-table-card'>
+            <div class='med-table-head'><h3>LISTA DE POSTULANTES</h3><div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap'><input id='med_buscar_tabla' oninput="filtrarTabla(this,'tabla_medica_postulantes')" placeholder='Buscar por DNI' style='height:42px;border:1px solid #cfe0ec;border-radius:12px;padding:0 14px;font-weight:850'><select onchange="filtrarTabla(this,'tabla_medica_postulantes')" style='height:42px;border:1px solid #cfe0ec;border-radius:12px;padding:0 14px;font-weight:850'><option>Todos los estados</option><option>APTO</option><option>PENDIENTE</option><option>NO APTO</option><option>RESTRICCIÓN</option></select><button type='button' class='c-btn' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(window.MEDICA_POSTULANTES && window.MEDICA_POSTULANTES.length===1){{seleccionarMedico(window.MEDICA_POSTULANTES[0].dni);}} if(x){{x.focus(); if((x.value||"").replace(/\D/g,"").length===8) buscarMedicaPorDni(x.value);}}}},80)'>Registrar</button></div></div>
+            <div class='med-scroll'>
+              <table id='tabla_medica_postulantes' class='med-grid-table'>
+                <tr><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Empresa</th><th>Requerimiento</th><th>Aptitud</th><th>Estado operativo</th><th>Resultado</th><th>Vencimiento</th><th>Acción</th></tr>
                 {med_table_html}
               </table>
             </div>
-            <div class='std-footnote'>ⓘ Lista médica unificada con el mismo diseño premium de los demás módulos.</div>
           </div>
 
           <input type='checkbox' id='modal_medica_registro' class='med-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='med-modal'><div class='med-modal-card'><div class='med-modal-head'><h2>Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar</label></div>
