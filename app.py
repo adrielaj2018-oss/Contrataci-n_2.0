@@ -9513,23 +9513,28 @@ def admin_contratacion():
 
     postulante_rows_360 = []
     for r,a in analisis_postulantes[:300]:
-        faltantes_txt = ', '.join(a['faltantes'][:5]) + ('...' if len(a['faltantes']) > 5 else '')
+        faltantes_txt = ', '.join(a['faltantes']) if a['faltantes'] else 'Ninguno'
         alerta_txt = f"{h(a['nivel'])} {h(a['motivo'])}" if a['obs'] else 'Sin alerta activa'
+        dni_r = h(row_get(r,'dni'))
+        req_r = h(row_get(r,'requerimiento'))
+        rid_r = h(row_get(r,'id'))
+        trabajador_r = h(row_get(r,'trabajador')) or 'PENDIENTE COMPLETAR'
+        cargo_r = h(row_get(r,'cargo')) or 'SIN CARGO'
         postulante_rows_360.append(f"""
-        <tr>
-          <td class='t-center'><b>{len(postulante_rows_360)+1}</b></td>
-          <td><div class='demo-avatar av1'>👤</div></td>
-          <td><b>{h(row_get(r,'dni'))}</b><small>{h(row_get(r,'tipo_ingreso'))}</small></td>
-          <td><b>{h(row_get(r,'trabajador'))}</b></td>
-          <td><b>{h(row_get(r,'cargo'))}</b><small>{h(row_get(r,'area'))}</small></td>
-          <td><span class='estado-flujo {a['clase']}'>{h(a['estado_visual'])}</span><small>{h(alerta_txt)}</small></td>
+        <tr data-dni='{dni_r}' data-estado='{h(a['estado_visual'])}'>
+          <td class='sel-cell'><input type='checkbox' name='ingreso_ids' value='{rid_r}'></td>
+          <td><b>{dni_r}</b></td>
+          <td class='name-cell'><b>{trabajador_r}</b><small>{h(row_get(r,'tipo_ingreso'))}</small></td>
+          <td><b>{cargo_r}</b><small>{h(row_get(r,'area'))}</small></td>
+          <td><span class='estado-flujo {a['clase']}'>{h(a['estado_visual']).replace('🟢 ','').replace('🟡 ','').replace('🔴 ','')}</span><small>{h(alerta_txt)}</small></td>
           <td><b>{a['avance']}%</b><div class='mini-progress'><span style='width:{a['avance']}%'></span></div></td>
-          <td>{'✅ Apto' if a['medico_ok'] else '❌ PENDIENTE'}</td>
-          <td>{'✅ Inducido' if a['induccion_ok'] else '— Pendiente'}</td>
-          <td>{'✅ Entregado' if a['indumentaria_ok'] else '— Pendiente'}</td>
-          <td>{'✅ Emitido' if a['fotocheck_ok'] else '— Pendiente'}</td>
-          <td>{'✅ Firmado' if _ok_estado(row_get(r,'estado_firma')) else '⏱ Pendiente'}</td>
-          <td class='actions-cell'><a class='icon-btn' title='Ver ficha 360°' href='/admin/contratacion?sec=ficha&dni={h(row_get(r,'dni'))}&req={h(row_get(r,'requerimiento'))}'>👁</a><a class='icon-btn' title='Documentos' href='/admin/contratacion?sec=datos_completos&req={h(row_get(r,'requerimiento'))}'>📄</a><a class='icon-btn' title='Más acciones' href='/admin/contratacion?sec=firma&req={h(row_get(r,'requerimiento'))}&dni={h(row_get(r,'dni'))}'>⋮</a></td>
+          <td class='faltantes-cell'>{h(faltantes_txt)}</td>
+          <td class='actions-cell'>
+            <a class='icon-btn' title='Ver detalle del postulante' href='/admin/contratacion?sec=ficha&dni={dni_r}&req={req_r}'>👁</a>
+            <a class='icon-btn' title='Editar / modificar' href='/admin/contratacion?sec=nuevos&req={req_r}&dni={dni_r}'>✎</a>
+            <a class='icon-btn' title='Ver ficha del trabajador para impresión' target='_blank' href='/admin/contratacion?sec=ficha&dni={dni_r}&req={req_r}&print=1'>📄</a>
+            <a class='icon-btn' title='Ir al módulo Postulantes' href='/admin/contratacion?sec=nuevos&req={req_r}'>⋮</a>
+          </td>
         </tr>""")
     postulante_tabla_360_html = ''.join(postulante_rows_360)
     demo_postulantes_360 = not postulante_tabla_360_html
@@ -9537,16 +9542,25 @@ def admin_contratacion():
         # DEMOS VISUALES: solo se muestran en pantalla cuando no hay postulantes reales.
         # No se guardan en BD ni alteran los indicadores reales del requerimiento.
         post_completos_demo, post_aptos_demo, post_pend_docs_demo, post_pend_firma_demo, post_inducidos_demo, post_alerta_demo, avance_req_demo = 1, 2, 2, 2, 1, 1, 72
-        postulante_tabla_360_html = '''
-        <tr class="demo-row"><td class="t-center">1</td><td><div class="demo-avatar av1">👨</div></td><td><b>74324033</b></td><td><b>PEREZ GARCIA</b><small>Juan Carlos</small></td><td><b>OPERARIO DE<br>CAMPO</b></td><td><span class="estado-flujo warn">En validación</span></td><td><b>75%</b><div class="mini-progress"><span style="width:75%"></span></div></td><td><span class="dot-ok">✓</span> Apto</td><td><span class="dot-warn">!</span> 2</td><td><span class="dot-ok">✓</span><small>Generado</small></td><td><span class="dot-warn">◷</span><small>Pendiente</small></td><td><span class="dot-muted">−</span><small>Pendiente</small></td><td><span class="dot-muted">−</span><small>Pendiente</small></td><td class="actions-cell"><a class="icon-btn">◎</a><a class="icon-btn">▤</a><a class="icon-btn">✎</a><a class="icon-btn">⋮</a></td></tr>
-        <tr class="demo-row"><td class="t-center">2</td><td><div class="demo-avatar av2">👨</div></td><td><b>80234111</b></td><td><b>RAMOS LOPEZ</b><small>Miguel Angel</small></td><td><b>SUPERVISOR DE<br>CAMPO</b></td><td><span class="estado-flujo ok">Completo</span></td><td><b>100%</b><div class="mini-progress"><span style="width:100%"></span></div></td><td><span class="dot-ok">✓</span> Apto</td><td><span class="dot-ok">✓</span><small>OK</small></td><td><span class="dot-ok">✓</span><small>Generado</small></td><td><span class="dot-ok">✓</span><small>Firmado</small></td><td><span class="dot-ok">✓</span><small>Emitido</small></td><td><span class="dot-ok">✓</span><small>Inducido</small></td><td class="actions-cell"><a class="icon-btn">◎</a><a class="icon-btn">▤</a><a class="icon-btn">✎</a><a class="icon-btn">⋮</a></td></tr>
-        <tr class="demo-row"><td class="t-center">3</td><td><div class="demo-avatar av3">👩</div></td><td><b>71234567</b></td><td><b>QUISPE ROJAS</b><small>María Fernanda</small></td><td><b>COSECHADOR</b></td><td><span class="estado-flujo danger">Incompleto</span></td><td><b>40%</b><div class="mini-progress danger"><span style="width:40%"></span></div></td><td><span class="dot-bad">×</span> No apto</td><td><span class="dot-bad">!</span> 4</td><td><span class="dot-muted">−</span><small>Pendiente</small></td><td><span class="dot-muted">−</span><small>Pendiente</small></td><td><span class="dot-muted">−</span><small>Pendiente</small></td><td><span class="dot-muted">−</span><small>Pendiente</small></td><td class="actions-cell"><a class="icon-btn">◎</a><a class="icon-btn">▤</a><a class="icon-btn">✎</a><a class="icon-btn">⋮</a></td></tr>
-        '''
+        postulante_tabla_360_html = """
+        <tr class='demo-row'><td class='sel-cell'><input type='checkbox' name='ingreso_ids' value='demo1'></td><td><b>74324033</b></td><td class='name-cell'><b>PEREZ GARCIA</b><small>Juan Carlos</small></td><td><b>OPERARIO DE CAMPO</b></td><td><span class='estado-flujo warn'>En validación</span></td><td><b>75%</b><div class='mini-progress'><span style='width:75%'></span></div></td><td class='faltantes-cell'>Inducción, Indumentaria, Fotocheck, Contratos</td><td class='actions-cell'><a class='icon-btn' title='Ver detalle'>👁</a><a class='icon-btn' title='Editar'>✎</a><a class='icon-btn' title='Ficha impresión'>📄</a><a class='icon-btn' title='Ir a postulantes'>⋮</a></td></tr>
+        <tr class='demo-row'><td class='sel-cell'><input type='checkbox' name='ingreso_ids' value='demo2'></td><td><b>80234111</b></td><td class='name-cell'><b>RAMOS LOPEZ</b><small>Miguel Angel</small></td><td><b>SUPERVISOR DE CAMPO</b></td><td><span class='estado-flujo ok'>Completo</span></td><td><b>100%</b><div class='mini-progress'><span style='width:100%'></span></div></td><td class='faltantes-cell'>Ninguno</td><td class='actions-cell'><a class='icon-btn' title='Ver detalle'>👁</a><a class='icon-btn' title='Editar'>✎</a><a class='icon-btn' title='Ficha impresión'>📄</a><a class='icon-btn' title='Ir a postulantes'>⋮</a></td></tr>
+        <tr class='demo-row'><td class='sel-cell'><input type='checkbox' name='ingreso_ids' value='demo3'></td><td><b>71234567</b></td><td class='name-cell'><b>QUISPE ROJAS</b><small>María Fernanda</small></td><td><b>COSECHADOR</b></td><td><span class='estado-flujo danger'>Incompleto</span></td><td><b>40%</b><div class='mini-progress danger'><span style='width:40%'></span></div></td><td class='faltantes-cell'>Evaluación médica, Inducción, Indumentaria, Fotocheck, Contratos</td><td class='actions-cell'><a class='icon-btn' title='Ver detalle'>👁</a><a class='icon-btn' title='Editar'>✎</a><a class='icon-btn' title='Ficha impresión'>📄</a><a class='icon-btn' title='Ir a postulantes'>⋮</a></td></tr>
+        """
 
     postulante_css_pro = """
     <style>
     :root{--prz-green:#058846;--prz-green2:#10b981;--prz-dark:#064e3b;--prz-mint:#ecfdf5;--prz-soft:#f7fffb;--prz-border:#c7f3d8;--prz-line:#dbeee5}
     .prz-postulantes-pro{background:linear-gradient(180deg,#ffffff 0%,#fbfffd 100%);border:1px solid var(--prz-line);border-radius:22px;box-shadow:0 16px 42px rgba(6,78,59,.08);padding:18px;margin:0 0 18px 0}
+    .tabla-postulantes-estandar th{background:#058846!important;color:#fff!important;text-align:center!important;white-space:nowrap!important}
+    .tabla-postulantes-estandar td{vertical-align:middle!important;text-align:center!important}
+    .tabla-postulantes-estandar .sel-cell{width:46px!important}
+    .tabla-postulantes-estandar .name-cell{text-align:left!important;min-width:170px!important}
+    .tabla-postulantes-estandar .name-cell small,.tabla-postulantes-estandar td small{display:block;color:#486179;font-weight:800;margin-top:4px}
+    .tabla-postulantes-estandar .faltantes-cell{text-align:left!important;min-width:250px!important;color:#334155!important;font-weight:800!important}
+    .actions-cell{white-space:nowrap!important;min-width:170px!important}
+    .actions-cell .icon-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:36px!important;height:36px!important;border:1px solid #a7f3d0!important;border-radius:10px!important;background:#f8fffb!important;color:#0b253a!important;text-decoration:none!important;margin:2px!important;font-size:17px!important}
+    .actions-cell .icon-btn:hover{background:#ecfdf5!important;border-color:#059669!important;transform:translateY(-1px)}
     .prz-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
     .prz-panel-head h3{margin:0;color:#067a43;font-size:20px;font-weight:950;letter-spacing:-.02em}
     .prz-panel-head p{margin:4px 0 0;color:#52637a;font-size:13px;font-weight:700}
@@ -9701,7 +9715,7 @@ def admin_contratacion():
     </div>
     <div class='control-360-card table-wrap'>
       <div class='control-360-title'><div><h3>LISTA DE POSTULANTES</h3><p>Semáforo por trabajador: datos obligatorios, médico, documentos, contrato, firma, fotocheck e inducción. {'Vista demo referencial: no guarda datos.' if demo_postulantes_360 else ''}</p></div><div class='quick-actions-360'><a class='c-btn gray' href='/admin/contratacion?sec=datos_completos&req={h(requerimiento_sel)}'>📋 Ver ficha 360°</a><a class='c-btn gray' href='/admin/contratacion?sec=medica&req={h(requerimiento_sel)}'>🩺 Médico</a><a class='c-btn gray' href='/admin/contratacion?sec=induccion&req={h(requerimiento_sel)}'>🎓 Inducción</a></div></div>
-      <table id='tabla_360_postulantes' class='c-table tabla-360'><tr><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma de contratos</th><th>Acciones</th></tr>{postulante_tabla_360_html}</table>
+      <table id='tabla_360_postulantes' class='c-table tabla-360 tabla-postulantes-estandar'><tr><th><input type='checkbox' onclick="this.closest(&quot;table&quot;).querySelectorAll(&quot;input[type=checkbox]&quot;).forEach(x=>x.checked=this.checked)"></th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Módulos por los que falta pasar</th><th>Acciones</th></tr>{postulante_tabla_360_html}</table>
     </div>
     """
     req_detalle_txt = (f"{req_sel_row['requerimiento']} · {req_sel_row['empresa']} · {req_sel_row['area']} · {req_sel_row['actividad']}" if req_sel_row else "Seleccione un requerimiento para activar la ficha")
