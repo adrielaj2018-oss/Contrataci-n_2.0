@@ -9311,6 +9311,7 @@ def admin_contratacion():
     def h(v):
         return html.escape(str(v or ''))
     requerimiento_sel = clean(request.args.get('req'))
+    ticket_sel = requerimiento_sel  # compatibilidad interna: antes algunos bloques usaban ticket_sel
     ingresos_mostrar = [r for r in ingresos if not requerimiento_sel or clean(r['requerimiento']) == requerimiento_sel]
     trabajadores_proceso_mostrar = [r for r in trabajadores_proceso if not requerimiento_sel or clean(r['requerimiento']) == requerimiento_sel]
     req_sel_row = None
