@@ -3008,6 +3008,55 @@ def tabla_estandar_postulantes_header(tabla_id):
     return f"""<tr><th class='std-sel'><input type='checkbox' onclick=\"document.querySelectorAll('#{tabla_id} input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)\"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr>"""
 
 
+def fila_estandar_postulante_eval_medica(row, req='', medico_ok=None, extra_action=''):
+    """Fila compacta para Evaluación Médica, con el mismo estándar visual de Postulantes
+    pero sin columnas N° ni Foto, tal como la lista principal solicitada.
+    """
+    estado, pct, faltan = modulos_faltantes_postulante(row, medico_ok=medico_ok)
+    cls = 'ok' if estado == 'COMPLETO' else ('warn' if pct else 'bad')
+    dni = h(row_get(row, 'dni'))
+    trabajador = h(row_get(row, 'trabajador') or 'PENDIENTE COMPLETAR')
+    cargo = h(row_get(row, 'cargo'))
+
+    med_txt = estado_norm(row_get(row,'estado_medico') or row_get(row,'aptitud_medica'))
+    med_ok = bool(medico_ok) if medico_ok is not None else med_txt in ('APTO','HABILITADO','APROBADO','APTO CON RESTRICCIONES')
+    med_cell = _std_mod_cell('✅' if med_ok else '❌', 'APTO' if med_ok else 'PENDIENTE', 'ok' if med_ok else 'bad')
+
+    indu_ok = flujo_induccion_ok(row)
+    indu_cell = _std_mod_cell('✅' if indu_ok else '➖', 'Inducido' if indu_ok else 'Pendiente', 'ok' if indu_ok else 'pendiente')
+
+    indum_ok = flujo_indumentaria_ok(row)
+    indum_cell = _std_mod_cell('✅' if indum_ok else '➖', 'ENTREGADO' if indum_ok else 'PENDIENTE', 'ok' if indum_ok else 'pendiente')
+
+    foto_estado = estado_norm(row_get(row,'fotocheck_estado'))
+    foto_ok = foto_estado in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','OK')
+    foto_cell = _std_mod_cell('✅' if foto_ok else '➖', 'Emitido' if foto_ok else 'Pendiente', 'ok' if foto_ok else 'pendiente')
+
+    firma_estado = estado_norm(row_get(row,'estado_documentos'))
+    firma_ok = firma_estado in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK')
+    firma_cell = _std_mod_cell('✅' if firma_ok else '🕘', 'Firmado' if firma_ok else 'Pendiente', 'ok' if firma_ok else 'pendiente')
+
+    return f"""
+      <tr data-dni='{dni}' data-estado='{h(estado)}'>
+        <td><b>{dni}</b></td>
+        <td class='std-name'><b>{trabajador}</b></td>
+        <td class='std-cargo'>{cargo}</td>
+        <td><span class='std-pill {cls}'>{'Completo' if estado=='COMPLETO' else ('En validación' if pct else 'Incompleto')}</span></td>
+        <td><b>{pct}%</b><div class='std-bar'><span style='width:{pct}%'></span></div></td>
+        <td>{med_cell}</td>
+        <td>{indu_cell}</td>
+        <td>{indum_cell}</td>
+        <td>{foto_cell}</td>
+        <td>{firma_cell}</td>
+        <td>{acciones_estandar_postulante(row, req=req, extra=extra_action)}</td>
+      </tr>
+    """
+
+
+def tabla_estandar_postulantes_header_eval_medica():
+    return """<tr><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr>"""
+
+
 def estilos_tabla_estandar_postulantes():
     return """
     <style>
@@ -3016,6 +3065,18 @@ def estilos_tabla_estandar_postulantes():
     .std-card-head h2,.std-card-head h3{margin:0;color:#071b34;font-size:22px;font-weight:1000;letter-spacing:-.2px}
     .std-head-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.std-head-btn{height:50px;border-radius:14px;border:1px solid #dbe7ef;background:#fff;color:#071b34;padding:0 18px;text-decoration:none;display:inline-flex;align-items:center;gap:10px;font-weight:950;box-shadow:0 10px 24px rgba(15,23,42,.04)}.std-head-btn.green{background:#008a48;color:#fff;border-color:#008a48;box-shadow:0 12px 24px rgba(0,138,72,.20)}
     .std-table-wrap{overflow:auto;padding:0 14px 14px}.std-table{width:100%;min-width:1320px;border-collapse:separate;border-spacing:0}.std-table th{background:#008a48;color:#fff;padding:15px 12px;text-align:center;font-weight:1000;border-right:1px solid rgba(255,255,255,.18);white-space:nowrap}.std-table th:first-child{border-top-left-radius:14px}.std-table th:last-child{border-top-right-radius:14px}.std-table td{padding:15px 12px;border-bottom:1px solid #e1ebf3;border-right:1px solid #e1ebf3;text-align:center;vertical-align:middle;color:#071b34;font-weight:850;background:#fff}.std-table tr:nth-child(even) td{background:#f8fbfd}.std-table tr:hover td{background:#ecfdf5}.std-sel{width:38px}.std-num{font-weight:1000}.std-avatar{display:inline-grid;place-items:center;width:54px;height:54px;border-radius:14px;background:#ecfdf5;border:1px solid #86efac;font-size:26px}.std-name{font-weight:1000;line-height:1.18;min-width:120px}.std-cargo{font-weight:1000;line-height:1.2}.std-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:10px 18px;font-weight:1000;min-width:104px}.std-pill.ok{background:#dcfce7;color:#047857}.std-pill.warn{background:#fef3c7;color:#d97706}.std-pill.bad{background:#fee2e2;color:#ef4444}.std-bar{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin:9px auto 0;max-width:110px}.std-bar span{display:block;height:100%;background:#008a48;border-radius:999px}.std-mod{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-weight:900;min-width:88px}.std-mod b{font-size:17px;line-height:1}.std-mod small{font-size:12px;color:#425572;font-weight:850}.std-mod.ok small{color:#047857}.std-mod.bad small{color:#475569}.std-mod.pendiente b{color:#6d50d9}.std-actions{display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:nowrap}.std-ico{width:34px;height:34px;border-radius:10px;border:1px solid #a7f3d0;background:#ecfdf5;color:#071b34;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-weight:1000;font-size:17px}.std-ico:hover{background:#008a48;color:#fff}.std-empty{padding:28px!important;text-align:center!important;color:#64748b!important;font-weight:900!important}.std-footnote{padding:0 18px 16px;color:#64748b;font-weight:850}
+
+    .med-postulantes-card{border-radius:22px!important;background:#fff!important;border:1px solid #dbe7ef!important;box-shadow:0 14px 34px rgba(15,23,42,.07)!important;overflow:hidden!important}
+    .med-postulantes-card .std-card-head{padding:22px 18px 16px!important}
+    .med-postulantes-card .std-card-head h3{font-size:22px!important;color:#071b34!important}
+    .med-postulantes-card .std-head-actions{gap:14px!important}
+    .med-postulantes-card .std-head-btn{height:50px!important;border-radius:12px!important;background:#fff!important;color:#10253d!important;border:1px solid #dce6ee!important;font-size:15px!important}
+    .med-postulantes-card .std-head-btn.green{background:#008a48!important;color:#fff!important;border-color:#008a48!important}
+    .med-postulantes-card .std-table-wrap{padding:0 18px 12px!important;overflow-x:auto!important}
+    .med-postulantes-card table.std-table{min-width:1160px!important;border-collapse:separate!important;border-spacing:0!important}
+    .med-postulantes-card table.std-table th{background:linear-gradient(180deg,#00894c,#006f3e)!important;padding:16px 14px!important;font-size:15px!important}
+    .med-postulantes-card table.std-table td{padding:20px 14px!important;font-size:15px!important}
+    .med-postulantes-card .std-footnote{padding:8px 18px 18px!important;color:#64748b!important;font-weight:850!important}
     </style>
     """
 
@@ -10749,13 +10810,13 @@ html,body{overflow-x:hidden!important;}
                 f"data-empresa='{h(row_get(r,'empresa'))}' data-area='{h(row_get(r,'area'))}' data-cargo='{h(row_get(r,'cargo'))}' "
                 f"data-foto-url='{h(foto_url_r) if foto_r else ''}' onclick=\"event.stopPropagation();abrirModalMedica('{h(dni_r)}');return false;\">➕</label>"
             )
-            med_table_rows.append(fila_estandar_postulante(r, req=req_r, medico_ok=med_ok, checkbox_name='ingreso_ids', extra_action=extra_med, idx=len(med_table_rows)+1))
+            med_table_rows.append(fila_estandar_postulante_eval_medica(r, req=req_r, medico_ok=med_ok, extra_action=extra_med))
 
         medica_json = json.dumps(medica_data, ensure_ascii=False)
         if req_actual:
-            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='14'>No hay postulantes registrados para este requerimiento.</td></tr>"
+            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='11'>No hay postulantes registrados para este requerimiento.</td></tr>"
         else:
-            med_table_html = "<tr><td colspan='14'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
+            med_table_html = "<tr><td colspan='11'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
 
         med_rows=''.join([f"""\n          <tr>\n            <td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td>\n            <td>{h(row_get(r,'fecha_registro'))}</td>\n            <td><b>{h(row_get(r,'dni'))}</b></td>\n            <td><b>{h(row_get(r,'trabajador'))}</b></td>\n            <td>{h(row_get(r,'requerimiento'))}</td>\n            <td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td>\n            <td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td>\n            <td>{h(row_get(r,'fecha_resultado'))}</td>\n            <td>{h(row_get(r,'fecha_vencimiento'))}</td>\n            <td><a class='med-pdf-btn' target='_blank' href='/admin/contratacion/medica/{r['id']}/pdf'>📄 Ver PDF</a></td>\n          </tr>\n        """ for r in medicas]) or "<tr><td colspan='10'>Sin evaluaciones médicas.</td></tr>"
 
@@ -10863,17 +10924,18 @@ html,body{overflow-x:hidden!important;}
             <div class='std-card-head'>
               <h3>LISTA DE POSTULANTES</h3>
               <div class='std-head-actions'>
-                <input id='med_buscar_tabla' oninput="filtrarTabla(this,'tabla_medica_postulantes')" placeholder='Buscar por DNI' class='med-filter-control'>
-                <select onchange="filtrarTabla(this,'tabla_medica_postulantes')" class='med-filter-control'><option>Todos los estados</option><option>APTO</option><option>PENDIENTE</option><option>NO APTO</option><option>RESTRICCIÓN</option></select>
-                <button type='button' class='std-head-btn green' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(window.MEDICA_POSTULANTES && window.MEDICA_POSTULANTES.length===1){{seleccionarMedico(window.MEDICA_POSTULANTES[0].dni);}} if(x){{x.focus(); if((x.value||"").replace(/\D/g,"").length===8) buscarMedicaPorDni(x.value);}}}},80)'>Registrar</button>
+                <a class='std-head-btn' href='/admin/plantilla_gestion/contratacion'>📄 Exportar Excel</a>
+                <button type='button' class='std-head-btn' onclick='window.print()'>🖨️ Imprimir</button>
+                <a class='std-head-btn green' href='/admin/contratacion?sec=datos_completos&req={h(req_actual)}'>📋 Ver ficha 360°</a>
               </div>
             </div>
             <div class='std-table-wrap'>
               <table id='tabla_medica_postulantes' class='std-table'>
-                {tabla_estandar_postulantes_header('tabla_medica_postulantes')}
+                {tabla_estandar_postulantes_header_eval_medica()}
                 {med_table_html}
               </table>
             </div>
+            <div class='std-footnote'>ⓘ Mostrando {len(med_table_rows)} de {len(trabajadores_req_med)} postulantes.</div>
           </div>
 
           <input type='checkbox' id='modal_medica_registro' class='med-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='med-modal'><div class='med-modal-card'><div class='med-modal-head'><h2>Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar</label></div>
