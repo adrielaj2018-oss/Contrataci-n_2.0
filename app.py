@@ -3008,66 +3008,6 @@ def tabla_estandar_postulantes_header(tabla_id):
     return f"""<tr><th class='std-sel'><input type='checkbox' onclick=\"document.querySelectorAll('#{tabla_id} input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)\"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr>"""
 
 
-def tabla_medica_postulantes_header():
-    """Cabecera exacta solicitada para Evaluación Médica: sin N°, sin Foto y sin selector."""
-    return """<tr><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr>"""
-
-
-def _std_medica_cell(aptitud='', estado='', ok=False):
-    apt = estado_norm(aptitud or estado)
-    est = estado_norm(estado or aptitud)
-    if ok:
-        return _std_mod_cell('✅', 'APTO' if apt == 'APTO' else (apt or 'APTO'), 'ok')
-    if 'RESTRICC' in apt or 'OBSERV' in apt or 'RESTRICC' in est:
-        return _std_mod_cell('➖', 'RESTRICCIÓN', 'pendiente')
-    if 'NO APTO' in apt or 'BLOQUEADO' in apt or 'NO APTO' in est or 'BLOQUEADO' in est:
-        return _std_mod_cell('❌', 'NO APTO', 'bad')
-    return _std_mod_cell('❌', 'PENDIENTE', 'bad')
-
-
-def fila_medica_postulante_estandar(row, req='', medico_ok=None, aptitud='', estado_medico='', extra_action=''):
-    """Fila estándar para Lista de Postulantes en Evaluación Médica.
-    Replica la vista del módulo Postulantes pero quitando N°, Foto y selector.
-    """
-    estado, pct, faltan = modulos_faltantes_postulante(row, medico_ok=medico_ok)
-    cls = 'ok' if estado == 'COMPLETO' else ('warn' if pct else 'bad')
-    dni = h(row_get(row, 'dni'))
-    trabajador = h(row_get(row, 'trabajador') or 'PENDIENTE COMPLETAR')
-    cargo = h(row_get(row, 'cargo'))
-
-    med_cell = _std_medica_cell(aptitud or row_get(row,'aptitud_medica') or row_get(row,'estado_medico'), estado_medico or row_get(row,'estado_medico'), ok=bool(medico_ok))
-
-    indu_ok = flujo_induccion_ok(row)
-    indu_cell = _std_mod_cell('✅' if indu_ok else '➖', 'Inducido' if indu_ok else 'Pendiente', 'ok' if indu_ok else 'pendiente')
-
-    indum_ok = flujo_indumentaria_ok(row)
-    indum_cell = _std_mod_cell('✅' if indum_ok else '➖', 'Entregado' if indum_ok else 'PENDIENTE', 'ok' if indum_ok else 'pendiente')
-
-    foto_estado = estado_norm(row_get(row,'fotocheck_estado'))
-    foto_ok = foto_estado in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','OK')
-    foto_cell = _std_mod_cell('✅' if foto_ok else '➖', 'Emitido' if foto_ok else 'Pendiente', 'ok' if foto_ok else 'pendiente')
-
-    firma_estado = estado_norm(row_get(row,'estado_documentos'))
-    firma_ok = firma_estado in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK')
-    firma_cell = _std_mod_cell('✅' if firma_ok else '🕘', 'Firmado' if firma_ok else 'Pendiente', 'ok' if firma_ok else 'pendiente')
-
-    return f"""
-      <tr data-dni='{dni}' data-estado='{h(estado)}'>
-        <td><b>{dni}</b></td>
-        <td class='std-name'><b>{trabajador}</b></td>
-        <td class='std-cargo'>{cargo}</td>
-        <td><span class='std-pill {cls}'>{'Completo' if estado=='COMPLETO' else ('En validación' if pct else 'Incompleto')}</span></td>
-        <td><b>{pct}%</b><div class='std-bar'><span style='width:{pct}%'></span></div></td>
-        <td>{med_cell}</td>
-        <td>{indu_cell}</td>
-        <td>{indum_cell}</td>
-        <td>{foto_cell}</td>
-        <td>{firma_cell}</td>
-        <td>{acciones_estandar_postulante(row, req=req, extra=extra_action)}</td>
-      </tr>
-    """
-
-
 def estilos_tabla_estandar_postulantes():
     return """
     <style>
@@ -10211,7 +10151,6 @@ html,body{overflow-x:hidden!important;}
         except Exception:
             pass
         content=wrap(f"""
-        {estilos_tabla_estandar_postulantes()}
         <style>
           .ia-hero{{display:flex;justify-content:space-between;gap:18px;align-items:center;background:linear-gradient(135deg,#062b24,#0f766e);color:white;border-radius:24px;padding:26px;margin-bottom:18px;box-shadow:0 18px 38px rgba(15,118,110,.22)}}
           .ia-hero h1{{color:white!important;margin:0;font-size:30px}} .ia-hero p{{color:#d9fff6;margin:8px 0 0}}
@@ -10226,6 +10165,8 @@ html,body{overflow-x:hidden!important;}
           .ia-result.ok{{border-color:#86efac;background:#f0fdf4}} .ia-result.warn{{border-color:#fde68a;background:#fffbeb}} .ia-result.bad{{border-color:#fecdd3;background:#fff1f2}}
           .ia-result h3{{color:#0f172a!important;margin-top:0}} .ia-result li{{margin:6px 0}}
           .ia-suggest{{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}} .ia-suggest a{{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0;border-radius:999px;padding:8px 12px;text-decoration:none;font-weight:900}}
+
+          .med-table-card{border-radius:22px!important;padding:14px!important;background:#fff!important}.med-table-head{padding:10px 4px 12px!important}.med-table-head h3{color:#071b34!important;font-size:22px!important;font-weight:1000!important}.med-scroll{border:1px solid #dfe7ee!important;border-radius:14px!important;overflow:auto!important}table.med-pp-table{width:100%!important;min-width:1420px!important;border-collapse:collapse!important;background:#fff!important}.med-pp-table th{background:linear-gradient(180deg,#00964f,#008344)!important;color:#fff!important;font-size:14px!important;padding:15px 12px!important;text-align:center!important;border-right:1px solid rgba(255,255,255,.35)!important;white-space:nowrap!important}.med-pp-table td{padding:14px 12px!important;border-right:1px solid #e1e8ef!important;border-bottom:1px solid #e1e8ef!important;text-align:center!important;vertical-align:middle!important;font-size:14px!important;color:#10253d!important;font-weight:850!important}.med-pp-table tr:nth-child(even) td{background:#f8fbfd!important}.med-pp-table tr:hover td{background:#f0fff7!important}.med-pp-table .pp-photo{width:54px!important;height:54px!important;border-radius:14px!important;border:1px solid #b7efcd!important;background:#f1fff7!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:26px!important;overflow:hidden!important}.med-pp-table .pp-photo img{width:100%!important;height:100%!important;object-fit:cover!important}.med-pp-table .pp-name{font-weight:1000!important;line-height:1.18!important;text-transform:uppercase!important}.med-pp-table .pp-pill{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:112px!important;border-radius:999px!important;padding:10px 16px!important;font-weight:1000!important;font-size:14px!important}.med-pp-table .pp-pill.ok{background:#dcfce7!important;color:#047857!important}.med-pp-table .pp-pill.warn{background:#fef3c7!important;color:#d97706!important}.med-pp-table .pp-pill.bad{background:#ffe4e6!important;color:#f43f5e!important}.med-pp-table .pp-bar{width:118px!important;height:9px!important;border-radius:999px!important;background:#e0e4e8!important;margin:8px auto 0!important;overflow:hidden!important}.med-pp-table .pp-bar span{display:block!important;height:100%!important;border-radius:999px!important;background:#009b57!important}.med-pp-mod{display:inline-flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:4px!important;font-weight:1000!important;min-width:96px!important}.med-pp-mod b{font-size:22px!important;line-height:1!important}.med-pp-mod small{font-size:12px!important;color:#64748b!important;font-weight:950!important;text-transform:uppercase!important}.med-pp-mod.ok b{color:#009b57!important}.med-pp-mod.warn b{color:#d97706!important}.med-pp-mod.bad b{color:#f43f5e!important}.med-pp-mod.pend b{color:#7c5bd6!important}.med-pp-actions{display:flex!important;gap:8px!important;justify-content:center!important;align-items:center!important;white-space:nowrap!important}.med-pp-actions a,.med-pp-actions label{width:38px!important;height:38px!important;border:1px solid #b7efcd!important;border-radius:10px!important;color:#0b2742!important;background:#fff!important;text-decoration:none!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-weight:1000!important;cursor:pointer!important;font-size:18px!important}.med-pp-actions a:hover,.med-pp-actions label:hover{background:#008a48!important;color:#fff!important}.med-head-premium-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.med-head-premium-actions .pp-light-btn,.med-head-premium-actions .pp-btn-green{height:50px!important;border-radius:14px!important;font-size:15px!important}
           @media(max-width:1100px){{.ia-kpis,.ia-grid{{grid-template-columns:1fr}}.ia-form{{grid-template-columns:1fr}}.ia-hero{{display:block}}}}
         </style>
         <div class='ia-hero'>
@@ -10760,7 +10701,58 @@ html,body{overflow-x:hidden!important;}
         medica_data = []
         med_table_rows = []
 
-        for r in lista_med[:600]:
+        def fila_medica_premium_postulantes(r, idx, req_r, apt, est, med_ok):
+            """Fila visual de Evaluación Médica igual a Lista de Postulantes."""
+            estado, pct, faltan = modulos_faltantes_postulante(r, medico_ok=med_ok)
+            cls = 'ok' if estado == 'COMPLETO' else ('warn' if pct else 'bad')
+            rid = h(row_get(r, 'id'))
+            dni = h(row_get(r, 'dni'))
+            trabajador = h(row_get(r, 'trabajador') or 'PENDIENTE COMPLETAR')
+            cargo = h(row_get(r, 'cargo'))
+            foto_r = clean(row_get(r, 'foto_ruta'))
+            foto_url = url_for('contratacion_foto_postulante', ingreso_id=row_get(r, 'id')) if foto_r else ''
+            foto_html = f"<span class='pp-photo'><img src='{foto_url}' alt='Foto'></span>" if foto_r else "<span class='pp-photo'>👤</span>"
+            med_bad = 'ok' if med_ok else ('warn' if clase_medica(apt) == 'warn' else 'bad')
+            med_icon = '✅' if med_ok else ('⚠️' if clase_medica(apt) == 'warn' else '❌')
+            med_text = 'APTO' if med_ok else h(apt or est or 'PENDIENTE')
+            indu_ok = flujo_induccion_ok(r)
+            indum_ok = flujo_indumentaria_ok(r)
+            foto_estado = estado_norm(row_get(r,'fotocheck_estado'))
+            foto_ok = foto_estado in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','OK')
+            firma_estado = estado_norm(row_get(r,'estado_documentos'))
+            firma_ok = firma_estado in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK')
+            req_val = h(req_r or row_get(r, 'requerimiento'))
+            indu_cls = 'ok' if indu_ok else 'pend'
+            indum_cls = 'ok' if indum_ok else 'pend'
+            foto_cls = 'ok' if foto_ok else 'pend'
+            firma_cls = 'ok' if firma_ok else 'pend'
+            acciones = (
+                f"<div class='pp-actions med-pp-actions'>"
+                f"<a title='Ver detalle del postulante' href='/admin/contratacion?sec=detalle_postulante&id={rid}'>👁️</a>"
+                f"<a title='Ver ficha para impresión' target='_blank' href='/admin/contratacion?sec=detalle_postulante&id={rid}&print=1'>📄</a>"
+                f"<label title='Registrar / editar evaluación médica' for='modal_medica_registro' class='pp-action-label' onclick=\"event.stopPropagation();abrirModalMedica('{dni}');return false;\">✏️</label>"
+                f"<a title='Ir a postulantes' href='/admin/contratacion?sec=nuevos&req={req_val}'>⋮</a>"
+                f"</div>"
+            )
+            return f"""
+              <tr data-dni='{dni}' data-estado='{h(apt)} {h(est)} {h(estado)}'>
+                <td class='pp-num'><b>{idx}</b></td>
+                <td>{foto_html}</td>
+                <td><b>{dni}</b></td>
+                <td class='pp-name'><b>{trabajador}</b></td>
+                <td><b>{cargo}</b></td>
+                <td><span class='pp-pill {cls}'>{'Completo' if estado=='COMPLETO' else ('En validación' if pct else 'Incompleto')}</span></td>
+                <td><b>{pct}%</b><div class='pp-bar'><span style='width:{pct}%'></span></div></td>
+                <td><span class='med-pp-mod {med_bad}'><b>{med_icon}</b><small>{med_text}</small></span></td>
+                <td><span class='med-pp-mod {indu_cls}'><b>{'✅' if indu_ok else '➖'}</b><small>{'Inducido' if indu_ok else 'Pendiente'}</small></span></td>
+                <td><span class='med-pp-mod {indum_cls}'><b>{'✅' if indum_ok else '➖'}</b><small>{'ENTREGADO' if indum_ok else 'PENDIENTE'}</small></span></td>
+                <td><span class='med-pp-mod {foto_cls}'><b>{'✅' if foto_ok else '➖'}</b><small>{'Emitido' if foto_ok else 'Pendiente'}</small></span></td>
+                <td><span class='med-pp-mod {firma_cls}'><b>{'✅' if firma_ok else '🕘'}</b><small>{'Firmado' if firma_ok else 'Pendiente'}</small></span></td>
+                <td>{acciones}</td>
+              </tr>
+            """
+
+        for idx_med, r in enumerate(lista_med[:600], 1):
             dni_r = clean(row_get(r, 'dni'))
             req_r = clean(row_get(r, 'requerimiento'))
             med = medicos_por_clave.get((dni_r, req_r)) or medicos_por_dni.get(dni_r, {})
@@ -10809,20 +10801,19 @@ html,body{overflow-x:hidden!important;}
                 f"data-empresa='{h(row_get(r,'empresa'))}' data-area='{h(row_get(r,'area'))}' data-cargo='{h(row_get(r,'cargo'))}' "
                 f"data-foto-url='{h(foto_url_r) if foto_r else ''}' onclick=\"event.stopPropagation();abrirModalMedica('{h(dni_r)}');return false;\">➕</label>"
             )
-            med_table_rows.append(fila_medica_postulante_estandar(r, req=req_r, medico_ok=med_ok, aptitud=apt, estado_medico=est, extra_action=extra_med))
+            med_table_rows.append(fila_medica_premium_postulantes(r, idx_med, req_r, apt, est, med_ok))
 
         medica_json = json.dumps(medica_data, ensure_ascii=False)
         if req_actual:
-            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='11' class='std-empty'>No hay postulantes registrados para este requerimiento.</td></tr>"
+            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='13'>No hay postulantes registrados para este requerimiento.</td></tr>"
         else:
-            med_table_html = "<tr><td colspan='11' class='std-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</td></tr>"
+            med_table_html = "<tr><td colspan='13'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
 
         med_rows=''.join([f"""\n          <tr>\n            <td><form method='post' onsubmit=\"return confirm('¿Eliminar evaluación médica?')\"><input type='hidden' name='accion' value='eliminar_medica'><input type='hidden' name='medica_id' value='{r['id']}'><button class='icon-btn'>Eliminar</button></form></td>\n            <td>{h(row_get(r,'fecha_registro'))}</td>\n            <td><b>{h(row_get(r,'dni'))}</b></td>\n            <td><b>{h(row_get(r,'trabajador'))}</b></td>\n            <td>{h(row_get(r,'requerimiento'))}</td>\n            <td><span class='med-pill {clase_medica(row_get(r,'aptitud'))}'>{h(row_get(r,'aptitud') or 'PENDIENTE')}</span></td>\n            <td><span class='med-pill {clase_medica(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td>\n            <td>{h(row_get(r,'fecha_resultado'))}</td>\n            <td>{h(row_get(r,'fecha_vencimiento'))}</td>\n            <td><a class='med-pdf-btn' target='_blank' href='/admin/contratacion/medica/{r['id']}/pdf'>📄 Ver PDF</a></td>\n          </tr>\n        """ for r in medicas]) or "<tr><td colspan='10'>Sin evaluaciones médicas.</td></tr>"
 
         content=wrap(f"""
-        {estilos_tabla_estandar_postulantes()}
         <style>
-          .med-page-pro{{display:flex;flex-direction:column;gap:16px}}.med-top-actions .std-head-btn{height:54px;border-radius:14px;padding:0 24px;font-size:16px}.med-postulantes-card .std-table{min-width:1320px}.med-postulantes-card .std-table th:first-child{border-top-left-radius:14px}.med-postulantes-card .std-table th:last-child{border-top-right-radius:14px}.med-postulantes-card .std-table td:first-child,.med-postulantes-card .std-table th:first-child{min-width:90px}.med-postulantes-card .std-table td:nth-child(2),.med-postulantes-card .std-table th:nth-child(2){min-width:130px}.med-postulantes-card .std-table td:nth-child(11),.med-postulantes-card .std-table th:nth-child(11){min-width:170px}.med-filter-control{{height:50px;border:1px solid #dbe7ef;border-radius:14px;background:#fff;color:#071b34;padding:0 16px;font-weight:950;min-width:170px}}.med-postulantes-card{{margin-top:0!important}}.std-actions{{display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap}}.std-ico{{width:32px;height:32px;border-radius:10px;border:1px solid #b8f0d2;background:#ecfdf5;color:#047857;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-weight:1000}}.std-ico:hover{{background:#008a48;color:#fff}}
+          .med-page-pro{{display:flex;flex-direction:column;gap:16px}}.std-actions{{display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap}}.std-ico{{width:32px;height:32px;border-radius:10px;border:1px solid #b8f0d2;background:#ecfdf5;color:#047857;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-weight:1000}}.std-ico:hover{{background:#008a48;color:#fff}}
           .med-page-pro .dash-hero{{background:#fff;border:1px solid #d7e5ef;border-radius:24px;padding:26px 30px;box-shadow:0 16px 35px rgba(15,23,42,.06)}}
           .med-page-pro .dash-hero h1{{color:#007a3d;font-size:34px;margin:0 0 8px;font-weight:1000;letter-spacing:-.5px}}
           .med-filter-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:16px 18px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}
@@ -10919,19 +10910,11 @@ html,body{overflow-x:hidden!important;}
             <div class='med-kpi danger'><span class='med-ico'><svg viewBox='0 0 24 24'><path d='m15 9-6 6'/><path d='m9 9 6 6'/><path d='M7.8 2h8.4L22 7.8v8.4L16.2 22H7.8L2 16.2V7.8Z'/></svg></span><div><small>No aptos/vencidos</small><b>{no_aptos_med_req + vencidos_med_req}</b></div></div>
           </div>
 
-          <div class='std-card med-postulantes-card'>
-            <div class='std-card-head'>
-              <h3>LISTA DE POSTULANTES</h3>
-              <div class='std-head-actions med-top-actions'>
-                <a class='std-head-btn' href='/admin/plantilla_gestion/contratacion' title='Exportar Excel'>📄 <span>Exportar Excel</span></a>
-                <button type='button' class='std-head-btn' onclick='window.print()' title='Imprimir lista'>🖨️ <span>Imprimir</span></button>
-                <button type='button' class='std-head-btn green' onclick='abrirFicha360Seleccionada()' title='Ver ficha 360°'>📋 <span>Ver ficha 360°</span></button>
-              </div>
-            </div>
-            <div class='std-table-wrap'>
-              <table id='tabla_medica_postulantes' class='std-table'>
-                {tabla_medica_postulantes_header()}
-                {med_table_html}
+          <div class='med-table-card'>
+            <div class='med-table-head'><h3>LISTA DE POSTULANTES</h3><div class='med-head-premium-actions'><input id='med_buscar_tabla' oninput="filtrarTabla(this,'tabla_medica_postulantes')" placeholder='Buscar por DNI' style='height:50px;border:1px solid #dce6ee;border-radius:14px;padding:0 14px;font-weight:850'><select onchange="filtrarTabla(this,'tabla_medica_postulantes')" style='height:50px;border:1px solid #dce6ee;border-radius:14px;padding:0 14px;font-weight:850'><option>Todos los estados</option><option>APTO</option><option>PENDIENTE</option><option>NO APTO</option><option>RESTRICCIÓN</option></select><a class='pp-light-btn' href='/admin/plantilla_gestion/contratacion'>📄 Exportar Excel</a><button type='button' class='pp-light-btn' onclick='window.print()'>🖨️ Imprimir</button><button type='button' class='pp-btn-green' onclick='abrirFicha360SeleccionadaMedica()'>📋 Ver ficha 360°</button><button type='button' class='pp-btn-green' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni_lookup"); if(window.MEDICA_POSTULANTES && window.MEDICA_POSTULANTES.length===1){{seleccionarMedico(window.MEDICA_POSTULANTES[0].dni);}} if(x){{x.focus(); if((x.value||"").replace(/\D/g,"").length===8) buscarMedicaPorDni(x.value);}}}},80)'>Registrar</button></div></div>
+            <div class='med-scroll'>
+              <table id='tabla_medica_postulantes' class='pp-table med-pp-table'>
+                <thead><tr><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr></thead><tbody>{med_table_html}</tbody>
               </table>
             </div>
           </div>
@@ -10992,6 +10975,12 @@ html,body{overflow-x:hidden!important;}
         </div>
 
         <script>
+          function abrirFicha360SeleccionadaMedica(){{
+            const first=document.querySelector('#tabla_medica_postulantes tbody tr td:nth-child(3) b');
+            const req=new URLSearchParams(location.search).get('req')||'';
+            if(first && first.textContent.trim()) location.href='/admin/contratacion?sec=datos_completos&req='+encodeURIComponent(req)+'&dni='+encodeURIComponent(first.textContent.trim());
+            else alert('Seleccione primero un requerimiento con postulantes registrados.');
+          }}
           window.MEDICA_POSTULANTES = {medica_json};
           const MEDICA_POSTULANTES = window.MEDICA_POSTULANTES || [];
           const MEDICA_BY_DNI = Object.create(null);
