@@ -2939,25 +2939,84 @@ def acciones_estandar_postulante(row, req='', extra=''):
             f"<a class='std-ico' title='Ir a postulantes' href='/admin/contratacion?sec=nuevos&req={req_val}'>⋯</a>{extra}</div>")
 
 
-def fila_estandar_postulante(row, req='', medico_ok=None, checkbox_name='ingreso_ids', extra_action=''):
+def _std_estado_modulo(txt='', ok_words=(), warn_words=()):
+    v = estado_norm(txt)
+    if ok_words and v in ok_words:
+        return "<span class='std-check ok'>✅</span>"
+    if warn_words and v in warn_words:
+        return "<span class='std-check warn'>➖</span>"
+    return "<span class='std-check pend'>➖</span>"
+
+
+def _std_mod_cell(icono, texto, cls='pendiente'):
+    return f"<span class='std-mod {cls}'><b>{icono}</b><small>{h(texto)}</small></span>"
+
+
+def fila_estandar_postulante(row, req='', medico_ok=None, checkbox_name='ingreso_ids', extra_action='', idx=''):
+    """Fila premium estándar para módulos operativos: Inducción, Indumentaria y Fotocheck.
+    Mantiene selección antes de acciones y columnas uniformes como la vista premium solicitada.
+    """
     estado, pct, faltan = modulos_faltantes_postulante(row, medico_ok=medico_ok)
-    faltan_txt = ', '.join(faltan) if faltan else 'Ninguno'
-    cls = 'ok' if estado == 'COMPLETO' else ('warn' if pct else 'muted')
+    cls = 'ok' if estado == 'COMPLETO' else ('warn' if pct else 'bad')
     rid = h(row_get(row, 'id'))
     dni = h(row_get(row, 'dni'))
     trabajador = h(row_get(row, 'trabajador') or 'PENDIENTE COMPLETAR')
     cargo = h(row_get(row, 'cargo'))
+    foto_icon = '🧑🏻' if clean(row_get(row,'foto_ruta')) else '👤'
+
+    med_txt = estado_norm(row_get(row,'estado_medico') or row_get(row,'aptitud_medica'))
+    med_ok = bool(medico_ok) if medico_ok is not None else med_txt in ('APTO','HABILITADO','APROBADO','APTO CON RESTRICCIONES')
+    med_cell = _std_mod_cell('✅' if med_ok else '❌', 'Apto' if med_ok else 'No apto', 'ok' if med_ok else 'bad')
+
+    indu = estado_norm(row_get(row,'estado_capacitacion'))
+    indu_ok = flujo_induccion_ok(row)
+    indu_cell = _std_mod_cell('✅' if indu_ok else '➖', 'Inducido' if indu_ok else 'Pendiente', 'ok' if indu_ok else 'pendiente')
+
+    indum = estado_norm(row_get(row,'estado_indumentaria'))
+    indum_ok = flujo_indumentaria_ok(row)
+    indum_cell = _std_mod_cell('✅' if indum_ok else '➖', 'Entregado' if indum_ok else 'Pendiente', 'ok' if indum_ok else 'pendiente')
+
+    foto_estado = estado_norm(row_get(row,'fotocheck_estado'))
+    foto_ok = foto_estado in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','OK')
+    foto_cell = _std_mod_cell('✅' if foto_ok else '➖', 'Emitido' if foto_ok else 'Pendiente', 'ok' if foto_ok else 'pendiente')
+
+    firma_estado = estado_norm(row_get(row,'estado_documentos'))
+    firma_ok = firma_estado in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK')
+    firma_cell = _std_mod_cell('✅' if firma_ok else '🕘', 'Firmado' if firma_ok else 'Pendiente', 'ok' if firma_ok else 'pendiente')
+
     return f"""
       <tr data-dni='{dni}' data-estado='{h(estado)}'>
-        <td><input type='checkbox' name='{checkbox_name}' value='{rid}'></td>
+        <td class='std-sel'><input type='checkbox' name='{checkbox_name}' value='{rid}'></td>
+        <td class='std-num'>{h(idx)}</td>
+        <td><span class='std-avatar'>{foto_icon}</span></td>
         <td><b>{dni}</b></td>
-        <td class='name-cell'><b>{trabajador}</b></td>
-        <td>{cargo}</td>
-        <td><span class='status-pill {cls}'>{h(estado)}</span></td>
-        <td><b>{pct}%</b><div class='ind-bar'><span style='width:{pct}%'></span></div></td>
-        <td>{h(faltan_txt)}</td>
+        <td class='std-name'><b>{trabajador}</b></td>
+        <td class='std-cargo'>{cargo}</td>
+        <td><span class='std-pill {cls}'>{'Completo' if estado=='COMPLETO' else ('En validación' if pct else 'Incompleto')}</span></td>
+        <td><b>{pct}%</b><div class='std-bar'><span style='width:{pct}%'></span></div></td>
+        <td>{med_cell}</td>
+        <td>{indu_cell}</td>
+        <td>{indum_cell}</td>
+        <td>{foto_cell}</td>
+        <td>{firma_cell}</td>
         <td>{acciones_estandar_postulante(row, req=req, extra=extra_action)}</td>
       </tr>
+    """
+
+
+def tabla_estandar_postulantes_header(tabla_id):
+    return f"""<tr><th class='std-sel'><input type='checkbox' onclick=\"document.querySelectorAll('#{tabla_id} input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)\"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr>"""
+
+
+def estilos_tabla_estandar_postulantes():
+    return """
+    <style>
+    .std-card{background:#fff;border:1px solid #dbe7ef;border-radius:22px;overflow:hidden;box-shadow:0 14px 34px rgba(15,23,42,.07);margin-top:16px}
+    .std-card-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:20px 20px 18px}
+    .std-card-head h2,.std-card-head h3{margin:0;color:#071b34;font-size:22px;font-weight:1000;letter-spacing:-.2px}
+    .std-head-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.std-head-btn{height:50px;border-radius:14px;border:1px solid #dbe7ef;background:#fff;color:#071b34;padding:0 18px;text-decoration:none;display:inline-flex;align-items:center;gap:10px;font-weight:950;box-shadow:0 10px 24px rgba(15,23,42,.04)}.std-head-btn.green{background:#008a48;color:#fff;border-color:#008a48;box-shadow:0 12px 24px rgba(0,138,72,.20)}
+    .std-table-wrap{overflow:auto;padding:0 14px 14px}.std-table{width:100%;min-width:1320px;border-collapse:separate;border-spacing:0}.std-table th{background:#008a48;color:#fff;padding:15px 12px;text-align:center;font-weight:1000;border-right:1px solid rgba(255,255,255,.18);white-space:nowrap}.std-table th:first-child{border-top-left-radius:14px}.std-table th:last-child{border-top-right-radius:14px}.std-table td{padding:15px 12px;border-bottom:1px solid #e1ebf3;border-right:1px solid #e1ebf3;text-align:center;vertical-align:middle;color:#071b34;font-weight:850;background:#fff}.std-table tr:nth-child(even) td{background:#f8fbfd}.std-table tr:hover td{background:#ecfdf5}.std-sel{width:38px}.std-num{font-weight:1000}.std-avatar{display:inline-grid;place-items:center;width:54px;height:54px;border-radius:14px;background:#ecfdf5;border:1px solid #86efac;font-size:26px}.std-name{font-weight:1000;line-height:1.18;min-width:120px}.std-cargo{font-weight:1000;line-height:1.2}.std-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:10px 18px;font-weight:1000;min-width:104px}.std-pill.ok{background:#dcfce7;color:#047857}.std-pill.warn{background:#fef3c7;color:#d97706}.std-pill.bad{background:#fee2e2;color:#ef4444}.std-bar{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin:9px auto 0;max-width:110px}.std-bar span{display:block;height:100%;background:#008a48;border-radius:999px}.std-mod{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-weight:900;min-width:88px}.std-mod b{font-size:17px;line-height:1}.std-mod small{font-size:12px;color:#425572;font-weight:850}.std-mod.ok small{color:#047857}.std-mod.bad small{color:#475569}.std-mod.pendiente b{color:#6d50d9}.std-actions{display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:nowrap}.std-ico{width:34px;height:34px;border-radius:10px;border:1px solid #a7f3d0;background:#ecfdf5;color:#071b34;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;font-weight:1000;font-size:17px}.std-ico:hover{background:#008a48;color:#fff}.std-empty{padding:28px!important;text-align:center!important;color:#64748b!important;font-weight:900!important}.std-footnote{padding:0 18px 16px;color:#64748b;font-weight:850}
+    </style>
     """
 
 def row_to_dict(row):
@@ -11340,10 +11399,11 @@ html,body{overflow-x:hidden!important;}
         def _ind_estado_ok(v):
             return clean(v).upper() in ('VIDEO VISTO','APROBADO','INDUCIDO','COMPLETO','OK')
         induccion_control_rows = ''.join([
-            f"""<tr><td><input type='checkbox' form='form_masivo_induccion' name='ingreso_ids' value='{row_get(r,'id')}'></td><td>{i}</td><td><span class='pp-photo'>{'📷' if clean(row_get(r,'foto_ruta')) else '👤'}</span></td><td><b>{h(row_get(r,'dni'))}</b></td><td class='pp-name'>{h(row_get(r,'trabajador')) or 'PENDIENTE COMPLETAR'}</td><td>{h(row_get(r,'cargo'))}</td><td><span class='pp-pill {'ok' if _ind_estado_ok(row_get(r,'estado_capacitacion')) else 'warn'}'>{'Inducido' if _ind_estado_ok(row_get(r,'estado_capacitacion')) else 'Pendiente'}</span></td><td><b>{100 if _ind_estado_ok(row_get(r,'estado_capacitacion')) else 35}%</b><div class='pp-bar'><span style='width:{100 if _ind_estado_ok(row_get(r,'estado_capacitacion')) else 35}%'></span></div></td><td>{'✅' if _ind_estado_ok(row_get(r,'estado_capacitacion')) else '➖'}<br><small>{h(row_get(r,'estado_capacitacion') or 'PENDIENTE')}</small></td><td>{h(row_get(r,'actividad'))}</td><td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={row_get(r,'id')}'>Ver</a></td></tr>"""
+            fila_estandar_postulante(r, req=req_filtro_induccion or row_get(r,'requerimiento'), checkbox_name='ingreso_ids', idx=i)
             for i,r in enumerate(trabajadores_induccion[:500],1)
-        ]) or "<tr><td colspan='11' style='padding:26px;text-align:center;color:#64748b;font-weight:900'>No hay postulantes aptos para inducción general.</td></tr>"
+        ]) or "<tr><td colspan='14' class='std-empty'>No hay postulantes aptos para inducción general.</td></tr>"
         control_induccion_html = f"""
+        {estilos_tabla_estandar_postulantes()}
         <style>
         .ind-general-badge{{background:#e8fff2;border:1px solid #b8f0d2;border-radius:14px;padding:14px 16px;font-weight:1000;color:#007a3d}}.ctrl360{{background:#fff;border:1px solid #dbeafe;border-radius:24px;padding:22px;margin:18px 0 24px;box-shadow:0 18px 42px rgba(15,23,42,.07)}}
         .ctrl360-kpis{{display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:18px;margin-bottom:22px}}
@@ -11361,9 +11421,9 @@ html,body{overflow-x:hidden!important;}
           <div class='ctrl360-kpis'><div class='ctrl360-card'><i>🎫</i><div><span>Seleccionados</span><b>{total_ind_req}</b><small>Postulantes aptos</small></div></div><div class='ctrl360-card'><i>🎓</i><div><span>Inducidos</span><b>{inducidos_req}</b><small>Proceso completado</small></div></div><div class='ctrl360-card'><i>⏳</i><div><span>Pendientes</span><b>{pendientes_ind_req}</b><small>Por revisar</small></div></div><div class='ctrl360-card'><i>▶️</i><div><span>Videos</span><b>{videos_subidos_req}</b><small>Biblioteca activa</small></div></div><div class='ctrl360-card'><i>✅</i><div><span>Avance</span><b>{avance_ind_req}%</b><small>Control general</small></div></div><div class='ctrl360-card'><i>⚠️</i><div><span>Observados</span><b>0</b><small>Requiere atención</small></div></div></div>
           <div class='ctrl360-center'><div class='ctrl360-title'><h2>Centro de Control 360°</h2><p>Avance general de inducción</p><div class='ring360'><div>{avance_ind_req}%<br><small>completo</small></div></div></div><div class='ctrl360-mini'><div class='ico'>📚</div><b>{videos_subidos_req}</b><small>Materiales / videos</small></div><div class='ctrl360-mini'><div class='ico'>✅</div><b>{inducidos_req}</b><small>Inducción realizada</small></div><div class='ctrl360-mini'><div class='ico'>🕒</div><b>{pendientes_ind_req}</b><small>Pendiente inducción</small></div><div class='ctrl360-mini'><div class='ico'>🧾</div><b>{total_ind_req}</b><small>Total general</small></div></div>
         </div>
-        <div class='c-card table-wrap pp-premium-table' style='margin-bottom:22px'><h2>LISTA DE POSTULANTES</h2><table class='c-table'><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_induccion_360 input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>DNI</th><th>TRABAJADOR</th><th>CARGO</th><th>ESTADO PROCESO</th><th>% COMPLETITUD</th><th>MÓDULOS POR PASAR</th><th>ACCIONES</th></tr>{induccion_control_rows}</table></div>
         """
         content=wrap(f"""
+        {estilos_tabla_estandar_postulantes()}
         <style>
         .mod360-page{{display:flex;flex-direction:column;gap:18px}}
         .mod360-hero{{background:linear-gradient(135deg,#fff,#effff7);border:1px solid #b8f0d2;border-radius:26px;padding:26px 30px;display:grid;grid-template-columns:1.3fr 1.1fr auto;gap:22px;align-items:center;box-shadow:0 18px 44px rgba(4,120,87,.08)}}
@@ -11390,7 +11450,7 @@ html,body{overflow-x:hidden!important;}
           <form id='form_masivo_induccion' method='post' class='mod360-mass'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='induccion'><input type='hidden' name='campo_estado' value='estado_capacitacion'><h3>Cambio masivo / notificaciones</h3><b>Estado masivo</b><select name='nuevo_estado'><option>PENDIENTE</option><option>APROBADO</option></select><b>Aprobador</b><input name='aprobador' placeholder='Responsable SST/RRHH'><b class='mass-ob-label'>Observación</b><textarea name='observacion' placeholder='Observación del administrador.'></textarea><button class='mod360-btn green mass-submit'>✅ Cambiar seleccionados</button></form>
           <div class='mod360-table-card'><div class='mod360-table-head'><h3>LISTA DE POSTULANTES</h3><div class='mod360-actions'><label for='modal_biblioteca_ind' class='mod360-btn'>Registrar</label></div></div>
           
-          <div class='mod360-table-wrap'><table id='tabla_induccion_360' class='mod360-table'><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_induccion_360 input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>DNI</th><th>TRABAJADOR</th><th>CARGO</th><th>ESTADO PROCESO</th><th>% COMPLETITUD</th><th>MÓDULOS POR PASAR</th><th>ACCIONES</th></tr>{induccion_control_rows}</table></div></div>
+          <div class='std-table-wrap'><table id='tabla_induccion_360' class='std-table'>{tabla_estandar_postulantes_header('tabla_induccion_360')}{induccion_control_rows}</table></div></div>
           
           <input type='checkbox' id='modal_biblioteca_ind' class='modal-toggle' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='mod360-modal'><div class='mod360-modal-card'><div class='mod360-modal-head'><h3>📚 Biblioteca de inducción</h3><label for='modal_biblioteca_ind' class='mod360-close'>Cerrar</label></div><form id='form_capacitacion' method='post' enctype='multipart/form-data' class='mod360-form'><input type='hidden' name='accion' value='guardar_capacitacion'><input type='hidden' name='req_contexto' value='{h(req_filtro_induccion)}'><b>Tema inducción</b><select name='curso' required>{opciones_curso}</select><b>Tipo video</b><select name='tipo_video' required><option>URL EXTERNA</option><option>ARCHIVO MP4</option><option>YOUTUBE / DRIVE</option><option>MICROLEARNING</option></select><b>URL video</b><input name='video_url' placeholder='https://...'><b>Cargar video MP4</b><input type='file' name='archivo_video' accept='.mp4,.webm,.mov'><b>Duración min.</b><input name='duracion_min' type='number' min='0' placeholder='0'><b>Fecha inicio</b><input type='date' name='fecha_inicio' value='{hoy_iso()}' required><b>Fecha fin</b><input type='date' name='fecha_fin' value='{hoy_iso()}'><b>Material adicional</b><input type='file' name='evidencia' accept='.pdf,.png,.jpg,.jpeg,.xlsx,.docx'><span></span><button class='mod360-btn green'>💾 Guardar video/material</button></form><hr><h3>Base de videos y materiales</h3><div class='mod360-table-wrap'><table class='mod360-table'><tr><th>Fecha</th><th>Tema</th><th>Tipo</th><th>Archivo / URL</th><th>Min.</th><th>Estado</th></tr>{video_rows}</table></div></div></div>
         </section>
@@ -11434,13 +11494,14 @@ html,body{overflow-x:hidden!important;}
         ind_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'polo'))}</td><td>{h(row_get(r,'pantalon'))}</td><td>{h(row_get(r,'botas'))}</td><td><span class='ind-pill {_ind_class(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td>{h(row_get(r,'fecha_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{row_get(r,'id')}'><button class='ind-btn danger mini'>Eliminar</button></form></td></tr>" for r in indumentarias_filtradas]) or "<tr><td colspan='13'>Seleccione un requerimiento o no hay entregas registradas para este requerimiento.</td></tr>"
 
         indumentaria_control_rows = ''.join([
-            f"""<tr><td>{i}</td><td><span class='avatar-mini'>{'📷' if clean(row_get(r,'foto_ruta')) else '👤'}</span></td><td><b>{h(row_get(r,'dni'))}</b></td><td class='name-cell'>{h(row_get(r,'trabajador')) or 'PENDIENTE COMPLETAR'}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'actividad'))}</td><td><span class='ind-pill {_ind_class(row_get(r,'estado_indumentaria'))}'>{h(row_get(r,'estado_indumentaria') or 'PENDIENTE')}</span></td><td><b>{_ind_pct(row_get(r,'estado_indumentaria'))}%</b><div class='ind-bar'><span style='width:{_ind_pct(row_get(r,'estado_indumentaria'))}%'></span></div></td><td><a class='ind-btn light mini' href='/admin/contratacion?sec=detalle_postulante&id={row_get(r,'id')}'>Ver</a></td></tr>"""
+            fila_estandar_postulante(r, req=req_filtro_indumentaria or row_get(r,'requerimiento'), checkbox_name='ingreso_ids', idx=i)
             for i,r in enumerate(trabajadores_indumentaria[:500],1)
-        ]) or "<tr><td colspan='9' class='empty-row'>Seleccione un requerimiento para visualizar postulantes.</td></tr>"
+        ]) or "<tr><td colspan='14' class='std-empty'>Seleccione un requerimiento para visualizar postulantes.</td></tr>"
 
         trabajadores_js = json.dumps({normalizar_dni(row_get(r,'dni')):{'trabajador':clean(row_get(r,'trabajador')),'empresa':clean(row_get(r,'empresa')),'area':clean(row_get(r,'area')),'cargo':clean(row_get(r,'cargo')),'actividad':clean(row_get(r,'actividad')),'requerimiento':clean(row_get(r,'requerimiento')),'fecha_ingreso':fecha_sin_hora(row_get(r,'fecha_ingreso'))} for r in trabajadores_indumentaria}, ensure_ascii=False)
 
         content=wrap(f"""
+        {estilos_tabla_estandar_postulantes()}
         <style>
         .ind-page{{display:flex;flex-direction:column;gap:18px;color:#071b34}}.ind-hero{{background:linear-gradient(135deg,#ffffff,#effff7);border:1px solid #b8f0d2;border-radius:26px;padding:24px 28px;display:grid;grid-template-columns:1.2fr .9fr;gap:22px;align-items:center;box-shadow:0 18px 44px rgba(4,120,87,.08)}}.ind-title{{display:flex;gap:18px;align-items:center}}.ind-icon{{width:66px;height:66px;border-radius:22px;background:#dcfce7;border:1px solid #86efac;display:grid;place-items:center;font-size:32px}}.ind-title h1{{margin:0;font-size:34px;line-height:1.05;font-weight:1000;color:#071b34}}.ind-title p{{margin:8px 0 0;color:#50627c;font-size:17px;font-weight:800;line-height:1.35}}.ind-requerimiento label,.ind-tools label{{display:block;color:#071b34;text-transform:uppercase;font-size:12px;font-weight:1000;margin-bottom:8px}}.ind-requerimiento select,.ind-tools input,.ind-tools select,.ind-form input,.ind-form select,.ind-form textarea{{width:100%;border:1px solid #cfe0ec;border-radius:14px;background:#fff;color:#071b34;font-weight:900;font-size:14px;padding:0 14px;min-height:42px}}.ind-form textarea{{padding-top:14px;min-height:86px}}.ind-tools{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px 22px;display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-actions{{display:flex;gap:10px;flex-wrap:wrap}}.ind-btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:15px;padding:0 22px;text-decoration:none;border:0;font-weight:1000;cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;box-shadow:0 12px 22px rgba(0,138,72,.20)}}.ind-btn.green{{background:linear-gradient(135deg,#00964f,#0bbf72)}}.ind-btn.light{{background:#fff;color:#071b34;border:1px solid #dbe7ef;box-shadow:none}}.ind-btn.danger{{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;box-shadow:none}}.ind-btn.mini{{min-height:38px;padding:0 12px;font-size:12px}}.ind-kpis{{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:16px}}.ind-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:20px;padding:18px;display:flex;align-items:center;gap:15px;min-height:105px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-kpi .ico{{width:54px;height:54px;border-radius:50%;background:#008a48;color:#fff;display:grid;place-items:center;font-size:24px}}.ind-kpi b{{font-size:32px;color:#071b34;line-height:1;font-weight:1000}}.ind-kpi h4{{margin:0 0 4px;font-size:14px;color:#071b34;font-weight:1000}}.ind-kpi small{{display:block;color:#53627a;font-weight:850}}.ind-control{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:22px;display:grid;grid-template-columns:260px repeat(5,1fr);gap:18px;box-shadow:0 16px 34px rgba(15,23,42,.06)}}.ind-radial h2{{margin:0;color:#071b34;font-size:28px;line-height:1.05;font-weight:1000}}.ind-radial p{{color:#53627a;font-weight:850;line-height:1.35}}.ind-ring{{width:132px;height:132px;border-radius:50%;background:conic-gradient(#008a48 {avance_indum_req}%,#e5e7eb 0);display:grid;place-items:center;margin:auto}}.ind-ring div{{width:98px;height:98px;background:#fff;border-radius:50%;display:grid;place-items:center;text-align:center;color:#071b34;font-weight:1000}}.ind-ring span{{display:block;font-size:13px;color:#53627a}}.ind-stage{{border:1px solid #dbe7ef;border-radius:18px;padding:20px 12px;text-align:center;background:linear-gradient(180deg,#fff,#fcfffd);border-bottom:4px solid #008a48;min-height:158px}}.ind-stage .sico{{width:60px;height:60px;border-radius:50%;background:#dcfce7;display:grid;place-items:center;margin:0 auto 12px;font-size:26px}}.ind-stage h4{{margin:0;color:#071b34;font-weight:1000}}.ind-stage b{{font-size:31px;color:#071b34;display:block}}.ind-stage small{{color:#53627a;font-weight:850}}.ind-table-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.06)}}.ind-table-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;flex-wrap:wrap}}.ind-table-head h2{{margin:0;color:#071b34;font-size:22px;font-weight:1000}}.ind-table-wrap{{overflow:auto}}.ind-table{{width:100%;min-width:1100px;border-collapse:separate;border-spacing:0}}.ind-table th{{background:#008a48;color:#fff;padding:14px;text-align:center;font-weight:1000;border-right:1px solid rgba(255,255,255,.22)}}.ind-table td{{padding:14px;border-bottom:1px solid #e1ebf3;border-right:1px solid #e1ebf3;text-align:center;vertical-align:middle;font-weight:850;color:#071b34}}.ind-table tr:hover td{{background:#f0fff7}}.avatar-mini{{display:inline-grid;place-items:center;width:52px;height:52px;border-radius:15px;background:#ecfdf5;border:1px solid #86efac;font-size:25px}}.name-cell{{font-weight:1000;text-align:left!important}}.ind-pill{{display:inline-flex;border-radius:999px;padding:8px 14px;font-weight:1000;font-size:12px;border:1px solid transparent}}.ind-pill.ok{{background:#dcfce7;color:#047857;border-color:#86efac}}.ind-pill.warn{{background:#fef3c7;color:#b45309;border-color:#fde68a}}.ind-pill.danger{{background:#fee2e2;color:#991b1b;border-color:#fecaca}}.ind-pill.muted{{background:#f1f5f9;color:#475569;border-color:#e2e8f0}}.ind-bar{{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px}}.ind-bar span{{display:block;height:100%;background:#008a48;border-radius:999px}}.empty-row{{padding:26px!important;text-align:center!important;color:#64748b!important;font-weight:900!important}}.ind-modal-check{{display:none}}.ind-modal{{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:28px 22px;overflow:auto}}.ind-modal-check:checked + .ind-modal{{display:flex}}.ind-modal-card{{width:min(980px,94vw);max-height:92vh;background:#fff;border-radius:22px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.35);overflow:auto}}.ind-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border-bottom:1px solid #e5eef6;background:#fbfffd}}.ind-modal-head h2{{margin:0;color:#071b34;font-weight:1000}}.ind-close{{cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;border-radius:12px;padding:10px 16px;font-weight:1000;box-shadow:0 10px 20px rgba(0,138,72,.18)}}.ind-alert{{margin:18px 24px 0;background:linear-gradient(135deg,#ecfdf5,#f8fffd);border:1px solid #a7f3d0;border-radius:18px;padding:16px 18px;color:#064e3b;font-weight:900;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}}.ind-form{{padding:18px 24px 24px;display:grid;grid-template-columns:150px 1fr 150px 1fr;gap:10px;align-items:center}}.ind-form b{{background:#eef6f3;border-radius:10px;padding:10px 12px;text-align:right;color:#071b34;font-weight:1000;font-size:13px}}.ind-form .section{{grid-column:1/-1;margin:8px 0 0;font-size:18px;font-weight:1000;color:#071b34}}.ind-form .field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.15)!important}}.ind-alert.danger{{background:#fef2f2;border-color:#fca5a5;color:#7f1d1d}}.ind-form input:disabled,.ind-form select:disabled{{background:#f1f5f9;color:#64748b;cursor:not-allowed}}.ind-form b.req{{background:#dcfce7;border:1px solid #86efac;color:#064e3b}}.ind-form b.req:after{{content:' *';color:#ef4444;font-weight:1000}}.ind-form select{{height:48px;border:1px solid #cfe0ec;border-radius:13px;padding:0 14px;font-weight:850;background:#fff}}.ind-form .full{{grid-column:1/-1}}@media(max-width:1200px){{.ind-control{{grid-template-columns:1fr 1fr 1fr}}.ind-kpis{{grid-template-columns:repeat(3,1fr)}}.ind-hero,.ind-tools,.ind-form{{grid-template-columns:1fr 1fr}}}}@media(max-width:760px){{.ind-hero,.ind-tools,.ind-control,.ind-form{{grid-template-columns:1fr}}.ind-kpis{{grid-template-columns:1fr 1fr}}.ind-form b{{text-align:left}}}}
         </style>
@@ -11448,7 +11509,7 @@ html,body{overflow-x:hidden!important;}
           {modulo_requerimiento_header_html('🦺','Indumentaria y EPP','Seleccione primero el requerimiento, revise postulantes y registre una sola entrega con prendas, cargo firmado y responsable.','indumentaria', "<option value=''>Seleccione requerimiento</option>" + req_options_indumentaria, req_filtro_indumentaria)}
           <div class='ind-kpis'><div class='ind-kpi'><span class='ico'>👥</span><div><h4>Seleccionados</h4><b>{total_indumentaria_req}</b><small>Postulantes aptos</small></div></div><div class='ind-kpi'><span class='ico'>🦺</span><div><h4>Entregados</h4><b>{entregados_req}</b><small>Cargo completo</small></div></div><div class='ind-kpi'><span class='ico'>⏳</span><div><h4>Pendientes</h4><b>{pendientes_req}</b><small>Sin entrega</small></div></div><div class='ind-kpi'><span class='ico'>⚠️</span><div><h4>Observados</h4><b>{observados_req}</b><small>Requiere atención</small></div></div></div>
           <div class='ind-tools'><div><label>Buscar por DNI</label><input oninput="filtrarTabla(this,'tabla_indumentaria_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar por estado</label><select onchange="filtrarTabla(this,'tabla_indumentaria_360')"><option>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select></div><div><label>Registrar</label><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn'>Registrar</label></div></div></div>
-          <div class='ind-table-card'><div class='ind-table-head'><h2>LISTA DE POSTULANTES</h2><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn green'>Registrar</label></div></div><div class='ind-table-wrap'><table id='tabla_indumentaria_360' class='ind-table'><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_indumentaria_360 input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>DNI</th><th>TRABAJADOR</th><th>CARGO</th><th>ESTADO PROCESO</th><th>% COMPLETITUD</th><th>MÓDULOS POR PASAR</th><th>ACCIONES</th></tr>{indumentaria_control_rows}</table></div></div>
+          <div class='ind-table-card'><div class='ind-table-head'><h2>LISTA DE POSTULANTES</h2><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn green'>Registrar</label></div></div><div class='std-table-wrap'><table id='tabla_indumentaria_360' class='std-table'>{tabla_estandar_postulantes_header('tabla_indumentaria_360')}{indumentaria_control_rows}</table></div></div>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Cargos de entrega registrados</h2><small>{len(indumentarias_filtradas)} registro(s)</small></div><div class='ind-table-wrap'><table class='ind-table'><tr><th>Fecha registro</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Estado</th><th>Responsable</th><th>Fecha entrega</th><th>Acción</th></tr>{ind_rows}</table></div></div>
           <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card'><div class='ind-modal-head'><h2>Registrar entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar</label></div><div class='ind-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span><span>Primero elija requerimiento y DNI.</span></div><form method='post' enctype='multipart/form-data' class='ind-form' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><div class='section'>1. Requerimiento y postulante</div><b class='req'>Requerimiento</b><select name='requerimiento' id='ind_requerimiento' required onchange='actualizarBloqueoIndumentaria(true)'><option value='{h(req_filtro_indumentaria)}'>{h(req_filtro_indumentaria) or 'Seleccione requerimiento'}</option>{req_options_indumentaria}</select><b class='req'>DNI</b><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Primero seleccione requerimiento' required><div class='full' style='font-weight:900;color:#047857;padding:4px 0 8px'>Al digitar 8 números, los datos se cargan automáticamente.</div><div class='section'>2. Datos del trabajador</div><b class='req'>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b>Área</b><input id='ind_area' name='area' placeholder='Área'><b>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'>3. Detalle de prendas / EPP</div><b class='req'>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req'>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req'>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req'>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><b class='req'>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='ind-btn green' type='submit'>✅ Registrar entrega</button></div></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>
         </section>
@@ -11688,10 +11749,10 @@ html,body{overflow-x:hidden!important;}
                 ok = vv in ['LISTO PARA IMPRIMIR','ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO','CARGO GENERADO','FOTO APROBADA','APROBADO']
                 return f"<span class='status-pill {'ok' if ok else ''}'>{h(vv)}</span>"
             foto_rows=[]
-            for r in lista_foto:
+            for i, r in enumerate(lista_foto, 1):
                 extra = f"<a class='std-ico' title='Vista previa fotocheck' target='_blank' href='/admin/contratacion/fotocheck/preview_dni?dni={h(row_get(r,'dni'))}'>🪪</a>"
-                foto_rows.append(fila_estandar_postulante(r, req=req_actual, checkbox_name='ingreso_ids', extra_action=extra))
-            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='8'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
+                foto_rows.append(fila_estandar_postulante(r, req=req_actual, checkbox_name='ingreso_ids', extra_action=extra, idx=i))
+            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='14' class='std-empty'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
             with db() as con_cfg_ui:
                 cfg_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
                 hist_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_historial ORDER BY id DESC LIMIT 8').fetchall()
@@ -11721,6 +11782,7 @@ html,body{overflow-x:hidden!important;}
             cfg_estado_class = 'ok' if zebra_permite_impresion(cfg_estado) else ('warn' if cfg_estado in ['PENDIENTE DE PRUEBA LOCAL','PENDIENTE DE PRUEBA REAL','PRUEBA LÓGICA / REQUIERE PC LOCAL'] else 'bad')
             hist_rows = ''.join([f"<tr><td>{h(x['fecha'])}</td><td>{h(x['accion'])}</td><td>{h(x['impresora'])}</td><td>{h(x['tipo_conexion'])}</td><td>{h(x['estado'])}</td><td>{h(x['detalle'])}</td></tr>" for x in hist_zebra]) or "<tr><td colspan='6'>Sin pruebas ni impresiones registradas.</td></tr>"
             content=wrap(f"""
+            {estilos_tabla_estandar_postulantes()}
             <style>
             .foto-kpis{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:14px;margin:14px 0 18px}}
             .foto-kpis .kpi{{background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:15px;box-shadow:0 8px 22px rgba(15,23,42,.06)}}
@@ -11857,12 +11919,12 @@ html,body{overflow-x:hidden!important;}
                 <button class='c-btn' name='accion' value='fotocheck_accion_masiva'>Actualizar seleccionados</button>
                 <button class='c-btn gray' name='accion' value='fotocheck_generar_cargo'>Generar cargo para firma</button>
               </div>
-              <div class='c-card table-wrap'>
-                <table id='tabla_fotocheck' class='c-table'>
-                  <tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_fotocheck input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>DNI</th><th>TRABAJADOR</th><th>CARGO</th><th>ESTADO PROCESO</th><th>% COMPLETITUD</th><th>MÓDULOS POR PASAR</th><th>ACCIONES</th></tr>
+              <div class='std-card'><div class='std-table-wrap'>
+                <table id='tabla_fotocheck' class='std-table'>
+                  {tabla_estandar_postulantes_header('tabla_fotocheck')}
                   {foto_rows_html}
                 </table>
-              </div>
+              </div></div>
             </form>
             <div class='c-card' style='padding:18px;margin-top:16px'>
               <h3>Reglas automáticas</h3>
