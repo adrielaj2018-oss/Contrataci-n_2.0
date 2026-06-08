@@ -1514,7 +1514,7 @@ def ia_contratacion_analizar_dni(dni):
         if 'REING' in tipo_ing.upper():
             resultado['alertas'].append('El trabajador figura como REINGRESANTE. Revisar historial laboral y documentos anteriores.')
     else:
-        resultado['recomendaciones'].append('No se encontró registro en POSTULANTES; enlazarlo a un requerimiento/requerimiento.')
+        resultado['recomendaciones'].append('No se encontró registro en POSTULANTES; enlazarlo a un requerimiento.')
     if medicas:
         estado_med = clean(medicas[0]['estado'] if 'estado' in medicas[0].keys() else '')
         if estado_med and estado_med.upper() != 'APTO':
@@ -2350,7 +2350,7 @@ def init_db():
             nota TEXT, fecha_inicio TEXT, fecha_fin TEXT, evidencia_nombre TEXT, ruta_evidencia TEXT,
             observacion TEXT, fecha_registro TEXT, registrado_por TEXT
         )''')
-        # PRO VALIDACIÓN: Inducción/Capacitación debe quedar amarrada al requerimiento/requerimiento.
+        # PRO VALIDACIÓN: Inducción/Capacitación debe quedar amarrada al requerimiento.
         try: con.execute('ALTER TABLE contratacion_capacitacion ADD COLUMN requerimiento TEXT')
         except Exception: pass
         try: con.execute('CREATE INDEX IF NOT EXISTS idx_capacitacion_req_dni ON contratacion_capacitacion(requerimiento,dni)')
@@ -2798,7 +2798,7 @@ def validar_dni_en_requerimiento(con, dni, requerimiento):
     dni = normalizar_dni(dni)
     requerimiento = clean(requerimiento)
     if not requerimiento:
-        return False, 'Primero seleccione un requerimiento/requerimiento.', None
+        return False, 'Primero seleccione un requerimiento.', None
     if not dni:
         return False, 'Digite un DNI válido de 8 dígitos.', None
     row = con.execute("""SELECT * FROM contratacion_ingresos
@@ -2991,8 +2991,8 @@ def cantidad_solicitada_requerimiento(row):
 
 
 def contar_postulantes_requerimiento(con, requerimiento):
-    """Cuenta solo postulantes activos vinculados exactamente al requerimiento/requerimiento."""
-    requerimiento = clean(ticket)
+    """Cuenta solo postulantes activos vinculados exactamente al requerimiento."""
+    requerimiento = clean(requerimiento)
     if not requerimiento:
         return 0
     return int(con.execute("""SELECT COUNT(*)
@@ -3004,7 +3004,7 @@ def contar_postulantes_requerimiento(con, requerimiento):
 def sincronizar_estado_requerimiento_por_cupo(con, requerimiento):
     if not requerimiento:
         return
-    req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
+    req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(requerimiento)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
     if not req:
         return
     cantidad = cantidad_solicitada_requerimiento(req)
@@ -3016,34 +3016,34 @@ def sincronizar_estado_requerimiento_por_cupo(con, requerimiento):
                                      AND UPPER(COALESCE(estado,'')) IN ('REGISTRADO','LISTO PARA DOCUMENTOS')""", (requerimiento,)).fetchone()[0] or 0)
     # Guarda los contadores en la tabla para que el dashboard y reportes siempre muestren lo mismo.
     try:
-        con.execute("UPDATE contratacion_requerimientos SET cupos_registrados=?, cupos_completos=? WHERE TRIM(ticket)=TRIM(?)", (registrados, completos, requerimiento))
+        con.execute("UPDATE contratacion_requerimientos SET cupos_registrados=?, cupos_completos=? WHERE TRIM(requerimiento)=TRIM(?)", (registrados, completos, requerimiento))
     except Exception:
         pass
     if cantidad > 0 and registrados >= cantidad:
-        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', observacion=COALESCE(observacion,'') || ' | Cupo cerrado automáticamente.' WHERE TRIM(ticket)=TRIM(?) AND estado NOT IN ('CERRADO')", (requerimiento,))
+        con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', observacion=COALESCE(observacion,'') || ' | Cupo cerrado automáticamente.' WHERE TRIM(requerimiento)=TRIM(?) AND estado NOT IN ('CERRADO')", (requerimiento,))
     elif registrados > 0:
-        con.execute("UPDATE contratacion_requerimientos SET estado='EN REGISTRO' WHERE TRIM(ticket)=TRIM(?) AND estado NOT IN ('CERRADO','CUPO CERRADO')", (requerimiento,))
+        con.execute("UPDATE contratacion_requerimientos SET estado='EN REGISTRO' WHERE TRIM(requerimiento)=TRIM(?) AND estado NOT IN ('CERRADO','CUPO CERRADO')", (requerimiento,))
     elif registrados == 0:
-        con.execute("UPDATE contratacion_requerimientos SET estado='SOLICITADO' WHERE TRIM(ticket)=TRIM(?) AND estado IN ('EN REGISTRO','CUPO CERRADO')", (requerimiento,))
+        con.execute("UPDATE contratacion_requerimientos SET estado='SOLICITADO' WHERE TRIM(requerimiento)=TRIM(?) AND estado IN ('EN REGISTRO','CUPO CERRADO')", (requerimiento,))
 
 
 def registrar_dni_en_requerimiento_backend(requerimiento, dni, usuario='admin'):
     """Registro único y real de DNI al requerimiento.
     Usado por digitación manual, lector USB/código de barras y cámara.
     """
-    requerimiento = clean(ticket)
+    requerimiento = clean(requerimiento)
     dni = normalizar_dni(dni)
     if not requerimiento or not dni or len(dni) != 8:
         return {'ok': False, 'msg': 'Seleccione requerimiento y registre un DNI válido de 8 dígitos.', 'sound': 'error'}
 
     with db() as con:
-        req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
+        req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(requerimiento)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
         if not req:
-            return {'ok': False, 'msg': f'No se encontró el requerimiento {ticket}. Vuelva a seleccionarlo.', 'sound': 'error'}
+            return {'ok': False, 'msg': f'No se encontró el requerimiento {requerimiento}. Vuelva a seleccionarlo.', 'sound': 'error'}
 
         cantidad_req = cantidad_solicitada_requerimiento(req)
         if cantidad_req <= 0:
-            return {'ok': False, 'msg': f'El requerimiento {ticket} no tiene cantidad solicitada válida. Edite el requerimiento e ingrese la cantidad real.', 'sound': 'error'}
+            return {'ok': False, 'msg': f'El requerimiento {requerimiento} no tiene cantidad solicitada válida. Edite el requerimiento e ingrese la cantidad real.', 'sound': 'error'}
 
         # BLOQUEO PRO: un DNI activo solo puede estar en UN requerimiento.
         # Si fue digitado por error, primero debe anularse desde Requerimiento > Ver/Eliminar postulantes.
@@ -3053,7 +3053,7 @@ def registrar_dni_en_requerimiento_backend(requerimiento, dni, usuario='admin'):
                               ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
         if existe:
             registrados_req = contar_postulantes_requerimiento(con, requerimiento)
-            return {'ok': False, 'msg': f'ALERTA: el DNI {dni} ya está registrado activo en el requerimiento {ticket}. No se permite duplicar postulante.',
+            return {'ok': False, 'msg': f'ALERTA: el DNI {dni} ya está registrado activo en el requerimiento {requerimiento}. No se permite duplicar postulante.',
                     'sound': 'error', 'registrados': registrados_req, 'cantidad': cantidad_req}
 
         existe_otro = con.execute("""SELECT id, requerimiento, estado FROM contratacion_ingresos
@@ -3064,19 +3064,19 @@ def registrar_dni_en_requerimiento_backend(requerimiento, dni, usuario='admin'):
         if existe_otro:
             req_otro = clean(row_get(existe_otro, 'requerimiento'))
             return {'ok': False,
-                    'msg': f'BLOQUEADO: el DNI {dni} ya está activo en el requerimiento {req_otro}. Para moverlo a {ticket}, primero anúlelo/elímínelo desde Ver/Eliminar postulantes del requerimiento anterior.',
+                    'msg': f'BLOQUEADO: el DNI {dni} ya está activo en el requerimiento {req_otro}. Para moverlo a {requerimiento}, primero anúlelo/elímínelo desde Ver/Eliminar postulantes del requerimiento anterior.',
                     'sound': 'error',
                     'duplicado_otro_requerimiento': True,
                     'requerimiento_actual': req_otro,
-                    'ticket': requerimiento,
+                    'requerimiento': requerimiento,
                     'registrados': contar_postulantes_requerimiento(con, requerimiento),
                     'cantidad': cantidad_req}
 
         registrados_req = contar_postulantes_requerimiento(con, requerimiento)
         if registrados_req >= cantidad_req:
-            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(ticket)=TRIM(?)", (registrados_req, requerimiento))
+            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(requerimiento)=TRIM(?)", (registrados_req, requerimiento))
             con.commit()
-            return {'ok': False, 'msg': f'CUPO COMPLETO: el requerimiento {ticket} solicitó {cantidad_req} postulante(s) y ya tiene {registrados_req}. No se puede registrar más personal.',
+            return {'ok': False, 'msg': f'CUPO COMPLETO: el requerimiento {requerimiento} solicitó {cantidad_req} postulante(s) y ya tiene {registrados_req}. No se puede registrar más personal.',
                     'sound': 'error', 'cupo': True, 'registrados': registrados_req, 'cantidad': cantidad_req}
 
         trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
@@ -3122,12 +3122,12 @@ def registrar_dni_en_requerimiento_backend(requerimiento, dni, usuario='admin'):
 
     return {
         'ok': True,
-        'msg': f'POSTULANTE REGISTRADO: DNI {dni} vinculado al requerimiento {ticket}.',
+        'msg': f'POSTULANTE REGISTRADO: DNI {dni} vinculado al requerimiento {requerimiento}.',
         'sound': 'ok',
         'dni': dni,
         'tipo': tipo,
         'nombre': nombre or '',
-        'ticket': requerimiento,
+        'requerimiento': requerimiento,
         'registrados': registrados_final,
         'cantidad': cantidad_req
     }
@@ -4763,7 +4763,7 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
 
 
 /* Mejoras PRO flujo contratación */
-.flow-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}.flow-step{background:#fff;border:1px solid #dbe3ef;border-radius:14px;padding:14px;box-shadow:0 8px 20px rgba(15,23,42,.06)}.flow-step b{display:block;color:#111827}.flow-step small{color:#64748b}.semaforo-ticket{display:inline-flex;gap:6px;align-items:center}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.dot.ok{background:#16a34a}.dot.warn{background:#f59e0b}.dot.bad{background:#dc2626}.dot.info{background:#2563eb}.status-pill.warn{background:#fff7ed!important;color:#9a3412!important;border-color:#fed7aa!important}.status-pill.info{background:#eff6ff!important;color:#1d4ed8!important;border-color:#bfdbfe!important}.missing-list{font-size:12px;color:#9a3412;max-width:260px}.checklist-mini{display:flex;gap:6px;flex-wrap:wrap}.checklist-mini span{font-size:11px;border:1px solid #dbe3ef;border-radius:999px;padding:4px 7px;background:#f8fafc}.checklist-mini .ok{background:#ecfdf5;color:#166534}.checklist-mini .warn{background:#fff7ed;color:#9a3412}
+.flow-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}.flow-step{background:#fff;border:1px solid #dbe3ef;border-radius:14px;padding:14px;box-shadow:0 8px 20px rgba(15,23,42,.06)}.flow-step b{display:block;color:#111827}.flow-step small{color:#64748b}.semaforo-requerimiento{display:inline-flex;gap:6px;align-items:center}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}.dot.ok{background:#16a34a}.dot.warn{background:#f59e0b}.dot.bad{background:#dc2626}.dot.info{background:#2563eb}.status-pill.warn{background:#fff7ed!important;color:#9a3412!important;border-color:#fed7aa!important}.status-pill.info{background:#eff6ff!important;color:#1d4ed8!important;border-color:#bfdbfe!important}.missing-list{font-size:12px;color:#9a3412;max-width:260px}.checklist-mini{display:flex;gap:6px;flex-wrap:wrap}.checklist-mini span{font-size:11px;border:1px solid #dbe3ef;border-radius:999px;padding:4px 7px;background:#f8fafc}.checklist-mini .ok{background:#ecfdf5;color:#166534}.checklist-mini .warn{background:#fff7ed;color:#9a3412}
 @media(max-width:900px){.flow-strip{grid-template-columns:1fr}}
 
 .preventive-alert-box{margin:0 0 16px;padding:14px 18px;border-radius:16px;border:1px solid #fecaca;background:#fff1f2;color:#991b1b;font-weight:650}.preventive-alert-box.warn{background:#fff7ed;color:#9a3412;border-color:#fed7aa}.preventive-alert-box.mid{background:#fefce8;color:#854d0e;border-color:#fde68a}.preventive-alert-box.bad{background:#fef2f2;color:#991b1b;border-color:#fecaca}
@@ -5302,7 +5302,7 @@ def sidebar(active):
           <button type='button' class='{con_title_cls}' onclick="toggleGroup('grp_contratacion')"><i class='bi bi-clipboard-data'></i><span class='label'>Gestión Contratación</span><span class='chev'>∨</span></button>
           <div class='submenu'>
             <a class='{cls('dashboard')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=dashboard'><i class='bi bi-speedometer2'></i><span class='label'>Dashboard</span></a>
-            <a class='{cls('requerimientos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=requerimientos'><i class='bi bi-ticket-perforated'></i><span class='label'>Requerimiento</span></a>
+            <a class='{cls('requerimientos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=requerimientos'><i class='bi bi-requerimiento-perforated'></i><span class='label'>Requerimiento</span></a>
             <a class='{cls('nuevos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=nuevos'><i class='bi bi-person-plus'></i><span class='label'>Postulantes</span></a>
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
@@ -8026,7 +8026,7 @@ def admin_contratacion():
                     flash(f'Se actualizó {campo} a {nuevo_estado} para {len(ids_validos)} trabajador(es).', 'ok')
             return redirect(url_for('admin_contratacion', sec=request.form.get('volver') or 'nuevos'))
         if accion == 'registrar_dni_requerimiento':
-            requerimiento = clean(request.form.get('ticket_req'))
+            requerimiento = clean(request.form.get('requerimiento_req'))
             dni = normalizar_dni(request.form.get('dni_scan'))
             ajax_req = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
             data = registrar_dni_en_requerimiento_backend(requerimiento, dni, session.get('admin_user','admin'))
@@ -8035,7 +8035,7 @@ def admin_contratacion():
             flash(data.get('msg') or ('Registrado correctamente.' if data.get('ok') else 'No se pudo registrar.'), 'ok' if data.get('ok') else 'error')
             return redirect(url_for('admin_contratacion', sec='requerimientos'))
         if accion == 'guardar_requerimiento':
-            requerimiento = clean(request.form.get('ticket')) or ('REQ-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
+            requerimiento = clean(request.form.get('requerimiento')) or ('REQ-' + datetime.now(APP_TZ).strftime('%Y%m%d%H%M%S'))
             empresa = clean(request.form.get('empresa')) or 'AQUANQA'
             sede = clean(request.form.get('sede')) or 'GENERAL'
             area = clean(request.form.get('area'))
@@ -8061,7 +8061,7 @@ def admin_contratacion():
                 flash('La cantidad solicitada debe ser mayor a cero.', 'error')
                 return redirect(url_for('admin_contratacion', sec='requerimientos'))
             with db() as con:
-                existente_req = con.execute('SELECT id FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) LIMIT 1', (requerimiento,)).fetchone()
+                existente_req = con.execute('SELECT id FROM contratacion_requerimientos WHERE TRIM(requerimiento)=TRIM(?) LIMIT 1', (requerimiento,)).fetchone()
                 if existente_req:
                     con.execute('''UPDATE contratacion_requerimientos
                                       SET empresa=?, sede=?, area=?, cargo=?, actividad=?, cantidad=?, fecha_ingreso=?, fecha_inicio_contrato=?, fecha_fin_contrato=?,
@@ -8180,7 +8180,7 @@ def admin_contratacion():
             dni=normalizar_dni(request.form.get('dni')); trab=get_trabajador(dni)
             req_cap = clean(request.form.get('requerimiento') or request.form.get('req_contexto'))
             if not req_cap:
-                flash('Primero seleccione requerimiento/requerimiento para registrar inducción.', 'error')
+                flash('Primero seleccione requerimiento para registrar inducción.', 'error')
                 return redirect(url_for('admin_contratacion', sec='induccion'))
             with db() as con_val_cap:
                 # Si no viene DNI, se está registrando solo material/biblioteca de inducción.
@@ -8512,7 +8512,7 @@ def admin_contratacion():
             if requerimiento:
                 try:
                     with db() as con_req_pre:
-                        req_pre = con_req_pre.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
+                        req_pre = con_req_pre.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(requerimiento)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
                     if req_pre:
                         empresa = row_get(req_pre, 'empresa') or empresa
                         sede = row_get(req_pre, 'sede') or sede or 'GENERAL'
@@ -8555,14 +8555,14 @@ def admin_contratacion():
 
                 # El tipo de ingreso lo manda el DNI dentro del requerimiento actual.
                 # No se marca REINGRESANTE solo porque exista en tabla trabajadores.
-                tipo_ticket_actual = clean(row_get(dni_en_requerimiento, 'tipo_ingreso')).upper() if dni_en_requerimiento else ''
-                if tipo_ticket_actual in ('NUEVO', 'REINGRESANTE'):
-                    tipo_ingreso = tipo_ticket_actual
+                tipo_requerimiento_actual = clean(row_get(dni_en_requerimiento, 'tipo_ingreso')).upper() if dni_en_requerimiento else ''
+                if tipo_requerimiento_actual in ('NUEVO', 'REINGRESANTE'):
+                    tipo_ingreso = tipo_requerimiento_actual
 
                 # Bloqueo PRO: no permite superar la cantidad solicitada del requerimiento.
                 # Si el DNI ya estaba pre-registrado en ese requerimiento, solo se completa su ficha.
                 if requerimiento:
-                    req_cap = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(ticket)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
+                    req_cap = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(requerimiento)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
                     ing_ya_existe_cap = con.execute("""SELECT id FROM contratacion_ingresos
                                                         WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
                                                           AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
@@ -8587,7 +8587,7 @@ def admin_contratacion():
                             flash(f'El requerimiento {requerimiento} no tiene cantidad solicitada válida. Corrija el requerimiento antes de registrar postulantes.', 'error')
                             return redirect(url_for('admin_contratacion', sec='nuevos', req=requerimiento))
                         if registrados_req_cap >= cantidad_req_cap:
-                            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(ticket)=TRIM(?)", (registrados_req_cap, requerimiento))
+                            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(requerimiento)=TRIM(?)", (registrados_req_cap, requerimiento))
                             con.commit()
                             flash(f'🚨 CUPO COMPLETO: el requerimiento {requerimiento} solicitó {cantidad_req_cap} postulante(s) y ya tiene {registrados_req_cap}. No se puede registrar otro trabajador.', 'error')
                             return redirect(url_for('admin_contratacion', sec='nuevos', req=requerimiento))
@@ -9311,12 +9311,12 @@ def admin_contratacion():
     def h(v):
         return html.escape(str(v or ''))
     requerimiento_sel = clean(request.args.get('req'))
-    ticket_sel = requerimiento_sel  # compatibilidad interna: antes algunos bloques usaban ticket_sel
+    requerimiento_sel = requerimiento_sel  # compatibilidad interna: antes algunos bloques usaban requerimiento_sel
     ingresos_mostrar = [r for r in ingresos if not requerimiento_sel or clean(r['requerimiento']) == requerimiento_sel]
     trabajadores_proceso_mostrar = [r for r in trabajadores_proceso if not requerimiento_sel or clean(r['requerimiento']) == requerimiento_sel]
     req_sel_row = None
     for _rq in requerimientos:
-        if requerimiento_sel and clean(_rq['ticket']) == requerimiento_sel:
+        if requerimiento_sel and clean(_rq['requerimiento']) == requerimiento_sel:
             req_sel_row = _rq
             break
     req_solicitados = cantidad_solicitada_requerimiento(req_sel_row) if req_sel_row else 0
@@ -9494,8 +9494,8 @@ def admin_contratacion():
     .req-main{display:flex;align-items:center;gap:12px}.req-main:after{content:'📊';font-size:28px;order:-1;width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,#10b981,#067a43);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(6,122,67,.20)}
     .req-main b{display:block;color:#067a43;font-size:16px;line-height:1.15}.req-main span,.req-kpi span{display:block;color:#52637a;font-weight:800;font-size:12px;margin-top:4px}
     .req-kpi b{font-size:28px;color:#073763;font-weight:950}.req-kpi.ok b{color:#059669}.req-kpi.warn{border-bottom-color:#f59e0b;background:linear-gradient(135deg,#fff,#fffdf4)}.req-kpi.warn b{color:#d97706}.req-kpi.danger{border-bottom-color:#ef4444;background:linear-gradient(135deg,#fff,#fff7f7)}.req-kpi.danger b{color:#dc2626}
-    .ticket-first{border:1px solid var(--prz-line)!important;border-radius:20px!important;box-shadow:0 12px 30px rgba(6,78,59,.07)!important}
-    .ticket-first b{color:#067a43}
+    .requerimiento-first{border:1px solid var(--prz-line)!important;border-radius:20px!important;box-shadow:0 12px 30px rgba(6,78,59,.07)!important}
+    .requerimiento-first b{color:#067a43}
     .nr-tabs a.active,.c-btn{background:linear-gradient(135deg,#10b981,#067a43)!important;color:#fff!important;border:0!important;box-shadow:0 10px 22px rgba(6,122,67,.18)}
 
     /* === POSTULANTES VERDE PRO COMPACTO FINAL - CSS AISLADO === */
@@ -9529,10 +9529,10 @@ def admin_contratacion():
     .dash-hero h1{font-size:34px!important;line-height:1.05!important;margin:0 0 10px!important;color:#08723f!important;font-weight:950!important;letter-spacing:-.8px!important}
     .dash-hero .muted2{font-size:13px!important;color:#334155!important;margin:0!important}
     .dash-hero .c-btn{border-radius:8px!important;padding:15px 22px!important;background:linear-gradient(180deg,#078f4d,#047857)!important;box-shadow:0 12px 20px rgba(4,120,87,.20)!important;font-weight:950!important}
-    .ticket-first{display:grid!important;grid-template-columns:1.25fr 1fr .95fr!important;gap:26px!important;align-items:end!important;background:#fff!important;border:1px solid #e2e8f0!important;border-radius:8px!important;padding:16px 20px!important;margin:0 0 16px!important;box-shadow:0 10px 24px rgba(15,23,42,.06)!important}
-    .ticket-first .filter-field{display:flex!important;flex-direction:column!important;gap:7px!important}
-    .ticket-first b{font-size:12px!important;color:#067a43!important;font-weight:950!important}
-    .ticket-first select,.ticket-first input{height:39px!important;border:1px solid #d5dee8!important;border-radius:8px!important;background:#fff!important;padding:0 14px!important;font-weight:750!important;color:#111827!important}
+    .requerimiento-first{display:grid!important;grid-template-columns:1.25fr 1fr .95fr!important;gap:26px!important;align-items:end!important;background:#fff!important;border:1px solid #e2e8f0!important;border-radius:8px!important;padding:16px 20px!important;margin:0 0 16px!important;box-shadow:0 10px 24px rgba(15,23,42,.06)!important}
+    .requerimiento-first .filter-field{display:flex!important;flex-direction:column!important;gap:7px!important}
+    .requerimiento-first b{font-size:12px!important;color:#067a43!important;font-weight:950!important}
+    .requerimiento-first select,.requerimiento-first input{height:39px!important;border:1px solid #d5dee8!important;border-radius:8px!important;background:#fff!important;padding:0 14px!important;font-weight:750!important;color:#111827!important}
     .kpi-row-pro{display:grid!important;grid-template-columns:repeat(6,minmax(145px,1fr))!important;gap:12px!important;margin:0 0 14px!important}
     .kpi-card-pro{height:88px!important;background:#fff!important;border:1px solid #e6edf3!important;border-radius:8px!important;padding:14px 16px!important;box-shadow:0 10px 22px rgba(15,23,42,.07)!important;display:grid!important;grid-template-columns:42px 1fr!important;gap:12px!important;align-items:center!important;overflow:hidden!important}
     .kpi-icon-pro{width:40px!important;height:40px!important;border-radius:999px!important;background:linear-gradient(180deg,#078f4d,#047857)!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:17px!important;font-weight:900!important;box-shadow:0 8px 16px rgba(4,120,87,.20)!important}
@@ -9553,7 +9553,7 @@ def admin_contratacion():
     .control-360-title{display:flex!important;justify-content:space-between!important;align-items:center!important;margin-bottom:10px!important}.control-360-title h3{margin:0!important;color:#067a43!important;font-size:15px!important;font-weight:950!important}.control-360-title p{display:none!important}
     .quick-actions-360{display:flex!important;gap:14px!important}.quick-actions-360 .c-btn{height:36px!important;border-radius:8px!important;padding:0 16px!important;background:#fff!important;color:#0f172a!important;border:1px solid #d9e2ec!important;box-shadow:none!important;font-size:12px!important;font-weight:950!important;display:flex!important;align-items:center!important}.quick-actions-360 .c-btn:last-child{background:linear-gradient(180deg,#078f4d,#047857)!important;color:#fff!important;border:0!important}
     .tabla-360 th{background:linear-gradient(180deg,#078f4d,#047857)!important;color:#fff!important;padding:10px 9px!important;text-align:center!important;font-size:11px!important}.tabla-360 td{padding:8px 9px!important;border:1px solid #e5edf2!important;vertical-align:middle!important;text-align:center!important;background:#fff!important}.tabla-360 td small{display:block!important;color:#334155!important;font-size:10px!important;margin-top:2px!important}.tabla-360 td b{font-size:11px!important;color:#102a43!important}
-    @media(max-width:1350px){.kpi-row-pro{grid-template-columns:repeat(2,1fr)!important}.postulantes-control-pro{grid-template-columns:1fr 1fr 1fr!important}.ticket-first{grid-template-columns:1fr!important}}
+    @media(max-width:1350px){.kpi-row-pro{grid-template-columns:repeat(2,1fr)!important}.postulantes-control-pro{grid-template-columns:1fr 1fr 1fr!important}.requerimiento-first{grid-template-columns:1fr!important}}
     @media(max-width:760px){.kpi-row-pro,.postulantes-control-pro{grid-template-columns:1fr!important}.control-360-title,.quick-actions-360{display:block!important}.quick-actions-360 .c-btn{margin-top:8px!important}}
 
     .demo-avatar{width:38px;height:38px;border-radius:8px;background:#dcfce7;border:1px solid #86efac;display:flex;align-items:center;justify-content:center;margin:auto;font-size:24px;overflow:hidden}.av1{background:#fef3c7}.av2{background:#dbeafe}.av3{background:#fce7f3}
@@ -9608,14 +9608,14 @@ def admin_contratacion():
       </div>
     </div>
     <div class='control-360-card table-wrap'>
-      <div class='control-360-title'><div><h3>Lista de postulantes del requerimiento</h3><p>Semáforo por trabajador: datos obligatorios, médico, documentos, contrato, firma, fotocheck e inducción. {'Vista demo referencial: no guarda datos.' if demo_postulantes_360 else ''}</p></div><div class='quick-actions-360'><a class='c-btn gray' href='/admin/contratacion?sec=datos_completos&req={h(ticket_sel)}'>📋 Ver ficha 360°</a><a class='c-btn gray' href='/admin/contratacion?sec=medica&req={h(ticket_sel)}'>🩺 Médico</a><a class='c-btn gray' href='/admin/contratacion?sec=induccion&req={h(ticket_sel)}'>🎓 Inducción</a></div></div>
+      <div class='control-360-title'><div><h3>Lista de postulantes del requerimiento</h3><p>Semáforo por trabajador: datos obligatorios, médico, documentos, contrato, firma, fotocheck e inducción. {'Vista demo referencial: no guarda datos.' if demo_postulantes_360 else ''}</p></div><div class='quick-actions-360'><a class='c-btn gray' href='/admin/contratacion?sec=datos_completos&req={h(requerimiento_sel)}'>📋 Ver ficha 360°</a><a class='c-btn gray' href='/admin/contratacion?sec=medica&req={h(requerimiento_sel)}'>🩺 Médico</a><a class='c-btn gray' href='/admin/contratacion?sec=induccion&req={h(requerimiento_sel)}'>🎓 Inducción</a></div></div>
       <table id='tabla_360_postulantes' class='c-table tabla-360'><tr><th>Sel.</th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma de contratos</th><th>Acciones</th></tr>{postulante_tabla_360_html}</table>
     </div>
     """
-    req_detalle_txt = (f"{req_sel_row['ticket']} · {req_sel_row['empresa']} · {req_sel_row['area']} · {req_sel_row['actividad']}" if req_sel_row else "Seleccione un requerimiento para activar la ficha")
+    req_detalle_txt = (f"{req_sel_row['requerimiento']} · {req_sel_row['empresa']} · {req_sel_row['area']} · {req_sel_row['actividad']}" if req_sel_row else "Seleccione un requerimiento para activar la ficha")
     opt_trab=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['nombre'])}</option>" for r in trabajadores])
     opt_ingresos=''.join([f"<option value='{h(r['dni'])}'>{h(r['dni'])} - {h(r['trabajador'])} - {h(r['requerimiento'])}</option>" for r in trabajadores_proceso_mostrar])
-    opt_req=''.join([f"<option value='{h(r['ticket'])}' {'selected' if requerimiento_sel==clean(r['ticket']) else ''}>{h(r['ticket'])} - {h(r['empresa'])} - {h(r['area'])} - {h(r['actividad'])}</option>" for r in requerimientos])
+    opt_req=''.join([f"<option value='{h(r['requerimiento'])}' {'selected' if requerimiento_sel==clean(r['requerimiento']) else ''}>{h(r['requerimiento'])} - {h(r['empresa'])} - {h(r['area'])} - {h(r['actividad'])}</option>" for r in requerimientos])
     # Catálogos para autocompletar desde configuración/maestros del empleador y requerimientos existentes
     def maestros_tipo(tipo):
         return sorted({clean(r['nombre']) for r in maestros_empleador if clean(r['tipo']).upper()==tipo and int(r['activo'] or 0)==1 and clean(r['nombre'])})
@@ -10261,14 +10261,14 @@ html,body{overflow-x:hidden!important;}
         </section>
         """)
     elif sec=='requerimientos':
-        req_options=''.join([f"<option value='{h(r['ticket'])}'>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['actividad'])}</option>" for r in requerimientos])
+        req_options=''.join([f"<option value='{h(r['requerimiento'])}'>{h(r['requerimiento'])} - {h(r['empresa'])} / {h(r['actividad'])}</option>" for r in requerimientos])
         req_reg_map = {}
         req_cant_map = {}
         try:
             with db() as con_req_count:
                 # Sincroniza primero para que no queden contadores viejos después de anular o registrar.
                 for r_sync in requerimientos:
-                    sincronizar_estado_requerimiento_por_cupo(con_req_count, clean(r_sync['ticket']))
+                    sincronizar_estado_requerimiento_por_cupo(con_req_count, clean(r_sync['requerimiento']))
                 con_req_count.commit()
                 for rr in con_req_count.execute("""SELECT TRIM(requerimiento) requerimiento, COUNT(*) total
                                                    FROM contratacion_ingresos
@@ -10276,17 +10276,17 @@ html,body{overflow-x:hidden!important;}
                                                    GROUP BY TRIM(requerimiento)""").fetchall():
                     req_reg_map[clean(rr['requerimiento'])] = int_safe(rr['total'], 0)
                 for rq in con_req_count.execute("SELECT * FROM contratacion_requerimientos").fetchall():
-                    req_cant_map[clean(rq['ticket'])] = cantidad_solicitada_requerimiento(rq)
+                    req_cant_map[clean(rq['requerimiento'])] = cantidad_solicitada_requerimiento(rq)
         except Exception:
             req_reg_map = {}
             req_cant_map = {}
-        req_rows=''.join([f"<tr><td><b>{h(r['ticket'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><span class='req-count-pill {'full' if int_safe(req_reg_map.get(clean(r['ticket']),0)) >= int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r))) and int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r)))>0 else ('warn' if int_safe(req_reg_map.get(clean(r['ticket']),0))>0 else '')}'>{int_safe(req_reg_map.get(clean(r['ticket']),0))} / {int_safe(req_cant_map.get(clean(r['ticket']), cantidad_solicitada_requerimiento(r)))}</span></td><td><a class='req-detail-btn' href='/admin/contratacion?sec=datos_completos&req={h(r['ticket'])}'>👁 Ver / eliminar postulantes</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar requerimiento?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
+        req_rows=''.join([f"<tr><td><b>{h(r['requerimiento'])}</b></td><td>{h(r['empresa'])}</td><td>{h(r['area'])}</td><td>{h(r['actividad'])}</td><td>{h(r['fecha_ingreso'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td><td><span class='req-count-pill {'full' if int_safe(req_reg_map.get(clean(r['requerimiento']),0)) >= int_safe(req_cant_map.get(clean(r['requerimiento']), cantidad_solicitada_requerimiento(r))) and int_safe(req_cant_map.get(clean(r['requerimiento']), cantidad_solicitada_requerimiento(r)))>0 else ('warn' if int_safe(req_reg_map.get(clean(r['requerimiento']),0))>0 else '')}'>{int_safe(req_reg_map.get(clean(r['requerimiento']),0))} / {int_safe(req_cant_map.get(clean(r['requerimiento']), cantidad_solicitada_requerimiento(r)))}</span></td><td><a class='req-detail-btn' href='/admin/contratacion?sec=datos_completos&req={h(r['requerimiento'])}'>👁 Ver / eliminar postulantes</a></td><td class='col-delete'><form method='post' onsubmit='return confirm(&quot;¿Eliminar requerimiento?&quot;)'><input type='hidden' name='accion' value='eliminar_requerimiento'><input type='hidden' name='req_id' value='{r['id']}'><button class='delete-mini' title='Eliminar'>Eliminar</button></form></td><td>{h(r['responsable'])}</td></tr>" for r in requerimientos]) or "<tr><td colspan='10'>Sin requerimientos registrados.</td></tr>"
         trabajadores_scan_js = json.dumps({normalizar_dni(r['dni']): {'nombre': (r['nombre'] or ''), 'empresa': (r['empresa'] or ''), 'cargo': (r['cargo'] or ''), 'area': (r['area'] or ''), 'correo': (r['correo'] or '')} for r in trabajadores}, ensure_ascii=False)
         relaciones_req_js = json.dumps([{
             'empresa': row_get(r,'empresa'), 'area': row_get(r,'area'), 'cargo': row_get(r,'cargo'), 'actividad': row_get(r,'actividad'),
             'regimen_laboral': row_get(r,'regimen_laboral'), 'tipo_contrato': row_get(r,'tipo_contrato'), 'modalidad': row_get(r,'modalidad')
         } for r in relaciones_laborales if int_safe(row_get(r,'activo'),1)==1], ensure_ascii=False)
-        req_info_js = json.dumps({clean(r['ticket']): {
+        req_info_js = json.dumps({clean(r['requerimiento']): {
             'empresa': row_get(r,'empresa'), 'area': row_get(r,'area'), 'cargo': row_get(r,'cargo'), 'actividad': row_get(r,'actividad'),
             'regimen_laboral': row_get(r,'regimen_laboral'), 'tipo_contrato': row_get(r,'tipo_contrato'),
             'fecha_inicio_contrato': row_get(r,'fecha_inicio_contrato') or row_get(r,'fecha_ingreso'), 'fecha_fin_contrato': row_get(r,'fecha_fin_contrato')
@@ -10302,8 +10302,8 @@ html,body{overflow-x:hidden!important;}
         </div>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Requerimiento de contratación</h1><p class='muted2'>Primero crea el requerimiento por empresa, área y actividad. Luego escanea DNI o código de barras en este mismo módulo para armar la base del requerimiento.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Completar ficha trabajador</a></div>
         <div class='req-pro-grid'>
-          <form method='post' class='pro-card nice-form req-cascade-form' id='form_req_laboral'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Requerimiento / Requerimiento</b><input name='ticket' required placeholder='Ej. REQ-2026-0001'><b>Régimen laboral</b><select name='regimen_laboral' id='req_regimen_laboral' required>{opt_regimen_select}</select><b>Empresa</b><select name='empresa' id='req_empresa' required>{opt_empresa_select}</select><b>Área</b><select name='area' id='req_area' required><option value=''>Seleccione área</option></select><b>Cargo</b><select name='cargo' id='req_cargo' required><option value=''>Seleccione cargo</option></select><b>Actividad</b><select name='actividad' id='req_actividad' required><option value=''>Seleccione actividad</option></select><b>Tipo contrato</b><select name='tipo_contrato' id='req_tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha inicio contrato</b><input type='date' name='fecha_inicio_contrato' id='req_fecha_inicio_contrato' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato' id='req_fecha_fin_contrato' required><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear requerimiento</button><span class='muted2'>Los datos del requerimiento pasarán automáticamente a Postulantes.</span></div></form>
-          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='ticket_req' id='ticket_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
+          <form method='post' class='pro-card nice-form req-cascade-form' id='form_req_laboral'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Requerimiento</b><input name='requerimiento' required placeholder='Ej. REQ-2026-0001'><b>Régimen laboral</b><select name='regimen_laboral' id='req_regimen_laboral' required>{opt_regimen_select}</select><b>Empresa</b><select name='empresa' id='req_empresa' required>{opt_empresa_select}</select><b>Área</b><select name='area' id='req_area' required><option value=''>Seleccione área</option></select><b>Cargo</b><select name='cargo' id='req_cargo' required><option value=''>Seleccione cargo</option></select><b>Actividad</b><select name='actividad' id='req_actividad' required><option value=''>Seleccione actividad</option></select><b>Tipo contrato</b><select name='tipo_contrato' id='req_tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha inicio contrato</b><input type='date' name='fecha_inicio_contrato' id='req_fecha_inicio_contrato' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato' id='req_fecha_fin_contrato' required><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear requerimiento</button><span class='muted2'>Los datos del requerimiento pasarán automáticamente a Postulantes.</span></div></form>
+          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='requerimiento_req' id='requerimiento_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
         </div>
         <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar requerimiento, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Requerimiento</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle / eliminar postulantes</th><th>Anular</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
@@ -10331,7 +10331,7 @@ html,body{overflow-x:hidden!important;}
         function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const freqs=(tipo==='error'?[620,420,620]:[tipo==='reingreso'?[880,1040]:[520,760]][0]); let t=ctx.currentTime; (Array.isArray(freqs)?freqs:[freqs]).forEach(f=>{{const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type=tipo==='error'?'square':'sine'; osc.frequency.value=f; gain.gain.value=tipo==='error'?0.10:0.07; osc.connect(gain); gain.connect(ctx.destination); osc.start(t); osc.stop(t+0.20); t+=0.23;}}); setTimeout(()=>ctx.close(),1000);}}catch(e){{}}}}
         function mostrarAlarmaReq(msg){{beepReq('error'); try{{if(navigator.vibrate) navigator.vibrate([180,80,180]);}}catch(e){{}} const old=document.querySelector('.req-cap-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-cap-alert'; a.innerHTML='🚨 '+(msg||'No se pudo registrar.')+'<small>Revise cupo, requerimiento activo o DNI duplicado.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},7000);}}
         function mostrarRegistradoReq(msg){{try{{if(navigator.vibrate) navigator.vibrate([80]);}}catch(e){{}} const old=document.querySelector('.req-ok-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-ok-alert'; a.innerHTML='✅ '+(msg||'POSTULANTE REGISTRADO')+'<small>Guardado automáticamente y vinculado al requerimiento.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},4500);}}
-        function actualizarContadorTablaReq(requerimiento, registrados, cantidad){{try{{document.querySelectorAll('#tabla_req tr').forEach(tr=>{{const c=tr.children&&tr.children[0]; if(!c) return; if((c.innerText||'').trim()===String(ticket).trim()){{const pill=tr.querySelector('.req-count-pill'); if(pill){{pill.textContent=String(registrados)+' / '+String(cantidad); pill.classList.remove('warn','full'); if(Number(registrados)>=Number(cantidad)&&Number(cantidad)>0) pill.classList.add('full'); else if(Number(registrados)>0) pill.classList.add('warn');}}}}}});}}catch(e){{}}}}
+        function actualizarContadorTablaReq(requerimiento, registrados, cantidad){{try{{document.querySelectorAll('#tabla_req tr').forEach(tr=>{{const c=tr.children&&tr.children[0]; if(!c) return; if((c.innerText||'').trim()===String(requerimiento).trim()){{const pill=tr.querySelector('.req-count-pill'); if(pill){{pill.textContent=String(registrados)+' / '+String(cantidad); pill.classList.remove('warn','full'); if(Number(registrados)>=Number(cantidad)&&Number(cantidad)>0) pill.classList.add('full'); else if(Number(registrados)>0) pill.classList.add('warn');}}}}}});}}catch(e){{}}}}
         function iniciarAutoDetectorReq(){{
           const i=document.getElementById('dni_scan_req'); if(!i) return;
           const handler=function(e){{ if(e && e.key==='Enter'){{e.preventDefault(); agregarDniLocalReq(); return;}} const dni=limpiarDniReq(i.value); if(document.getElementById('scan_masivo_req')?.checked && dni.length===8){{setTimeout(()=>agregarDniLocalReq(),120);}} }};
@@ -10342,13 +10342,13 @@ html,body{overflow-x:hidden!important;}
         document.addEventListener('DOMContentLoaded',()=>{{iniciarAutoDetectorReq(); const i=document.getElementById('dni_scan_req'); if(i) i.focus();}});
         async function agregarDniLocalReq(){{
           if(scanReqSaving) return;
-          const i=document.getElementById('dni_scan_req'); const requerimiento=document.getElementById('ticket_req_auto')?.value||''; const dni=limpiarDniReq(i.value);
-          if(!ticket){{mostrarAlarmaReq('Seleccione requerimiento activo.'); return;}}
+          const i=document.getElementById('dni_scan_req'); const requerimiento=document.getElementById('requerimiento_req_auto')?.value||''; const dni=limpiarDniReq(i.value);
+          if(!requerimiento){{mostrarAlarmaReq('Seleccione requerimiento activo.'); return;}}
           if(dni.length!==8){{return;}}
           const now=Date.now(); if(scanReqLast===dni && (now-scanReqLastAt)<1800){{return;}} scanReqLast=dni; scanReqLastAt=now;
           scanReqSaving=true; i.value=dni;
           try{{
-            const fd=new FormData(); fd.append('ticket_req',ticket); fd.append('dni_scan',dni);
+            const fd=new FormData(); fd.append('requerimiento_req',requerimiento); fd.append('dni_scan',dni);
             const resp = await fetch('/api/contratacion/registrar_dni_requerimiento', {{method:'POST', body:fd, credentials:'same-origin', headers:{{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}}}});
             let data={{ok:false,msg:'No se pudo registrar.'}}; try{{data=await resp.json();}}catch(e){{}}
             if(!data.ok){{document.getElementById('scan_result_req').value=data.msg||'Registro bloqueado'; mostrarAlarmaReq(data.msg); i.select(); scanReqSaving=false; return;}}
@@ -10425,7 +10425,7 @@ html,body{overflow-x:hidden!important;}
             if _faltan(r): return ('Incompleto','bad')
             if 'APTO' in clean(_rv(r,'estado_medico')).upper(): return ('Completo','ok')
             return ('En validación','warn')
-        req_has_selection = bool(ticket_sel)
+        req_has_selection = bool(requerimiento_sel)
         real_rows = ingresos_mostrar if req_has_selection else []
         demo_rows = [
             dict(dni='74324033', trabajador='PEREZ GARCIA<br>Juan Carlos', cargo='OPERARIO DE<br>CAMPO', estado='En validación', cls='warn', avance=75, medico='Apto', docs='2', contrato='Generado', firma='Pendiente', fotocheck='Pendiente', induccion='Pendiente', foto='👨🏻'),
@@ -10519,7 +10519,7 @@ html,body{overflow-x:hidden!important;}
 </style>
         <div class='post-modal-tools'><div><h2>Postulantes</h2><p>Primero elige el requerimiento. Luego registra la ficha en una ventana separada, igual que Indumentaria.</p></div><label for='modal_postulante_registro' class='c-btn'>👤 Registrar postulante</label></div>
         <input type='checkbox' id='modal_postulante_registro' class='post-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='post-modal'><div class='post-modal-card'><div class='post-modal-head'><h2>Registro de postulante</h2><label for='modal_postulante_registro' class='post-close'>Cerrar</label></div>
-        <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form ficha-registro-pro' style='padding:20px' data-req-activo='{h(ticket_sel)}' onsubmit='if(!validarDniRequerimiento()){{emitirBeepBloqueo();return false;}}'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><input type='hidden' name='requerimiento' id='requerimiento_ingreso_hidden' value='{h(ticket_sel)}'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='missing-note'>Campos obligatorios alineados a plantillas: DNI, nombre, cargo, fechas, dirección, contacto, remuneración y duración del contrato.</div><div id='bloqueo_req_msg' class='full req-lock-alert' style='display:none'><b>Primero seleccione un requerimiento arriba.</b><small>La ficha queda bloqueada para evitar registros sueltos sin requerimiento.</small></div><div id='dni_req_msg' class='full req-lock-alert dni-alert-pro' style='display:none'>
+        <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form ficha-registro-pro' style='padding:20px' data-req-activo='{h(requerimiento_sel)}' onsubmit='if(!validarDniRequerimiento()){{emitirBeepBloqueo();return false;}}'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><input type='hidden' name='requerimiento' id='requerimiento_ingreso_hidden' value='{h(requerimiento_sel)}'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='missing-note'>Campos obligatorios alineados a plantillas: DNI, nombre, cargo, fechas, dirección, contacto, remuneración y duración del contrato.</div><div id='bloqueo_req_msg' class='full req-lock-alert' style='display:none'><b>Primero seleccione un requerimiento arriba.</b><small>La ficha queda bloqueada para evitar registros sueltos sin requerimiento.</small></div><div id='dni_req_msg' class='full req-lock-alert dni-alert-pro' style='display:none'>
   <div class='alerta-icono-dni'>⚠</div>
   <div><b>DNI no pertenece al requerimiento seleccionado.</b><small>Solo se permite completar ficha de los DNI ya registrados/importados en este requerimiento.</small></div>
 </div><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='validarDniRequerimiento();detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'>{opt_empresa_select}</select><b>Celular <span class='req-mark'>*</span></b><input name='celular' id='celular_ingreso' required><b>Correo <span class='req-mark'>*</span></b><input name='correo' id='correo_ingreso' type='email' required><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b>Actividad</b><input name='actividad' list='lista_actividades_cfg' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_fin_contrato' required><b>Tipo contrato <span class='req-mark'>*</span></b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required>{opt_regimen_select}</select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneración básica <span class='req-mark'>*</span></b><input name='remuneracion_basica' id='remuneracion_basica' required inputmode='decimal' oninput='actualizarRemuneracionLetras()' placeholder='Ej. 1130.00'><b>Remuneración en letras <span class='req-mark'>*</span></b><input name='remuneracion_letra' id='remuneracion_letra' required readonly class='fixed-field' placeholder='Se genera automáticamente'><b>Moneda</b><input name='nombre_moneda' value='{h(_moneda_nombre)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='{h(_moneda_simbolo)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'>{opt_periodicidad_select}</select><b>Tipo pago</b><select name='tipo_pago'>{opt_tipo_pago_select}</select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏻ Apagar cámara</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Duración contrato texto <span class='req-mark'>*</span></b><input name='meses_contrato' required placeholder='Ej. TRES MESES / 1 mes y 2 días'><b>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button id='btn_guardar_ingreso' class='c-btn'>💾 Guardar trabajador</button></form></div></div><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
@@ -11437,7 +11437,7 @@ html,body{overflow-x:hidden!important;}
         # Flujo obligatorio: a Inducción solo pasan postulantes con ficha completa y evaluación médica APTO/HABILITADO.
         with db() as con_flujo_ind:
             trabajadores_induccion = [r for r in trabajadores_induccion_base if flujo_postulante_completo(r) and flujo_medica_apta_con(con_flujo_ind, row_get(r,'dni'), row_get(r,'requerimiento'))]
-        req_options_induccion = ''.join([f"<option value='{h(r['ticket'])}' {'selected' if clean(r['ticket'])==req_filtro_induccion else ''}>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['area'])} / {h(r['cargo'])}</option>" for r in requerimientos])
+        req_options_induccion = ''.join([f"<option value='{h(r['requerimiento'])}' {'selected' if clean(r['requerimiento'])==req_filtro_induccion else ''}>{h(r['requerimiento'])} - {h(r['empresa'])} / {h(r['area'])} / {h(r['cargo'])}</option>" for r in requerimientos])
         total_ind_req = len(trabajadores_induccion)
         inducidos_req = len([r for r in trabajadores_induccion if clean(row_get(r,'estado_capacitacion')).upper() in ('VIDEO VISTO','APROBADO','INDUCIDO','COMPLETO')])
         pendientes_ind_req = max(total_ind_req - inducidos_req, 0)
@@ -11519,7 +11519,7 @@ html,body{overflow-x:hidden!important;}
         with db() as con_flujo_indum:
             trabajadores_indumentaria = [r for r in trabajadores_indumentaria_base if flujo_postulante_completo(r) and flujo_medica_apta_con(con_flujo_indum, row_get(r,'dni'), row_get(r,'requerimiento')) and flujo_induccion_ok(r)]
         indumentarias_filtradas = [r for r in indumentarias if (not req_filtro_indumentaria or clean(row_get(r,'requerimiento')) == req_filtro_indumentaria)]
-        req_options_indumentaria = ''.join([f"<option value='{h(r['ticket'])}' {'selected' if clean(r['ticket'])==req_filtro_indumentaria else ''}>{h(r['ticket'])} - {h(r['empresa'])} / {h(r['area'])} / {h(r['cargo'])}</option>" for r in requerimientos])
+        req_options_indumentaria = ''.join([f"<option value='{h(r['requerimiento'])}' {'selected' if clean(r['requerimiento'])==req_filtro_indumentaria else ''}>{h(r['requerimiento'])} - {h(r['empresa'])} / {h(r['area'])} / {h(r['cargo'])}</option>" for r in requerimientos])
 
         estados_ok = ('ENTREGADO','COMPLETO','COMPLETADO','OK')
         estados_parcial = ('PARCIAL','EN PROCESO')
@@ -11564,7 +11564,7 @@ html,body{overflow-x:hidden!important;}
         <section class='ind-page'>
           <div class='ind-hero'>
             <div class='ind-title'><span class='ind-icon'>🦺</span><div><h1>Indumentaria y EPP</h1><p>Seleccione primero el requerimiento, revise postulantes y registre una sola entrega con prendas, cargo firmado y responsable.</p></div></div>
-            <form method='get' action='/admin/contratacion' class='ind-ticket'><input type='hidden' name='sec' value='indumentaria'><label>1) Requerimiento</label><select name='req' onchange='this.form.submit()'><option value=''>Seleccione requerimiento</option>{req_options_indumentaria}</select></form>
+            <form method='get' action='/admin/contratacion' class='ind-requerimiento'><input type='hidden' name='sec' value='indumentaria'><label>1) Requerimiento</label><select name='req' onchange='this.form.submit()'><option value=''>Seleccione requerimiento</option>{req_options_indumentaria}</select></form>
           </div>
           <div class='ind-tools'><div><label>Buscar postulantes</label><input oninput="filtrarTabla(this,'tabla_indumentaria_360')" placeholder='Digite DNI...'></div><div><label>Filtrar por estado</label><select onchange="filtrarTabla(this,'tabla_indumentaria_360')"><option>Todos los estados</option><option>ENTREGADO</option><option>PENDIENTE</option></select></div></div>
           <div class='ind-kpis'><div class='ind-kpi'><span class='ico'>👥</span><div><h4>Seleccionados</h4><b>{total_indumentaria_req}</b><small>Postulantes aptos</small></div></div><div class='ind-kpi'><span class='ico'>🦺</span><div><h4>Entregados</h4><b>{entregados_req}</b><small>Cargo completo</small></div></div><div class='ind-kpi'><span class='ico'>⏳</span><div><h4>Pendientes</h4><b>{pendientes_req}</b><small>Sin entrega</small></div></div><div class='ind-kpi'><span class='ico'>⚠️</span><div><h4>Observados</h4><b>{observados_req}</b><small>Requiere atención</small></div></div></div>
@@ -11674,7 +11674,7 @@ html,body{overflow-x:hidden!important;}
         def td(v):
             return h(v if v is not None else '')
         rows_trab = ''.join([f"<tr><td>{td(r['dni'])}</td><td><b>{td(r['trabajador'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['requerimiento'])}</td><td>{td(r['cargo'])}</td><td>{td(r['area'])}</td><td>{td(r['estado'])}</td><td>{td(r['estado_medico'])}</td><td>{td(r['estado_documentos'])}</td><td>{td(r['estado_indumentaria'])}</td><td>{td(r['estado_nisira'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_trab]) or "<tr><td colspan='12'>Sin registros en postulantes todavía.</td></tr>"
-        rows_req = ''.join([f"<tr><td><b>{td(r['ticket'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['area'])}</td><td>{td(r['cargo'])}</td><td>{td(r['actividad'])}</td><td>{td(r['cantidad'])}</td><td>{td(r['estado'])}</td><td>{td(r['fecha_ingreso'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_req]) or "<tr><td colspan='9'>Sin requerimientos.</td></tr>"
+        rows_req = ''.join([f"<tr><td><b>{td(r['requerimiento'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['area'])}</td><td>{td(r['cargo'])}</td><td>{td(r['actividad'])}</td><td>{td(r['cantidad'])}</td><td>{td(r['estado'])}</td><td>{td(r['fecha_ingreso'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_req]) or "<tr><td colspan='9'>Sin requerimientos.</td></tr>"
         rows_docs = ''.join([f"<tr><td>{td(r['dni'])}</td><td><b>{td(r['trabajador'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['etapa'])}</td><td>{td(r['tipo_doc'])}</td><td>{td(r['estado'])}</td><td>{td(r['archivo_nombre'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in ultimos_docs]) or "<tr><td colspan='8'>Sin documentos generados.</td></tr>"
         rows_cfg = ''.join([f"<tr><td>{td(r['destino'])}</td><td>{td(r['estado'])}</td><td>{td(r['servidor'])}</td><td>{td(r['base_datos'])}</td><td>{td(r['endpoint'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in sync_cfg]) or "<tr><td colspan='6'>Sin configuración externa todavía.</td></tr>"
         lote_rows=''.join([f"<tr><td><b>{td(r['lote_codigo'])}</b></td><td>{td(r['empresa'])}</td><td>{td(r['sede'])}</td><td>{td(r['requerimiento'])}</td><td>{td(r['actividad'])}</td><td>{td(r['total'])}</td><td>{td(r['estado'])}</td><td>{td(r['endpoint'])}</td><td>{td(r['fecha_registro'])}</td></tr>" for r in lotes_nisira_bc]) or "<tr><td colspan='9'>Sin lotes generados.</td></tr>"
@@ -11740,8 +11740,8 @@ html,body{overflow-x:hidden!important;}
             .datos-kpi .pz-kpi span{{display:block;color:#0f513f;font-weight:950;font-size:12px;text-transform:uppercase}}
             .datos-kpi .pz-kpi b{{font-size:28px;color:#071b34}}
             .datos-postulantes-pro .dash-hero{{background:#fff;border:1px solid #dbeafe;border-radius:24px;box-shadow:0 18px 40px rgba(15,23,42,.08);padding:26px 32px}}
-            .datos-postulantes-pro .ticket-first{{display:grid;grid-template-columns:210px minmax(280px,1fr) 190px minmax(260px,1fr);gap:14px;align-items:center;background:#fff;border:1px solid #dbeafe;border-radius:22px;box-shadow:0 12px 30px rgba(15,23,42,.06)}}
-            .datos-postulantes-pro .ticket-first b{{background:#eef6f7;border-radius:14px;padding:14px 16px;text-align:center;color:#071b34;font-weight:950}}
+            .datos-postulantes-pro .requerimiento-first{{display:grid;grid-template-columns:210px minmax(280px,1fr) 190px minmax(260px,1fr);gap:14px;align-items:center;background:#fff;border:1px solid #dbeafe;border-radius:22px;box-shadow:0 12px 30px rgba(15,23,42,.06)}}
+            .datos-postulantes-pro .requerimiento-first b{{background:#eef6f7;border-radius:14px;padding:14px 16px;text-align:center;color:#071b34;font-weight:950}}
             .datos-postulantes-pro .table-wrap{{overflow-x:auto!important;overflow-y:visible!important;border-radius:18px;padding:0!important}}
             .datos-postulantes-pro table.c-table{{min-width:1840px;width:max-content}}
             .datos-postulantes-pro table.c-table th{{background:#007a3d!important;color:#fff!important;white-space:nowrap}}
@@ -13661,10 +13661,10 @@ def contratacion_doc_log(doc_id):
 def api_contratacion_registrar_dni_requerimiento():
     if request.is_json:
         payload = request.get_json(silent=True) or {}
-        requerimiento = payload.get('ticket_req')
+        requerimiento = payload.get('requerimiento_req')
         dni = payload.get('dni_scan')
     else:
-        requerimiento = request.form.get('ticket_req')
+        requerimiento = request.form.get('requerimiento_req')
         dni = request.form.get('dni_scan')
     data = registrar_dni_en_requerimiento_backend(requerimiento, dni, session.get('admin_user','admin'))
     return jsonify(data)
@@ -13710,7 +13710,7 @@ def api_contratacion_medica_postulante():
 
     try:
         with db() as con:
-            # 1) Coincidencia exacta normalizada por DNI + requerimiento/requerimiento.
+            # 1) Coincidencia exacta normalizada por DNI + requerimiento.
             r = first_row(con, """
                 SELECT * FROM contratacion_ingresos
                 WHERE dni=? AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
