@@ -2791,6 +2791,116 @@ def row_get(row, key, default=''):
 
 
 
+# =============================
+# UI UNIFORME CONTRATACIÓN - SIN RETIRAR FUNCIONALIDADES
+# =============================
+def contratacion_estado_proceso(row):
+    med = str(row_get(row, 'estado_medico', 'PENDIENTE') or '').upper()
+    ind = str(row_get(row, 'estado_capacitacion', 'PENDIENTE') or '').upper()
+    epp = str(row_get(row, 'estado_indumentaria', 'PENDIENTE') or '').upper()
+    foto = str(row_get(row, 'fotocheck_estado', 'PENDIENTE') or '').upper()
+    firma = str(row_get(row, 'estado_documentos', 'PENDIENTE') or '').upper()
+    if 'NO APTO' in med or 'OBSERV' in med or 'BLOQUE' in med:
+        return 'Observado'
+    ok_med = med in ('APTO','APROBADO','COMPLETO','COMPLETADO','OK','HABILITADO')
+    ok_ind = ind in ('INDUCIDO','APROBADO','COMPLETO','COMPLETADO','OK','VIDEO VISTO')
+    ok_epp = epp in ('ENTREGADO','COMPLETO','COMPLETADO','OK','APROBADO')
+    ok_foto = foto in ('IMPRESO','ENTREGADO','GENERADO','EMITIDO','LISTO PARA IMPRIMIR','APROBADO')
+    ok_firma = firma in ('FIRMADO','ARCHIVADO','COMPLETO','COMPLETADO','OK')
+    if ok_med and ok_ind and ok_epp and ok_foto and ok_firma:
+        return 'Completo'
+    if ok_med or ok_ind or ok_epp or ok_foto or ok_firma:
+        return 'En validación'
+    return 'Pendiente'
+
+def contratacion_pct_completitud(row):
+    med = str(row_get(row, 'estado_medico', 'PENDIENTE') or '').upper()
+    ind = str(row_get(row, 'estado_capacitacion', 'PENDIENTE') or '').upper()
+    epp = str(row_get(row, 'estado_indumentaria', 'PENDIENTE') or '').upper()
+    foto = str(row_get(row, 'fotocheck_estado', 'PENDIENTE') or '').upper()
+    firma = str(row_get(row, 'estado_documentos', 'PENDIENTE') or '').upper()
+    ok = 0
+    ok += 1 if med in ('APTO','APROBADO','COMPLETO','COMPLETADO','OK','HABILITADO') else 0
+    ok += 1 if ind in ('INDUCIDO','APROBADO','COMPLETO','COMPLETADO','OK','VIDEO VISTO') else 0
+    ok += 1 if epp in ('ENTREGADO','COMPLETO','COMPLETADO','OK','APROBADO') else 0
+    ok += 1 if foto in ('IMPRESO','ENTREGADO','GENERADO','EMITIDO','LISTO PARA IMPRIMIR','APROBADO') else 0
+    ok += 1 if firma in ('FIRMADO','ARCHIVADO','COMPLETO','COMPLETADO','OK') else 0
+    return int(round((ok / 5) * 100))
+
+def contratacion_pill_estado(txt):
+    estado = str(txt or 'Pendiente')
+    up = estado.upper()
+    if 'NO APTO' in up or 'OBSERV' in up or 'INCOMPLETO' in up:
+        cls = 'danger'
+    elif 'COMPLETO' in up or 'APTO' in up or 'INDUCIDO' in up or 'ENTREGADO' in up or 'FIRMADO' in up or 'EMITIDO' in up:
+        cls = 'ok'
+    elif 'VALID' in up or 'PEND' in up:
+        cls = 'warn'
+    else:
+        cls = 'muted'
+    return f"<span class='u-pill {cls}'>{h(estado)}</span>"
+
+def contratacion_mod_estado(texto, ok_words=()):
+    val = str(texto or 'PENDIENTE').upper()
+    if any(w in val for w in ok_words):
+        return f"<span class='u-mod ok'>✅ {h(val.title())}</span>"
+    if 'NO APTO' in val or 'OBSERV' in val or 'BLOQUE' in val:
+        return f"<span class='u-mod bad'>❌ {h(val.title())}</span>"
+    return f"<span class='u-mod pend'>—<br><small>Pendiente</small></span>"
+
+def contratacion_acciones_html(row, modulo='postulantes'):
+    rid = row_get(row, 'id')
+    dni = normalizar_dni(row_get(row, 'dni'))
+    detalle = f"/admin/contratacion?sec=detalle_postulante&id={rid}"
+    editar = f"/admin/contratacion?sec=nuevos&dni={dni}&req={h(row_get(row,'requerimiento'))}"
+    ficha = detalle + "&print=1"
+    postulantes = f"/admin/contratacion?sec=nuevos&dni={dni}"
+    return (
+        "<div class='u-actions'>"
+        f"<a title='Ver detalle del postulante' data-need-select='1' href='{detalle}'>👁️</a>"
+        f"<a title='Editar / modificar' data-need-select='1' href='{editar}'>✏️</a>"
+        f"<a title='Ver ficha imprimible' data-need-select='1' target='_blank' href='{ficha}'>📄</a>"
+        f"<a title='Ir a Postulantes' data-need-select='1' href='{postulantes}'>⋮</a>"
+        "</div>"
+    )
+
+def contratacion_foto_html(row):
+    dni = normalizar_dni(row_get(row, 'dni'))
+    foto = clean(row_get(row, 'foto_ruta'))
+    if foto or dni:
+        return f"<img class='u-foto' src='/admin/contratacion/foto_postulante_dni/{h(dni)}' onerror=\"this.outerHTML='<span class=&quot;u-avatar&quot;>👤</span>'\">"
+    return "<span class='u-avatar'>👤</span>"
+
+def contratacion_lista_estandar_row(row, modulo='postulantes'):
+    rid = h(row_get(row, 'id'))
+    dni = h(normalizar_dni(row_get(row, 'dni')))
+    nombre = h(row_get(row, 'trabajador') or row_get(row, 'nombre') or 'PENDIENTE COMPLETAR')
+    cargo = h(row_get(row, 'cargo') or '—')
+    estado = contratacion_estado_proceso(row)
+    pct = contratacion_pct_completitud(row)
+    return f"""<tr data-dni="{dni}">
+        <td><input class='u-row-select pp-row-select' type='checkbox' name='ingreso_ids' value='{rid}'></td>
+        <td>{contratacion_foto_html(row)}</td>
+        <td><b>{dni}</b></td>
+        <td class='u-name'>{nombre}</td>
+        <td>{cargo}</td>
+        <td>{contratacion_pill_estado(estado)}</td>
+        <td><b>{pct}%</b><div class='u-bar'><span style='width:{pct}%'></span></div></td>
+        <td>{contratacion_mod_estado(row_get(row,'estado_medico','PENDIENTE'), ('APTO','APROBADO','COMPLETO','HABILITADO'))}</td>
+        <td>{contratacion_mod_estado(row_get(row,'estado_capacitacion','PENDIENTE'), ('INDUCIDO','APROBADO','COMPLETO','OK'))}</td>
+        <td>{contratacion_mod_estado(row_get(row,'estado_indumentaria','PENDIENTE'), ('ENTREGADO','COMPLETO','APROBADO','OK'))}</td>
+        <td>{contratacion_mod_estado(row_get(row,'fotocheck_estado','PENDIENTE'), ('IMPRESO','ENTREGADO','GENERADO','EMITIDO','APROBADO'))}</td>
+        <td>{contratacion_mod_estado(row_get(row,'estado_documentos','PENDIENTE'), ('FIRMADO','ARCHIVADO','COMPLETO','OK'))}</td>
+        <td>{contratacion_acciones_html(row, modulo)}</td>
+    </tr>"""
+
+def contratacion_lista_estandar_header():
+    return ("<tr><th>Seleccionar</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th>"
+            "<th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th>"
+            "<th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr>")
+
+
+
 
 
 def validar_dni_en_requerimiento(con, dni, requerimiento):
@@ -9977,68 +10087,42 @@ html,body{overflow-x:hidden!important;}
         /* Uniformidad visual sin retirar funcionalidades existentes */
         .uniform-hidden-by-rule{display:none!important}
         body .pp-final .pp-control360{display:none!important}
-        body [class*='quick-actions'], body .quick-actions-360{display:none!important}
-        body .ind-tools .ind-action, body .med-actions, body .acciones-rapidas, body .acciones-rapidas-card{display:none!important}
+        body [class*='quick-actions'], body .quick-actions-360, body .acciones-rapidas, body .acciones-rapidas-card{display:none!important}
         body a[href*='nisira'], body button[onclick*='nisira'], body button[name*='nisira'], body .btn-nisira{display:none!important}
-        body .pp-hero, body .ind-hero, body .med-hero, body .induccion-hero, body .hero-contratacion{
+        body .pp-hero, body .ind-hero, body .mod360-hero, body .med-hero, body .induccion-hero, body .hero-contratacion{
             border-radius:24px!important;border:1px solid #bbf7d0!important;background:linear-gradient(135deg,#f7fffb,#ecfdf5)!important;
-            box-shadow:0 14px 32px rgba(6,78,59,.08)!important;
+            box-shadow:0 14px 32px rgba(6,78,59,.08)!important;margin-bottom:18px!important;
         }
-        body .pp-filter-card, body .ind-tools, body .med-tools, body .filter-card{
-            grid-template-columns:1fr 1fr!important;
+        body .ind-hero label, body .mod360-hero label, body .med-hero label, body .pp-hero label{text-transform:uppercase!important;color:#071b34!important;font-weight:1000!important}
+        body .ind-tools, body .med-tools, body .mod360-tools, body .pp-filter-card, body .filter-card{
+            display:grid!important;grid-template-columns:1fr 1fr auto!important;gap:18px!important;align-items:end!important;background:#fff!important;border:1px solid #dbe7ef!important;border-radius:22px!important;padding:18px!important;box-shadow:0 12px 28px rgba(15,23,42,.05)!important;margin-bottom:18px!important;
         }
-        body .pp-filter-card > *:nth-child(n+3), body .ind-tools > *:nth-child(n+3), body .med-tools > *:nth-child(n+3){
-            display:none!important;
-        }
-        body .pp-table-card .pp-btn-green, body .ind-list-head .ind-btn, body .med-list-head .med-btn{
-            float:right!important;
-        }
-        .pp-row-select{width:18px!important;height:18px!important;accent-color:#008a4f!important;cursor:pointer!important}
-        .pp-actions a[data-need-select="1"]{position:relative}
+        body .ind-tools > div:nth-child(n+4), body .med-tools > div:nth-child(n+4), body .mod360-tools > div:nth-child(n+4), body .pp-filter-card > div:nth-child(n+4){display:none!important}
+        body .ind-tools label, body .med-tools label, body .mod360-tools label, body .pp-filter-card label{font-weight:1000!important;color:#071b34!important}
+        body .ind-kpis, body .mod360-kpis, body .med-kpis, body .pp-kpis{margin-top:0!important;margin-bottom:18px!important}
+        body .ind-table-card, body .med-list-card, body .mod360-list-card, body .pp-table-card{border-radius:22px!important;border:1px solid #dbe7ef!important;box-shadow:0 14px 30px rgba(15,23,42,.06)!important;background:#fff!important;overflow:hidden!important}
+        body .ind-table-head, body .med-list-head, body .mod360-list-head, body .pp-table-head{display:flex!important;justify-content:space-between!important;align-items:center!important;gap:12px!important;padding:18px 20px!important}
+        table.u-table, table.ind-table.u-standard, table.med-table.u-standard, table.mod360-table.u-standard{width:100%!important;min-width:1420px!important;border-collapse:separate!important;border-spacing:0!important}
+        table.u-table th, table.ind-table.u-standard th, table.med-table.u-standard th, table.mod360-table.u-standard th{background:#008a48!important;color:#fff!important;padding:13px 12px!important;text-align:center!important;font-weight:1000!important;border-right:1px solid rgba(255,255,255,.22)!important;white-space:nowrap!important}
+        table.u-table td, table.ind-table.u-standard td, table.med-table.u-standard td, table.mod360-table.u-standard td{padding:13px 12px!important;border-bottom:1px solid #e1ebf3!important;border-right:1px solid #e1ebf3!important;text-align:center!important;vertical-align:middle!important;color:#071b34!important;font-weight:850!important}
+        .u-row-select,.pp-row-select{width:18px!important;height:18px!important;accent-color:#008a4f!important;cursor:pointer!important}
+        .u-foto{width:52px!important;height:52px!important;border-radius:15px!important;object-fit:cover!important;border:1px solid #86efac!important;background:#ecfdf5!important}
+        .u-avatar{display:inline-grid!important;place-items:center!important;width:52px!important;height:52px!important;border-radius:15px!important;background:#ecfdf5!important;border:1px solid #86efac!important;font-size:25px!important}
+        .u-name{font-weight:1000!important;text-align:center!important}
+        .u-pill{display:inline-flex!important;border-radius:999px!important;padding:8px 14px!important;font-weight:1000!important;font-size:12px!important;border:1px solid transparent!important}
+        .u-pill.ok{background:#dcfce7!important;color:#047857!important;border-color:#86efac!important}.u-pill.warn{background:#fef3c7!important;color:#b45309!important;border-color:#fde68a!important}.u-pill.danger{background:#fee2e2!important;color:#991b1b!important;border-color:#fecaca!important}.u-pill.muted{background:#f1f5f9!important;color:#475569!important;border-color:#e2e8f0!important}
+        .u-bar{height:9px!important;background:#e5e7eb!important;border-radius:999px!important;overflow:hidden!important;margin-top:8px!important}.u-bar span{display:block!important;height:100%!important;background:#008a48!important;border-radius:999px!important}
+        .u-mod{font-weight:900!important;color:#475569!important;line-height:1.2!important}.u-mod.ok{color:#047857!important}.u-mod.bad{color:#e11d48!important}.u-mod.pend{color:#53627a!important}
+        .u-actions{display:flex!important;align-items:center!important;justify-content:center!important;gap:8px!important;white-space:nowrap!important}.u-actions a{width:35px!important;height:35px!important;border-radius:10px!important;border:1px solid #86efac!important;background:#fff!important;color:#071b34!important;display:inline-grid!important;place-items:center!important;text-decoration:none!important;font-size:18px!important;font-weight:1000!important}.u-actions a:hover{background:#ecfdf5!important;transform:translateY(-1px)}
+        @media(max-width:900px){body .ind-tools,body .med-tools,body .mod360-tools,body .pp-filter-card{grid-template-columns:1fr!important}}
         </style>
         <script id="uniformidad_modulos_prize_js">
         (function(){
-          function txtReplace(node){
-            if(!node || !node.childNodes) return;
-            node.childNodes.forEach(function(n){
-              if(n.nodeType===3){
-                n.nodeValue=n.nodeValue
-                  .replace(/\\b[Tt]icket\\b/g, function(x){return x.charAt(0)==='T'?'Requerimiento':'requerimiento'})
-                  .replace(/Requerimiento\\s*\\/\\s*Requerimiento/g,'Requerimiento');
-              } else if(n.nodeType===1 && !/^(SCRIPT|STYLE|TEXTAREA|INPUT)$/i.test(n.tagName)){
-                txtReplace(n);
-              }
-            });
-          }
-          function hideByText(){
-            var killers=['ACCIONES RÁPIDAS','Acciones rápidas','Validar NISIRA','VALIDAR NISIRA','Validar Nisira'];
-            document.querySelectorAll('div,section,button,a,label,h3,h4').forEach(function(el){
-              var t=(el.textContent||'').trim();
-              if(!t) return;
-              if(killers.some(function(k){return t.indexOf(k)>=0;})){
-                var box=el.closest('.card,.c-card,.ind-tools,.med-tools,.quick-actions,.acciones-rapidas,.pp-field,div') || el;
-                if(t.indexOf('Validar')>=0 || t.indexOf('ACCIONES')>=0 || t.indexOf('Acciones')>=0){ box.classList.add('uniform-hidden-by-rule'); }
-              }
-            });
-          }
-          function requireSelected(){
-            document.querySelectorAll('.pp-actions a').forEach(function(a){
-              a.setAttribute('data-need-select','1');
-              a.addEventListener('click',function(ev){
-                var tr=a.closest('tr');
-                var ck=tr && tr.querySelector('.pp-row-select');
-                if(ck && !ck.checked){
-                  ev.preventDefault();
-                  alert('Primero seleccione el postulante antes de realizar una acción.');
-                }
-              });
-            });
-          }
-          document.addEventListener('DOMContentLoaded',function(){
-            txtReplace(document.body);
-            hideByText();
-            requireSelected();
-          });
+          function txtReplace(node){if(!node||!node.childNodes)return;node.childNodes.forEach(function(n){if(n.nodeType===3){n.nodeValue=n.nodeValue.replace(/\\b[Tt]icket\\b/g,function(x){return x.charAt(0)==='T'?'Requerimiento':'requerimiento'}).replace(/Requerimiento\\s*\\/\\s*Requerimiento/g,'Requerimiento');}else if(n.nodeType===1&&!/^(SCRIPT|STYLE|TEXTAREA|INPUT)$/i.test(n.tagName)){txtReplace(n);}});}
+          function hideByText(){var killers=['ACCIONES RÁPIDAS','Acciones rápidas','Validar NISIRA','VALIDAR NISIRA','Validar Nisira'];document.querySelectorAll('div,section,button,a,label,h3,h4').forEach(function(el){var t=(el.textContent||'').trim();if(!t)return;if(killers.some(function(k){return t.indexOf(k)>=0;})){if(t.indexOf('Validar')>=0||t.indexOf('ACCIONES')>=0||t.indexOf('Acciones')>=0){el.classList.add('uniform-hidden-by-rule');}}});}
+          function requireSelected(){document.querySelectorAll('.u-actions a,.pp-actions a').forEach(function(a){a.setAttribute('data-need-select','1');a.addEventListener('click',function(ev){var tr=a.closest('tr');var ck=tr&&(tr.querySelector('.u-row-select')||tr.querySelector('.pp-row-select')||tr.querySelector('input[type=checkbox]'));if(ck&&!ck.checked){ev.preventDefault();alert('Primero seleccione el postulante antes de realizar una acción.');}});});}
+          function moveRegisterButtons(){document.querySelectorAll('label,button,a').forEach(function(el){var t=(el.textContent||'').trim().toLowerCase();if(t.indexOf('registrar')>=0){var card=el.closest('.ind-table-card,.med-list-card,.mod360-list-card,.pp-table-card');if(!card){var head=document.querySelector('.ind-table-head,.med-list-head,.mod360-list-head,.pp-table-head');if(head&&!head.contains(el)){head.appendChild(el);}}}});}
+          document.addEventListener('DOMContentLoaded',function(){txtReplace(document.body);hideByText();moveRegisterButtons();requireSelected();});
         })();
         </script>
         """
@@ -11424,9 +11508,9 @@ html,body{overflow-x:hidden!important;}
         ind_rows=''.join([f"<tr><td>{h(row_get(r,'fecha_registro'))}</td><td><b>{h(row_get(r,'dni'))}</b></td><td>{h(row_get(r,'trabajador'))}</td><td>{h(row_get(r,'empresa'))}</td><td>{h(row_get(r,'area'))}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'polo'))}</td><td>{h(row_get(r,'pantalon'))}</td><td>{h(row_get(r,'botas'))}</td><td><span class='ind-pill {_ind_class(row_get(r,'estado'))}'>{h(row_get(r,'estado') or 'PENDIENTE')}</span></td><td>{h(row_get(r,'responsable_entrega'))}</td><td>{h(row_get(r,'fecha_entrega'))}</td><td><form method='post' onsubmit='return confirm(&quot;¿Eliminar entrega?&quot;)'><input type='hidden' name='accion' value='eliminar_indumentaria'><input type='hidden' name='indumentaria_id' value='{row_get(r,'id')}'><button class='ind-btn danger mini'>Eliminar</button></form></td></tr>" for r in indumentarias_filtradas]) or "<tr><td colspan='13'>Seleccione un requerimiento o no hay entregas registradas para este requerimiento.</td></tr>"
 
         indumentaria_control_rows = ''.join([
-            f"""<tr><td>{i}</td><td><span class='avatar-mini'>{'📷' if clean(row_get(r,'foto_ruta')) else '👤'}</span></td><td><b>{h(row_get(r,'dni'))}</b></td><td class='name-cell'>{h(row_get(r,'trabajador')) or 'PENDIENTE COMPLETAR'}</td><td>{h(row_get(r,'cargo'))}</td><td>{h(row_get(r,'actividad'))}</td><td><span class='ind-pill {_ind_class(row_get(r,'estado_indumentaria'))}'>{h(row_get(r,'estado_indumentaria') or 'PENDIENTE')}</span></td><td><b>{_ind_pct(row_get(r,'estado_indumentaria'))}%</b><div class='ind-bar'><span style='width:{_ind_pct(row_get(r,'estado_indumentaria'))}%'></span></div></td><td><a class='ind-btn light mini' href='/admin/contratacion?sec=detalle_postulante&id={row_get(r,'id')}'>Ver</a></td></tr>"""
-            for i,r in enumerate(trabajadores_indumentaria[:500],1)
-        ]) or "<tr><td colspan='9' class='empty-row'>Seleccione un requerimiento para visualizar postulantes.</td></tr>"
+            contratacion_lista_estandar_row(r, 'indumentaria')
+            for r in trabajadores_indumentaria[:500]
+        ]) or "<tr><td colspan='13' class='empty-row'>Seleccione un requerimiento para visualizar postulantes.</td></tr>"
 
         trabajadores_js = json.dumps({normalizar_dni(row_get(r,'dni')):{'trabajador':clean(row_get(r,'trabajador')),'empresa':clean(row_get(r,'empresa')),'area':clean(row_get(r,'area')),'cargo':clean(row_get(r,'cargo')),'actividad':clean(row_get(r,'actividad')),'requerimiento':clean(row_get(r,'requerimiento')),'fecha_ingreso':fecha_sin_hora(row_get(r,'fecha_ingreso'))} for r in trabajadores_indumentaria}, ensure_ascii=False)
 
@@ -11441,7 +11525,7 @@ html,body{overflow-x:hidden!important;}
           </div>
           <div class='ind-tools'><div><label>Buscar postulantes</label><input oninput="filtrarTabla(this,'tabla_indumentaria_360')" placeholder='DNI, trabajador, cargo, actividad...'></div><div><label>Filtrar por estado</label><select onchange="filtrarTabla(this,'tabla_indumentaria_360')"><option>Todos los estados</option><option>ENTREGADO</option><option>PENDIENTE</option></select></div><div><label>Acciones rápidas</label><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn'>🧥 Registrar entrega</label><a class='ind-btn light' href='/admin/contratacion?sec=integracion_nisira'>Validar NISIRA</a></div></div></div>
           <div class='ind-kpis'><div class='ind-kpi'><span class='ico'>👥</span><div><h4>Seleccionados</h4><b>{total_indumentaria_req}</b><small>Postulantes aptos</small></div></div><div class='ind-kpi'><span class='ico'>🦺</span><div><h4>Entregados</h4><b>{entregados_req}</b><small>Cargo completo</small></div></div><div class='ind-kpi'><span class='ico'>⏳</span><div><h4>Pendientes</h4><b>{pendientes_req}</b><small>Sin entrega</small></div></div><div class='ind-kpi'><span class='ico'>⚠️</span><div><h4>Observados</h4><b>{observados_req}</b><small>Requiere atención</small></div></div></div>
-          <div class='ind-table-card'><div class='ind-table-head'><h2>Lista de postulantes del requerimiento</h2><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn green'>🧥 Registrar entrega</label><button type='button' class='ind-btn light' onclick='window.print()'>🖨️ Imprimir</button></div></div><div class='ind-table-wrap'><table id='tabla_indumentaria_360' class='ind-table'><tr><th>Seleccionar</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Actividad</th><th>Estado</th><th>%</th><th>Acción</th></tr>{indumentaria_control_rows}</table></div></div>
+          <div class='ind-table-card'><div class='ind-table-head'><h2>Lista de postulantes del requerimiento</h2><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn green'>🧥 Registrar entrega</label></div></div><div class='ind-table-wrap'><table id='tabla_indumentaria_360' class='ind-table u-standard'>{contratacion_lista_estandar_header()}{indumentaria_control_rows}</table></div></div>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Cargos de entrega registrados</h2><small>{len(indumentarias_filtradas)} registro(s)</small></div><div class='ind-table-wrap'><table class='ind-table'><tr><th>Fecha registro</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Estado</th><th>Responsable</th><th>Fecha entrega</th><th>Acción</th></tr>{ind_rows}</table></div></div>
           <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card'><div class='ind-modal-head'><h2>Registrar entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar</label></div><div class='ind-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span><span>Primero elija requerimiento y DNI.</span></div><form method='post' enctype='multipart/form-data' class='ind-form' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><div class='section'>1. Requerimiento y postulante</div><b class='req'>Requerimiento</b><select name='requerimiento' id='ind_requerimiento' required onchange='actualizarBloqueoIndumentaria(true)'><option value='{h(req_filtro_indumentaria)}'>{h(req_filtro_indumentaria) or 'Seleccione requerimiento'}</option>{req_options_indumentaria}</select><b class='req'>DNI</b><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Primero seleccione requerimiento' required><div class='full' style='font-weight:900;color:#047857;padding:4px 0 8px'>Al digitar 8 números, los datos se cargan automáticamente.</div><div class='section'>2. Datos del trabajador</div><b class='req'>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b>Área</b><input id='ind_area' name='area' placeholder='Área'><b>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'>3. Detalle de prendas / EPP</div><b class='req'>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req'>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req'>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req'>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><b class='req'>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='ind-btn green' type='submit'>✅ Registrar entrega</button></div></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>
         </section>
@@ -11605,7 +11689,7 @@ html,body{overflow-x:hidden!important;}
                   <td><a class='c-btn gray mini-btn' href='/admin/contratacion?sec=detalle_postulante&id={r['id']}'>Ver detalle</a></td>
                   <td><form method='post' class='inline-del' onsubmit="return confirm('Solo se eliminará si la clave de administrador es correcta. ¿Continuar?')"><input type='hidden' name='accion' value='anular_ingreso_admin'><input type='hidden' name='ingreso_id' value='{r['id']}'><input type='hidden' name='req_return' value='{h(req_actual)}'><input type='hidden' name='motivo_anulacion' value='Anulado desde Datos Postulantes por registro errado.'><input type='password' name='clave_admin' placeholder='Clave admin' required><button class='icon-btn danger'>Anular</button></form></td>
                 </tr>""")
-            tabla_rows = ''.join(rows) or "<tr><td colspan='15' style='padding:28px;text-align:center;color:#64748b;font-weight:900'>Seleccione un requerimiento para visualizar los postulantes vinculados al ticket.</td></tr>"
+            tabla_rows = ''.join(rows) or "<tr><td colspan='15' style='padding:28px;text-align:center;color:#64748b;font-weight:900'>Seleccione un requerimiento para visualizar los postulantes vinculados al requerimiento.</td></tr>"
             content=wrap(f"""
             <style>
             .datos-kpi{{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:14px;margin:14px 0 18px}}
