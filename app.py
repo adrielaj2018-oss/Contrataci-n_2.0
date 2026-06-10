@@ -10542,7 +10542,7 @@ html,body{overflow-x:hidden!important;}
             <input type='hidden' name='accion' value='avance_masivo_ingresos'>
             <input type='hidden' name='volver' value='nuevos'>
             <input type='hidden' name='campo_estado' value='estado'>
-          <div class='pp-filter-card'><div class='pp-field'><label>Buscar por DNI</label><div class='pp-search-wrap'><input class='pp-control' oninput="filtrarTabla(this,'tabla_pp_final')" placeholder='Buscar por DNI'><span>⌕</span></div></div><div class='pp-field'><label>Filtrar / cambio masivo de estado</label><select class='pp-control pp-state-filter' name='nuevo_estado' onchange="filtrarTabla(this,'tabla_pp_final')"><option value=''>Todos los estados</option><option>Completo</option><option>En validación</option><option>Incompleto</option><option>Observado</option></select><select class='pp-control pp-mass-select legacy-mass-select' data-name-old='nuevo_estado'><option>EN PROCESO</option><option>APROBADO</option><option>OBSERVADO</option><option>ANULADO</option></select><button class='pp-btn-green pp-mass-btn' type='submit'>Cambiar seleccionados</button></div><div class='pp-field'><label>Registrar</label><label for='modal_postulante_registro' class='pp-btn-green pp-register-btn'>Registrar</label></div></div>
+          <div class='pp-filter-card'><div class='pp-field'><label>Buscar por DNI</label><div class='pp-search-wrap'><input class='pp-control' oninput="filtrarTabla(this,'tabla_pp_final')" placeholder='Buscar por DNI'><span>⌕</span></div></div><div class='pp-field'><label>Filtrar / cambio masivo de estado</label><select class='pp-control pp-state-filter' onchange="filtrarTabla(this,'tabla_pp_final')"><option value=''>Todos los estados</option><option>Completo</option><option>En validación</option><option>Incompleto</option><option>Observado</option></select><select class='pp-control pp-mass-select legacy-mass-select' name='nuevo_estado'><option>EN PROCESO</option><option>APROBADO</option><option>OBSERVADO</option><option>ANULADO</option></select><button class='pp-btn-green pp-mass-btn' type='submit'>Cambiar seleccionados</button></div><div class='pp-field'><label>Registrar</label><label for='modal_postulante_registro' class='pp-btn-green pp-register-btn'>Registrar</label></div></div>
           <div class='pp-table-card'><div class='pp-table-head'><h3>LISTA DE POSTULANTES</h3><div class='pp-table-actions'><a class='pp-light-btn' href='/admin/plantilla_gestion/contratacion' title='Descargar / exportar formato Excel'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 3h10l6 6v12H4z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M14 3v6h6M8 12l4 6m0-6l-4 6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Exportar Excel</span></a><button type='button' class='pp-light-btn' onclick='window.print()' title='Imprimir lista'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z' fill='none' stroke='currentColor' stroke-width='2' stroke-linejoin='round'/></svg><span>Imprimir</span></button><button type='button' class='pp-btn-green' onclick='abrirFicha360Seleccionada()' title='Abrir ficha del primer/seleccionado postulante'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 2h9l5 5v15H6z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M15 2v6h5M9 13h6M9 17h6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Ver ficha 360°</span></button></div></div><div class='pp-table-wrap'><table id='tabla_pp_final' class='pp-table'><thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_pp_final input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr></thead><tbody>{tabla_postulantes}</tbody></table></div><div class='pp-demo-note'>ⓘ Mostrando {len(real_rows) if real_rows else 3} de {len(real_rows) if real_rows else 3} postulantes{'' if real_rows else ' (demos visuales hasta seleccionar un requerimiento con datos reales)'}.</div></div>
         </section>
           </form>
@@ -10959,7 +10959,7 @@ html,body{overflow-x:hidden!important;}
             <input type='hidden' name='accion' value='avance_masivo_ingresos'>
             <input type='hidden' name='volver' value='medica'>
             <input type='hidden' name='campo_estado' value='estado_medico'>
-            <div class='std-filter-card'><div><label>Buscar por DNI</label><input id='med_buscar_tabla' oninput="filtrarTabla(this,'tabla_medica_postulantes')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='std-state-filter' name='nuevo_estado' onchange="filtrarTabla(this,'tabla_medica_postulantes')"><option value=''>Todos los estados</option><option>APTO</option><option>PENDIENTE</option><option>NO APTO</option><option>RESTRICCIÓN</option></select><select class='legacy-mass-select' data-name-old='nuevo_estado'><option>PENDIENTE</option><option>APTO</option><option>NO APTO</option><option>OBSERVADO</option></select><button class='std-green-btn mass-apply-btn' type='submit'>Aplicar estado</button></div><div><label>Registrar</label><button type='button' class='std-green-btn' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni"); if(x) x.focus();}},100)'>Registrar</button></div></div>
+            <div class='std-filter-card'><div><label>Buscar por DNI</label><input id='med_buscar_tabla' oninput="filtrarTabla(this,'tabla_medica_postulantes')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='std-state-filter' onchange="filtrarTabla(this,'tabla_medica_postulantes')"><option value=''>Todos los estados</option><option>APTO</option><option>PENDIENTE</option><option>NO APTO</option><option>RESTRICCIÓN</option></select><select class='legacy-mass-select' name='nuevo_estado'><option>PENDIENTE</option><option>APTO</option><option>NO APTO</option><option>OBSERVADO</option></select><button class='std-green-btn mass-apply-btn' type='submit'>Aplicar estado</button></div><div><label>Registrar</label><button type='button' class='std-green-btn' onclick='abrirModalMedica();setTimeout(function(){{var x=document.getElementById("med_dni"); if(x) x.focus();}},100)'>Registrar</button></div></div>
           <div class='med-table-card'>
             <div class='med-table-head'><h3>LISTA DE POSTULANTES</h3></div>
             <div class='pp-table-wrap med-postulantes-wrap'>
@@ -11548,7 +11548,7 @@ html,body{overflow-x:hidden!important;}
         <section class='mod360-page'>
           {modulo_requerimiento_header_html('🎓','Inducción laboral','Seleccione primero el requerimiento, revise postulantes aptos y cambie el estado de Pendiente a Aprobado.','induccion', "<option value=''>Seleccione requerimiento</option>" + req_options_induccion, req_filtro_induccion)}
           <div class='mod360-control'><div class='mod360-stage'><div class='sico'>🎫</div><h4>Postulantes</h4><b>{total_ind_req}</b><small>General</small></div><div class='mod360-stage'><div class='sico'>🎓</div><h4>Inducidos</h4><b>{inducidos_req}</b><small>Realizados</small></div><div class='mod360-stage'><div class='sico'>⏳</div><h4>Pendientes</h4><b>{pendientes_ind_req}</b><small>Por completar</small></div><div class='mod360-stage'><div class='sico'>▶️</div><h4>Videos</h4><b>{videos_subidos_req}</b><small>Materiales</small></div><div class='mod360-stage'><div class='sico'>⚠️</div><h4>Observados</h4><b>0</b><small>Atención</small></div></div>
-          <div class='mod360-filter-card'><div><label>Buscar por DNI</label><input oninput="filtrarTabla(this,'tabla_induccion_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='mod360-state-filter' form='form_masivo_induccion' name='nuevo_estado' onchange="filtrarTabla(this,'tabla_induccion_360')"><option value=''>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select><select class='legacy-mass-select' data-name-old='nuevo_estado'><option>PENDIENTE</option><option>APROBADO</option></select><button form='form_masivo_induccion' class='mod360-btn green mass-apply-btn' type='submit'>Aplicar estado</button></div><div><label>Registrar</label><div class='mod360-actions'><label for='modal_biblioteca_ind' class='mod360-btn'>Registrar</label></div></div></div>
+          <div class='mod360-filter-card'><div><label>Buscar por DNI</label><input oninput="filtrarTabla(this,'tabla_induccion_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='mod360-state-filter' onchange="filtrarTabla(this,'tabla_induccion_360')"><option value=''>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select><select class='legacy-mass-select' form='form_masivo_induccion' name='nuevo_estado'><option>PENDIENTE</option><option>APROBADO</option></select><button form='form_masivo_induccion' class='mod360-btn green mass-apply-btn' type='submit'>Aplicar estado</button></div><div><label>Registrar</label><div class='mod360-actions'><label for='modal_biblioteca_ind' class='mod360-btn'>Registrar</label></div></div></div>
           
           <form id='form_masivo_induccion' method='post' class='mod360-mass hidden-mass'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='induccion'><input type='hidden' name='campo_estado' value='estado_capacitacion'></form>
           <div class='mod360-table-card'><div class='mod360-table-head'><h3>LISTA DE POSTULANTES</h3><div class='mod360-actions'><label for='modal_biblioteca_ind' class='mod360-btn'>Registrar</label></div></div>
@@ -11611,7 +11611,7 @@ html,body{overflow-x:hidden!important;}
         <section class='ind-page'>
           {modulo_requerimiento_header_html('🦺','Indumentaria y EPP','Seleccione primero el requerimiento, revise postulantes y registre una sola entrega con prendas, cargo firmado y responsable.','indumentaria', "<option value=''>Seleccione requerimiento</option>" + req_options_indumentaria, req_filtro_indumentaria)}
           <div class='ind-kpis'><div class='ind-kpi'><span class='ico'>👥</span><div><h4>Seleccionados</h4><b>{total_indumentaria_req}</b><small>Postulantes aptos</small></div></div><div class='ind-kpi'><span class='ico'>🦺</span><div><h4>Entregados</h4><b>{entregados_req}</b><small>Cargo completo</small></div></div><div class='ind-kpi'><span class='ico'>⏳</span><div><h4>Pendientes</h4><b>{pendientes_req}</b><small>Sin entrega</small></div></div><div class='ind-kpi'><span class='ico'>⚠️</span><div><h4>Observados</h4><b>{observados_req}</b><small>Requiere atención</small></div></div></div>
-          <form id='form_masivo_indumentaria' method='post' class='ind-tools'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='indumentaria'><input type='hidden' name='campo_estado' value='estado_indumentaria'><div><label>Buscar por DNI</label><input type='text' oninput="filtrarTabla(this,'tabla_indumentaria_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='ind-state-filter' name='nuevo_estado' onchange="filtrarTabla(this,'tabla_indumentaria_360')"><option value=''>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select><select class='legacy-mass-select' data-name-old='nuevo_estado'><option>PENDIENTE</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='ind-btn mass-apply-btn' type='submit'>Aplicar estado</button></div><div><label>Registrar</label><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn'>Registrar</label></div></div></form>
+          <form id='form_masivo_indumentaria' method='post' class='ind-tools'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='indumentaria'><input type='hidden' name='campo_estado' value='estado_indumentaria'><div><label>Buscar por DNI</label><input type='text' oninput="filtrarTabla(this,'tabla_indumentaria_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='ind-state-filter' onchange="filtrarTabla(this,'tabla_indumentaria_360')"><option value=''>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select><select class='legacy-mass-select' name='nuevo_estado'><option>PENDIENTE</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='ind-btn mass-apply-btn' type='submit'>Aplicar estado</button></div><div><label>Registrar</label><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn'>Registrar</label></div></div></form>
           <div class='ind-table-card'><div class='ind-table-head'><h2>LISTA DE POSTULANTES</h2><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn green'>Registrar</label></div></div><div class='std-table-wrap'><table id='tabla_indumentaria_360' class='std-table'>{tabla_estandar_postulantes_header('tabla_indumentaria_360')}{indumentaria_control_rows}</table></div></div><script>document.addEventListener('DOMContentLoaded',function(){{function b(t,f){{var form=document.getElementById(f);if(!form)return;document.querySelectorAll('#'+t+' input[name="ingreso_ids"]').forEach(function(x){{x.setAttribute('form',f);}});}}b('tabla_induccion_360','form_masivo_induccion');b('tabla_indumentaria_360','form_masivo_indumentaria');}});</script>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Cargos de entrega registrados</h2><small>{len(indumentarias_filtradas)} registro(s)</small></div><div class='ind-table-wrap'><table class='ind-table'><tr><th>Fecha registro</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Estado</th><th>Responsable</th><th>Fecha entrega</th><th>Acción</th></tr>{ind_rows}</table></div></div>
           <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card'><div class='ind-modal-head'><h2>Registrar entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar</label></div><div class='ind-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span><span>Primero elija requerimiento y DNI.</span></div><form method='post' enctype='multipart/form-data' class='ind-form' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><div class='section'>1. Requerimiento y postulante</div><b class='req'>Requerimiento</b><select name='requerimiento' id='ind_requerimiento' required onchange='actualizarBloqueoIndumentaria(true)'><option value='{h(req_filtro_indumentaria)}'>{h(req_filtro_indumentaria) or 'Seleccione requerimiento'}</option>{req_options_indumentaria}</select><b class='req'>DNI</b><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Primero seleccione requerimiento' required><div class='full' style='font-weight:900;color:#047857;padding:4px 0 8px'>Al digitar 8 números, los datos se cargan automáticamente.</div><div class='section'>2. Datos del trabajador</div><b class='req'>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b>Área</b><input id='ind_area' name='area' placeholder='Área'><b>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'>3. Detalle de prendas / EPP</div><b class='req'>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req'>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req'>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req'>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><b class='req'>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='ind-btn green' type='submit'>✅ Registrar entrega</button></div></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>
@@ -14224,6 +14224,277 @@ EXTRA_UI_FIX_ADMIN_TABLES += """
   .pp-filter-card .pp-field:nth-child(3),.std-filter-card>div:nth-child(3),.mod360-filter-card>div:nth-child(3),.ind-tools>div:nth-child(3){width:100%!important}
 }
 """
+
+
+# ===== CORRECCION DEFINITIVA OMAR: BARRA OPERATIVA 40/20/20/10/10 EN UNA SOLA LINEA =====
+ONE_LINE_PREMIUM_FIX = """
+/* ==========================================================
+   BARRA OPERATIVA PREMIUM FINAL - 1 SOLA FILA REAL
+   Medidas: Buscar 40% | Estado 20% | Cambio 20% | Aplicar 10% | Registrar 10%
+   Aplica a Postulantes, Evaluación Médica, Inducción e Indumentaria.
+   ========================================================== */
+.main .pp-final .pp-filter-card,
+.main .std-filter-card,
+.main .mod360-filter-card,
+.main form.ind-tools{
+  display:grid!important;
+  grid-template-columns:minmax(300px,40fr) minmax(150px,20fr) minmax(150px,20fr) minmax(118px,10fr) minmax(126px,10fr)!important;
+  gap:12px!important;
+  align-items:end!important;
+  width:100%!important;
+  min-height:0!important;
+  height:auto!important;
+  padding:16px 18px!important;
+  margin:0 0 18px!important;
+  background:#fff!important;
+  border:1px solid #dbe7ef!important;
+  border-radius:22px!important;
+  box-shadow:0 10px 24px rgba(15,23,42,.06)!important;
+  overflow:visible!important;
+}
+
+.main .pp-filter-card .pp-field,
+.main .std-filter-card>div,
+.main .mod360-filter-card>div,
+.main form.ind-tools>div{
+  min-width:0!important;
+  margin:0!important;
+  padding:0!important;
+}
+
+/* Columna 1: Buscar DNI */
+.main .pp-filter-card .pp-field:nth-child(1),
+.main .std-filter-card>div:nth-child(1),
+.main .mod360-filter-card>div:nth-child(1),
+.main form.ind-tools>div:nth-child(4){
+  grid-column:1!important;
+  display:block!important;
+}
+
+/* Contenedor central: se abre para que sus hijos ocupen columnas 2,3,4 */
+.main .pp-filter-card .pp-field:nth-child(2),
+.main .std-filter-card>div:nth-child(2),
+.main .mod360-filter-card>div:nth-child(2),
+.main form.ind-tools>div:nth-child(5){
+  display:contents!important;
+}
+
+/* Columna 5: Registrar */
+.main .pp-filter-card .pp-field:nth-child(3),
+.main .std-filter-card>div:nth-child(3),
+.main .mod360-filter-card>div:nth-child(3),
+.main form.ind-tools>div:nth-child(6){
+  grid-column:5!important;
+  width:auto!important;
+  min-width:0!important;
+  display:block!important;
+}
+
+/* Labels compactos: solo se muestran Buscar y Registrar para no romper la fila */
+.main .pp-filter-card .pp-field:nth-child(2)>label,
+.main .std-filter-card>div:nth-child(2)>label,
+.main .mod360-filter-card>div:nth-child(2)>label,
+.main form.ind-tools>div:nth-child(5)>label{
+  display:none!important;
+}
+.main .pp-filter-card .pp-field:nth-child(1)>label,
+.main .pp-filter-card .pp-field:nth-child(3)>label,
+.main .std-filter-card>div:nth-child(1)>label,
+.main .std-filter-card>div:nth-child(3)>label,
+.main .mod360-filter-card>div:nth-child(1)>label,
+.main .mod360-filter-card>div:nth-child(3)>label,
+.main form.ind-tools>div:nth-child(4)>label,
+.main form.ind-tools>div:nth-child(6)>label{
+  display:block!important;
+  height:18px!important;
+  margin:0 0 7px!important;
+  padding:0!important;
+  color:#071b34!important;
+  font-size:12px!important;
+  line-height:18px!important;
+  font-weight:1000!important;
+  text-transform:uppercase!important;
+}
+
+/* Controles uniformes */
+.main .pp-filter-card input,
+.main .pp-filter-card select,
+.main .std-filter-card input,
+.main .std-filter-card select,
+.main .mod360-filter-card input,
+.main .mod360-filter-card select,
+.main form.ind-tools input,
+.main form.ind-tools select{
+  height:52px!important;
+  min-height:52px!important;
+  max-height:52px!important;
+  width:100%!important;
+  margin:0!important;
+  padding:0 16px!important;
+  border:1.5px solid #cfddea!important;
+  border-radius:15px!important;
+  background:#fff!important;
+  color:#071b34!important;
+  font-size:15px!important;
+  font-weight:900!important;
+  outline:none!important;
+  box-shadow:none!important;
+}
+.main .pp-filter-card input:focus,
+.main .pp-filter-card select:focus,
+.main .std-filter-card input:focus,
+.main .std-filter-card select:focus,
+.main .mod360-filter-card input:focus,
+.main .mod360-filter-card select:focus,
+.main form.ind-tools input:focus,
+.main form.ind-tools select:focus{
+  border-color:#0bbf72!important;
+  box-shadow:0 0 0 4px rgba(11,191,114,.12)!important;
+}
+.main .pp-search-wrap{position:relative!important;margin:0!important;padding:0!important}
+.main .pp-search-wrap input{padding-right:44px!important}
+.main .pp-search-wrap span{position:absolute!important;right:15px!important;top:50%!important;transform:translateY(-50%)!important;font-size:21px!important;color:#071b34!important;line-height:1!important}
+
+/* Estado filtro: columna 2 */
+.main .pp-filter-card .pp-state-filter,
+.main .std-filter-card .std-state-filter,
+.main .mod360-filter-card .mod360-state-filter,
+.main form.ind-tools .ind-state-filter{
+  grid-column:2!important;
+  align-self:end!important;
+  display:block!important;
+}
+
+/* Cambio masivo: columna 3 */
+.main .pp-filter-card .legacy-mass-select,
+.main .pp-filter-card .pp-mass-select,
+.main .std-filter-card .legacy-mass-select,
+.main .mod360-filter-card .legacy-mass-select,
+.main form.ind-tools .legacy-mass-select{
+  grid-column:3!important;
+  align-self:end!important;
+  display:block!important;
+}
+
+/* Botón aplicar: columna 4 */
+.main .pp-filter-card .pp-mass-btn,
+.main .std-filter-card .mass-apply-btn,
+.main .mod360-filter-card .mass-apply-btn,
+.main form.ind-tools .mass-apply-btn{
+  grid-column:4!important;
+  align-self:end!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+  height:52px!important;
+  min-height:52px!important;
+  max-height:52px!important;
+  margin:0!important;
+  padding:0 12px!important;
+  border-radius:15px!important;
+  border:0!important;
+  background:linear-gradient(135deg,#00964f,#0bbf72)!important;
+  color:#fff!important;
+  font-size:13px!important;
+  font-weight:1000!important;
+  text-decoration:none!important;
+  white-space:nowrap!important;
+  cursor:pointer!important;
+  box-shadow:0 12px 24px rgba(0,138,72,.18)!important;
+}
+
+/* Botón registrar: columna 5 */
+.main .pp-filter-card .pp-register-btn,
+.main .pp-filter-card .pp-field:nth-child(3) .pp-btn-green,
+.main .std-filter-card>div:nth-child(3) .std-green-btn,
+.main .mod360-filter-card>div:nth-child(3) .mod360-btn,
+.main form.ind-tools>div:nth-child(6) .ind-btn{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+  height:52px!important;
+  min-height:52px!important;
+  max-height:52px!important;
+  margin:0!important;
+  padding:0 12px!important;
+  border-radius:15px!important;
+  border:0!important;
+  background:linear-gradient(135deg,#00964f,#0bbf72)!important;
+  color:#fff!important;
+  font-size:13px!important;
+  font-weight:1000!important;
+  text-decoration:none!important;
+  white-space:nowrap!important;
+  cursor:pointer!important;
+  box-shadow:0 12px 24px rgba(0,138,72,.22)!important;
+}
+.main .mod360-actions,.main .ind-actions{display:block!important;margin:0!important;padding:0!important;width:100%!important}
+
+/* Quitar botón Descargar formato Excel en Postulantes */
+.main .pp-filter-card a[href*='plantilla_gestion/contratacion'],
+.main .post-modal-tools a[href*='plantilla_gestion/contratacion'],
+.main .base-excel-form a[href*='plantilla_gestion/contratacion']{display:none!important}
+
+@media(max-width:1180px){
+  .main .pp-final .pp-filter-card,
+  .main .std-filter-card,
+  .main .mod360-filter-card,
+  .main form.ind-tools{
+    grid-template-columns:1fr 1fr!important;
+    gap:12px!important;
+  }
+  .main .pp-filter-card .pp-field:nth-child(1),
+  .main .std-filter-card>div:nth-child(1),
+  .main .mod360-filter-card>div:nth-child(1),
+  .main form.ind-tools>div:nth-child(4){grid-column:1!important}
+  .main .pp-filter-card .pp-state-filter,
+  .main .std-filter-card .std-state-filter,
+  .main .mod360-filter-card .mod360-state-filter,
+  .main form.ind-tools .ind-state-filter{grid-column:2!important}
+  .main .pp-filter-card .legacy-mass-select,
+  .main .std-filter-card .legacy-mass-select,
+  .main .mod360-filter-card .legacy-mass-select,
+  .main form.ind-tools .legacy-mass-select{grid-column:1!important}
+  .main .pp-filter-card .pp-mass-btn,
+  .main .std-filter-card .mass-apply-btn,
+  .main .mod360-filter-card .mass-apply-btn,
+  .main form.ind-tools .mass-apply-btn{grid-column:2!important}
+  .main .pp-filter-card .pp-field:nth-child(3),
+  .main .std-filter-card>div:nth-child(3),
+  .main .mod360-filter-card>div:nth-child(3),
+  .main form.ind-tools>div:nth-child(6){grid-column:1 / -1!important}
+}
+@media(max-width:760px){
+  .main .pp-final .pp-filter-card,
+  .main .std-filter-card,
+  .main .mod360-filter-card,
+  .main form.ind-tools{grid-template-columns:1fr!important;padding:14px!important}
+  .main .pp-filter-card .pp-field:nth-child(1),
+  .main .pp-filter-card .pp-state-filter,
+  .main .pp-filter-card .legacy-mass-select,
+  .main .pp-filter-card .pp-mass-btn,
+  .main .pp-filter-card .pp-field:nth-child(3),
+  .main .std-filter-card>div:nth-child(1),
+  .main .std-filter-card .std-state-filter,
+  .main .std-filter-card .legacy-mass-select,
+  .main .std-filter-card .mass-apply-btn,
+  .main .std-filter-card>div:nth-child(3),
+  .main .mod360-filter-card>div:nth-child(1),
+  .main .mod360-filter-card .mod360-state-filter,
+  .main .mod360-filter-card .legacy-mass-select,
+  .main .mod360-filter-card .mass-apply-btn,
+  .main .mod360-filter-card>div:nth-child(3),
+  .main form.ind-tools>div:nth-child(4),
+  .main form.ind-tools .ind-state-filter,
+  .main form.ind-tools .legacy-mass-select,
+  .main form.ind-tools .mass-apply-btn,
+  .main form.ind-tools>div:nth-child(6){grid-column:1!important}
+}
+"""
+BASE = BASE.replace('</style>', ONE_LINE_PREMIUM_FIX + '\n</style>')
+
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
