@@ -12853,7 +12853,6 @@ html,body{overflow-x:hidden!important;}
               <input type='hidden' name='accion' value='importar_base_contratos_excel'>
               <input type='file' name='archivo' accept='.xlsx,.xls' required>
               <button class='c-btn'>⬆ Cargar Base Excel</button>
-              <a class='c-btn gray' href='/admin/plantilla_gestion/contratacion'>⬇ Descargar formato Excel</a>
             </form>
             <small class='muted2'>Columnas sugeridas: DNI, TRABAJADOR, EMPRESA, REQUERIMIENTO, CARGO, AREA, FECHA INGRESO, DIRECCION, DISTRITO, PROVINCIA, DEPARTAMENTO, BASICO.</small>
           </div>
@@ -14256,3 +14255,241 @@ if __name__ == '__main__':
         print('No se pudo iniciar con SSL:', e)
         print('Reintentando en HTTP solo para PC localhost...')
         app.run(host=host, port=port, debug=debug)
+
+
+# ===== AJUSTE OMAR 2026-06-09: BARRA PREMIUM EN UNA SOLA LINEA =====
+# Objetivo:
+# 1) Buscar DNI + Filtrar estado + Cambio masivo + Aplicar + Registrar en una sola línea.
+# 2) Quitar el botón "Descargar formato Excel" del módulo Postulantes.
+# 3) Mantener el orden de bloques sin afectar la lista ni modales.
+EXTRA_UI_FIX_ADMIN_TABLES += """
+/* ===== BARRA OPERATIVA PREMIUM - UNA SOLA LINEA ===== */
+.pp-flow-form{display:block!important}
+
+.pp-filter-card{
+  display:grid!important;
+  grid-template-columns:minmax(260px,1.1fr) minmax(210px,.72fr) minmax(210px,.72fr) minmax(150px,.45fr) minmax(150px,.45fr)!important;
+  gap:16px!important;
+  align-items:end!important;
+  background:#fff!important;
+  border:1px solid #dbe7ef!important;
+  border-radius:22px!important;
+  padding:20px 24px!important;
+  margin:0 0 20px!important;
+  min-height:104px!important;
+  box-shadow:0 12px 28px rgba(15,23,42,.06)!important;
+}
+
+/* Primer campo: Buscar DNI */
+.pp-filter-card .pp-field:nth-child(1){
+  min-width:0!important;
+  display:block!important;
+  grid-column:1!important;
+}
+
+/* Segundo campo se expande: filtro, cambio masivo y aplicar quedan como columnas reales */
+.pp-filter-card .pp-field:nth-child(2){
+  display:contents!important;
+}
+
+/* Oculta solo el título largo del campo 2 para que no rompa la línea */
+.pp-filter-card .pp-field:nth-child(2)>label{
+  display:none!important;
+}
+
+/* Tercer campo: Registrar */
+.pp-filter-card .pp-field:nth-child(3){
+  min-width:0!important;
+  display:block!important;
+  grid-column:5!important;
+}
+
+/* Labels visibles y compactos */
+.pp-filter-card .pp-field:nth-child(1)>label,
+.pp-filter-card .pp-field:nth-child(3)>label{
+  display:block!important;
+  color:#071b34!important;
+  font-size:13px!important;
+  font-weight:1000!important;
+  text-transform:none!important;
+  margin:0 0 8px!important;
+  line-height:1.1!important;
+}
+
+/* Controles en altura uniforme */
+.pp-filter-card .pp-control,
+.pp-filter-card select.pp-control,
+.pp-filter-card input.pp-control{
+  height:54px!important;
+  min-height:54px!important;
+  border:1.5px solid #cfddea!important;
+  border-radius:16px!important;
+  background:#fff!important;
+  padding:0 18px!important;
+  width:100%!important;
+  color:#071b34!important;
+  font-size:15px!important;
+  font-weight:900!important;
+  outline:none!important;
+  box-shadow:none!important;
+}
+
+.pp-filter-card .pp-control:focus{
+  border-color:#0bbf72!important;
+  box-shadow:0 0 0 4px rgba(11,191,114,.12)!important;
+}
+
+.pp-search-wrap{position:relative!important}
+.pp-search-wrap input{padding-right:48px!important}
+.pp-search-wrap span{
+  position:absolute!important;
+  right:17px!important;
+  top:50%!important;
+  transform:translateY(-50%)!important;
+  font-size:22px!important;
+  color:#071b34!important;
+  line-height:1!important;
+}
+
+/* Filtro estado y cambio masivo */
+.pp-filter-card .pp-state-filter{
+  grid-column:2!important;
+  align-self:end!important;
+  margin:0!important;
+}
+
+.pp-filter-card .pp-mass-select{
+  grid-column:3!important;
+  align-self:end!important;
+  margin:0!important;
+}
+
+/* Botones de la barra */
+.pp-filter-card .pp-mass-btn{
+  grid-column:4!important;
+  align-self:end!important;
+}
+
+.pp-register-btn{
+  width:100%!important;
+}
+
+.pp-filter-card .pp-btn-green,
+.pp-filter-card .pp-register-btn,
+.pp-filter-card .pp-mass-btn{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  height:54px!important;
+  min-height:54px!important;
+  border-radius:16px!important;
+  padding:0 16px!important;
+  background:linear-gradient(135deg,#00964f,#0bbf72)!important;
+  color:#fff!important;
+  border:0!important;
+  font-size:14px!important;
+  font-weight:1000!important;
+  text-decoration:none!important;
+  white-space:nowrap!important;
+  cursor:pointer!important;
+  box-shadow:0 14px 28px rgba(0,138,72,.20)!important;
+}
+
+.pp-filter-card .pp-btn-green:hover,
+.pp-filter-card .pp-register-btn:hover,
+.pp-filter-card .pp-mass-btn:hover{
+  filter:brightness(.98)!important;
+  transform:translateY(-1px)!important;
+}
+
+/* Quitar definitivamente cualquier botón de descargar formato dentro de Postulantes */
+.pp-filter-card a[href*='plantilla_gestion/contratacion'],
+.post-modal-tools a[href*='plantilla_gestion/contratacion'],
+.base-excel-form a[href*='plantilla_gestion/contratacion']{
+  display:none!important;
+}
+
+/* Estándar para módulos que usan tarjetas genéricas: 1 sola línea */
+.std-filter-card,.mod360-filter-card,.ind-tools{
+  display:grid!important;
+  grid-template-columns:minmax(260px,1.1fr) minmax(210px,.72fr) minmax(210px,.72fr) minmax(150px,.45fr) minmax(150px,.45fr)!important;
+  gap:16px!important;
+  align-items:end!important;
+  background:#fff!important;
+  border:1px solid #dbe7ef!important;
+  border-radius:22px!important;
+  padding:20px 24px!important;
+  margin:0 0 20px!important;
+  min-height:104px!important;
+  box-shadow:0 12px 28px rgba(15,23,42,.06)!important;
+}
+
+.std-filter-card label,.mod360-filter-card label,.ind-tools label{
+  color:#071b34!important;
+  font-size:13px!important;
+  font-weight:1000!important;
+  margin:0 0 8px!important;
+  line-height:1.1!important;
+}
+
+.std-filter-card input,.std-filter-card select,
+.mod360-filter-card input,.mod360-filter-card select,
+.ind-tools input,.ind-tools select{
+  height:54px!important;
+  min-height:54px!important;
+  border:1.5px solid #cfddea!important;
+  border-radius:16px!important;
+  background:#fff!important;
+  padding:0 18px!important;
+  width:100%!important;
+  color:#071b34!important;
+  font-size:15px!important;
+  font-weight:900!important;
+}
+
+.std-green-btn,.mod360-btn,.ind-btn{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  height:54px!important;
+  min-height:54px!important;
+  border-radius:16px!important;
+  padding:0 16px!important;
+  background:linear-gradient(135deg,#00964f,#0bbf72)!important;
+  color:#fff!important;
+  border:0!important;
+  font-size:14px!important;
+  font-weight:1000!important;
+  text-decoration:none!important;
+  white-space:nowrap!important;
+  cursor:pointer!important;
+  box-shadow:0 14px 28px rgba(0,138,72,.20)!important;
+}
+
+/* Responsivo: solo baja a columnas cuando realmente no cabe */
+@media(max-width:1280px){
+  .pp-filter-card,.std-filter-card,.mod360-filter-card,.ind-tools{
+    grid-template-columns:1fr 1fr!important;
+    min-height:auto!important;
+  }
+  .pp-filter-card .pp-field:nth-child(1){grid-column:1!important}
+  .pp-filter-card .pp-state-filter{grid-column:2!important}
+  .pp-filter-card .pp-mass-select{grid-column:1!important}
+  .pp-filter-card .pp-mass-btn{grid-column:2!important}
+  .pp-filter-card .pp-field:nth-child(3){grid-column:1 / -1!important}
+}
+@media(max-width:760px){
+  .pp-filter-card,.std-filter-card,.mod360-filter-card,.ind-tools{
+    grid-template-columns:1fr!important;
+    gap:12px!important;
+    padding:16px!important;
+  }
+  .pp-filter-card .pp-field:nth-child(1),
+  .pp-filter-card .pp-state-filter,
+  .pp-filter-card .pp-mass-select,
+  .pp-filter-card .pp-mass-btn,
+  .pp-filter-card .pp-field:nth-child(3){
+    grid-column:1!important;
+  }
+}
+"""
