@@ -10234,6 +10234,114 @@ html,body{overflow-x:hidden!important;}
 @media(max-width:700px){.pp-filter-card,.std-filter-card,.mod360-filter-card,.ind-tools,.foto-premium-row,.foto-kpis,.foto-kpis-premium{grid-template-columns:1fr!important}}
 /* ===== FIN PATCH OMAR 208 ===== */
 
+/* ===== PATCH OMAR 213: Dashboard presentable + indicadores de inducción compactos ===== */
+/* Inducción: indicadores tipo Indumentaria, compactos y sin bloque gigante */
+.mod360-page .mod360-control{
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(180px,1fr))!important;
+  gap:22px!important;
+  align-items:stretch!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  padding:0!important;
+  margin:18px 0 22px!important;
+}
+.mod360-page .mod360-control:before,.mod360-page .mod360-control:after{display:none!important;content:none!important;}
+.mod360-page .mod360-control .mod360-stage:nth-child(4){display:none!important;}
+.mod360-page .mod360-stage{
+  min-height:112px!important;
+  height:auto!important;
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:18px!important;
+  text-align:left!important;
+  padding:22px 24px!important;
+  background:#fff!important;
+  border:1px solid #d9e8f1!important;
+  border-radius:22px!important;
+  border-bottom:3px solid #009b57!important;
+  box-shadow:0 14px 32px rgba(15,23,42,.055)!important;
+}
+.mod360-page .mod360-stage .sico{
+  width:62px!important;height:62px!important;min-width:62px!important;margin:0!important;border-radius:999px!important;
+  background:#009b57!important;color:#fff!important;font-size:26px!important;display:grid!important;place-items:center!important;
+  box-shadow:0 16px 26px rgba(0,155,87,.18)!important;
+}
+.mod360-page .mod360-stage:nth-child(3) .sico{background:#f59e0b!important;}
+.mod360-page .mod360-stage:nth-child(5){border-bottom-color:#ef4444!important;}
+.mod360-page .mod360-stage:nth-child(5) .sico{background:#009b57!important;}
+.mod360-page .mod360-stage h4{margin:0!important;color:#08243f!important;font-size:16px!important;font-weight:1000!important;line-height:1.1!important;}
+.mod360-page .mod360-stage b{margin:6px 0 3px!important;color:#08243f!important;font-size:34px!important;font-weight:1000!important;line-height:1!important;}
+.mod360-page .mod360-stage small{color:#52677f!important;font-size:15px!important;font-weight:800!important;}
+.mod360-page .mod360-filter-card{margin-top:4px!important;}
+
+/* Dashboard: reorganiza y reduce tamaños para aspecto ejecutivo */
+.dashboard-contratacion{display:grid!important;gap:22px!important;}
+.dashboard-contratacion .dash-hero{
+  display:grid!important;grid-template-columns:minmax(0,1fr) 260px!important;align-items:center!important;gap:24px!important;
+  background:#fff!important;border:1px solid #dbe7ef!important;border-radius:26px!important;padding:28px 34px!important;
+  box-shadow:0 18px 42px rgba(15,23,42,.06)!important;margin:0!important;
+}
+.dashboard-contratacion .dash-hero h1{font-size:38px!important;line-height:1.08!important;margin:0 0 12px!important;color:#08243f!important;letter-spacing:-1px!important;}
+.dashboard-contratacion .dash-hero p{font-size:16px!important;line-height:1.45!important;color:#52677f!important;margin:0!important;max-width:900px!important;}
+.dashboard-contratacion .dash-hero .c-btn{width:100%!important;min-height:56px!important;border-radius:16px!important;justify-content:center!important;font-size:16px!important;}
+.dashboard-contratacion .dash-hero .c-btn.gray{background:#1f2937!important;color:#fff!important;border:0!important;}
+.dashboard-contratacion .dash-kpis{
+  display:grid!important;grid-template-columns:repeat(4,minmax(170px,1fr))!important;gap:18px!important;margin:0!important;
+}
+.dashboard-contratacion .dash-kpis .dash-card{
+  min-height:110px!important;padding:22px 26px!important;border-radius:22px!important;background:#fff!important;border:1px solid #dbe7ef!important;
+  box-shadow:0 14px 32px rgba(15,23,42,.055)!important;display:flex!important;flex-direction:column!important;justify-content:center!important;
+}
+.dashboard-contratacion .dash-kpis small{font-size:15px!important;font-weight:900!important;color:#52677f!important;}
+.dashboard-contratacion .dash-kpis b{font-size:34px!important;color:#08243f!important;line-height:1!important;margin-top:12px!important;}
+.dashboard-contratacion .dash360-panel{
+  margin:0!important;padding:24px!important;border-radius:26px!important;background:#fff!important;border:1px solid #dbe7ef!important;
+  box-shadow:0 18px 42px rgba(15,23,42,.06)!important;
+}
+.dashboard-contratacion .dash360-grid{display:grid!important;grid-template-columns:260px repeat(6,minmax(125px,1fr))!important;gap:14px!important;align-items:stretch!important;}
+.dashboard-contratacion .dash360-head{
+  display:flex!important;align-items:center!important;gap:16px!important;background:#f8fafc!important;border:1px solid #e3edf5!important;border-radius:20px!important;padding:18px!important;
+}
+.dashboard-contratacion .dash360-head h2{font-size:23px!important;line-height:1.05!important;margin:0!important;}
+.dashboard-contratacion .dash360-head p{font-size:13px!important;line-height:1.35!important;margin:8px 0 0!important;color:#52677f!important;}
+.dashboard-contratacion .dash360-ring{width:82px!important;height:82px!important;min-width:82px!important;box-shadow:inset 0 0 0 9px #f8fafc!important;}
+.dashboard-contratacion .dash360-ring b{width:58px!important;height:58px!important;font-size:20px!important;}
+.dashboard-contratacion .dash360-stage{min-height:138px!important;padding:14px 10px!important;border-radius:18px!important;}
+.dashboard-contratacion .dash360-stage .ico{width:50px!important;height:50px!important;font-size:22px!important;}
+.dashboard-contratacion .dash360-stage h4{font-size:13px!important;min-height:30px!important;display:flex!important;align-items:center!important;justify-content:center!important;}
+.dashboard-contratacion .dash360-stage b{font-size:30px!important;}
+.dashboard-contratacion .dash360-stage small{font-size:12px!important;}
+.dashboard-contratacion .dash360-actions{justify-content:flex-start!important;margin-top:18px!important;}
+.dashboard-contratacion .dash-grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:22px!important;margin:0!important;}
+.dashboard-contratacion .dash-grid>.dash-card,.dashboard-contratacion .doc-dash-pro,.dashboard-contratacion .table-wrap{
+  background:#fff!important;border:1px solid #dbe7ef!important;border-radius:24px!important;padding:26px!important;box-shadow:0 16px 36px rgba(15,23,42,.055)!important;
+}
+.dashboard-contratacion .dash-grid h2,.dashboard-contratacion .doc-dash-pro h2,.dashboard-contratacion .table-wrap h2{font-size:24px!important;margin:0 0 18px!important;color:#08243f!important;}
+.dashboard-contratacion .progress{height:32px!important;border-radius:999px!important;background:#e8eef5!important;overflow:hidden!important;}
+.dashboard-contratacion .progress span{height:100%!important;display:block!important;background:linear-gradient(135deg,#009b57,#12b76a)!important;color:#08243f!important;font-weight:900!important;padding-left:10px!important;line-height:32px!important;}
+.dashboard-contratacion .quick-grid{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:12px!important;}
+.dashboard-contratacion .quick-grid a{min-height:54px!important;border-radius:16px!important;background:#ecfdf5!important;border:1px solid #bbf7d0!important;color:#064e3b!important;display:flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;font-weight:1000!important;text-decoration:none!important;}
+.dashboard-contratacion .doc-dash-pro{display:grid!important;grid-template-columns:minmax(0,1fr) 240px!important;gap:22px!important;align-items:center!important;}
+.dashboard-contratacion .doc-dash-pro .doc-mini-kpis{grid-column:1/-1!important;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:16px!important;}
+.dashboard-contratacion .doc-dash-pro .doc-mini-kpis b{border:1px solid #dbe7ef!important;border-radius:18px!important;padding:18px 22px!important;background:#fff!important;color:#08243f!important;font-size:16px!important;}
+.dashboard-contratacion .doc-dash-pro .doc-mini-kpis span{display:block!important;font-size:28px!important;color:#009b57!important;margin-top:10px!important;}
+.dashboard-contratacion .doc-dash-pro .doc-actions{grid-column:1/-1!important;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:14px!important;}
+.dashboard-contratacion .doc-dash-pro .doc-actions span{border:1px solid #dbe7ef!important;border-radius:16px!important;padding:18px!important;font-weight:900!important;background:#fff!important;}
+@media(max-width:1250px){
+  .mod360-page .mod360-control{grid-template-columns:repeat(2,1fr)!important;}
+  .dashboard-contratacion .dash360-grid{grid-template-columns:repeat(3,1fr)!important;}
+  .dashboard-contratacion .dash360-head{grid-column:1/-1!important;}
+  .dashboard-contratacion .dash-hero,.dashboard-contratacion .dash-grid,.dashboard-contratacion .doc-dash-pro{grid-template-columns:1fr!important;}
+}
+@media(max-width:760px){
+  .mod360-page .mod360-control,.dashboard-contratacion .dash-kpis,.dashboard-contratacion .dash360-grid,.dashboard-contratacion .quick-grid,.dashboard-contratacion .doc-dash-pro .doc-mini-kpis,.dashboard-contratacion .doc-dash-pro .doc-actions{grid-template-columns:1fr!important;}
+}
+/* ===== FIN PATCH OMAR 213 ===== */
+
 </style>"""
     def wrap(inner):
         return css + inner
