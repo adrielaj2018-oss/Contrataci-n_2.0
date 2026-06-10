@@ -5512,9 +5512,9 @@ def sidebar(active):
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
             <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
-            <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-clipboard-check'></i><span class='label'>Doc. Postulantes</span></a>
             <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
             <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
+            <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-folder2-open'></i><span class='label'>Doc. Postulantes</span></a>
             <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested'>
               <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
               <div class='submenu'>
@@ -10519,52 +10519,173 @@ html,body{overflow-x:hidden!important;}
         </div>
         """)
     if sec=='dashboard':
-        total_trab = len(trabajadores)
         total_req = len(requerimientos)
         total_ing = len(ingresos)
-        total_med = len(medicas)
-        total_cap = len(capacitaciones)
-        total_ind = len(indumentarias)
-        total_nisira = len(lotes_nisira)
         total_docs_dash = len(docs)
         total_firmas_dash = len(firma_sols)
+
         aptos = len([r for r in medicas if (r['estado'] or '').upper()=='APTO'])
         inducidos_dash = len([r for r in capacitaciones if (r['estado'] or '').upper() in ('INDUCIDO','APROBADO','OK','COMPLETO')])
         indumentaria_ok_dash = len([r for r in indumentarias if (r['estado'] or '').upper() in ('ENTREGADO','APROBADO','OK','COMPLETO')])
         docs_ok_dash = len([r for r in docs if (r['estado'] or '').upper() in ('APROBADO','OK','COMPLETO','FIRMADO')])
         firmas_ok_dash = len([r for r in firma_sols if (r['estado'] or '').upper() in ('FIRMADO','OK','COMPLETO','APROBADO')])
+
         pendientes_docs_dash = max(total_ing - docs_ok_dash, 0)
         pendientes_firma_dash = max(total_ing - firmas_ok_dash, 0)
         completos_dash = min(aptos, inducidos_dash, indumentaria_ok_dash, docs_ok_dash, firmas_ok_dash) if total_ing else 0
         observados_dash = len([r for r in ingresos if 'OBSERV' in (r['estado'] or '').upper() or 'ANUL' in (r['estado'] or '').upper()])
+        listos_contratar_dash = completos_dash
         avance = min(100, round(((aptos+inducidos_dash+indumentaria_ok_dash+docs_ok_dash+firmas_ok_dash) / max(total_ing*5,1))*100, 1)) if total_ing else 0
-        ult_rows=''.join([f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='status-pill ok'>{h(r['estado'])}</span></td></tr>" for r in ingresos[:10]]) or "<tr><td colspan='7'>Sin ingresos registrados.</td></tr>"
+
+        ult_rows=''.join([
+            f"<tr><td>{h(r['fecha_registro'])}</td><td><b>{h(r['dni'])}</b></td><td>{h(r['trabajador'])}</td><td>{h(r['tipo_ingreso'])}</td><td>{h(r['sede'])}</td><td>{h(r['cargo'])}</td><td><span class='dash-status'>{h(r['estado'])}</span></td></tr>"
+            for r in ingresos[:8]
+        ]) or "<tr><td colspan='7' class='empty-row'>Sin ingresos registrados.</td></tr>"
+
         content=wrap(f"""
-        <section class='dashboard-contratacion'>
-          <div class='dash-hero'>
-            <div><h1>Centro de Control - Gestión Contratación</h1><p class='muted2'>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, indumentaria, fotocheck, NISIRA y Gestión Documental.</p></div>
-            <div style='display:flex;gap:10px;flex-wrap:wrap'><a class='c-btn' href='/admin/contratacion?sec=requerimientos'>Nuevo requerimiento</a><a class='c-btn gray' href='/admin/contratacion?sec=nuevos'>Registrar trabajador</a></div>
-          </div>
-          <style>
-            .dash360-panel{{background:#fff;border:1px solid #dfeaf2;border-radius:20px;margin:18px 0;padding:22px;box-shadow:0 18px 40px rgba(15,43,67,.07)}}
-            .dash360-grid{{display:grid;grid-template-columns:1.3fr repeat(6,1fr);gap:14px;align-items:stretch}}
-            .dash360-head{{display:flex;align-items:center;gap:18px;min-width:0}}.dash360-head h2{{margin:0;color:#08284a;font-size:24px;line-height:1.05;font-weight:1000}}.dash360-head p{{margin:8px 0 0;color:#4d607a;font-weight:800}}.dash360-ring{{width:112px;height:112px;border-radius:50%;background:conic-gradient(#0bbf72 {avance}%,#e5e7eb 0);display:grid;place-items:center;flex:0 0 112px;box-shadow:inset 0 0 0 12px #f8fafc}}.dash360-ring b{{display:grid;place-items:center;width:76px;height:76px;border-radius:50%;background:#fff;color:#071b34;font-size:24px;line-height:1}}.dash360-ring small{{display:block;font-size:11px;color:#43556c;font-weight:900}}.dash360-stage{{border:1px solid #d8e6ef;border-radius:16px;padding:16px 10px;text-align:center;background:#fff;box-shadow:0 10px 22px rgba(15,43,67,.04);border-bottom:3px solid #16c784}}.dash360-stage.warn{{border-bottom-color:#f59e0b}}.dash360-stage.bad{{border-bottom-color:#ef4444}}.dash360-stage .ico{{width:48px;height:48px;margin:0 auto 10px;border-radius:50%;display:grid;place-items:center;background:#dcfce7;font-size:24px}}.dash360-stage.warn .ico{{background:#fef3c7}}.dash360-stage.bad .ico{{background:#fee2e2}}.dash360-stage h4{{margin:0 0 8px;color:#08284a;font-size:13px;font-weight:1000}}.dash360-stage b{{display:block;color:#08284a;font-size:28px;line-height:1;font-weight:1000}}.dash360-stage small{{display:block;margin-top:8px;color:#50637d;font-weight:800;font-size:12px}}.dash360-actions{{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}}.dash360-actions a{{background:#f8fafc;border:1px solid #dbe7ef;border-radius:12px;padding:10px 14px;text-decoration:none;color:#08284a;font-weight:950}}.dash360-actions a.primary{{background:#009b57;color:#fff;border-color:#009b57}}@media(max-width:1200px){{.dash360-grid{{grid-template-columns:repeat(3,1fr)}}.dash360-head{{grid-column:1/-1}}}}@media(max-width:760px){{.dash360-grid{{grid-template-columns:1fr}}.dash360-head{{display:block}}.dash360-ring{{margin-top:14px}}}}
-          </style>
-          <div class='dash-kpis'><div class='dash-card'><small>Requerimientos</small><b>{total_req}</b></div><div class='dash-card'><small>Postulantes</small><b>{total_ing}</b></div><div class='dash-card'><small>Aptos médicos</small><b>{aptos}</b></div><div class='dash-card'><small>Lotes NISIRA</small><b>{total_nisira}</b></div></div>
-          <div class='dash360-panel'>
-            <div class='dash360-grid'>
-              <div class='dash360-head'><div><h2>Centro de Control 360°</h2><p>Avance global de contratación: médico, documentos, fotocheck/firma, inducción y observados.</p></div><div class='dash360-ring'><b>{avance}%<small>completo</small></b></div></div>
-              <div class='dash360-stage'><div class='ico'>✓</div><h4>Completos</h4><b>{completos_dash}</b><small>Listos para ingresar</small></div>
-              <div class='dash360-stage'><div class='ico'>♥</div><h4>Aptos médicos</h4><b>{aptos}</b><small>Con aptitud aprobada</small></div>
-              <div class='dash360-stage warn'><div class='ico'>▣</div><h4>Pend. documentos</h4><b>{pendientes_docs_dash}</b><small>Documentos faltantes</small></div>
-              <div class='dash360-stage warn'><div class='ico'>✎</div><h4>Pend. fotocheck/firma</h4><b>{pendientes_firma_dash}</b><small>Firma / fotocheck</small></div>
-              <div class='dash360-stage'><div class='ico'>🎓</div><h4>Inducidos</h4><b>{inducidos_dash}</b><small>Inducción realizada</small></div>
-              <div class='dash360-stage bad'><div class='ico'>!</div><h4>Observados</h4><b>{observados_dash}</b><small>Requiere atención</small></div>
+        <style>
+          .dash-premium{{display:grid;gap:18px}}
+          .dash-premium *{{box-sizing:border-box}}
+          .dash-hero-pro{{display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:center;background:linear-gradient(135deg,#ffffff 0%,#f2fff8 100%);border:1px solid #d7e8f0;border-radius:24px;padding:26px 30px;box-shadow:0 18px 45px rgba(15,43,67,.07)}}
+          .dash-hero-pro h1{{margin:0 0 8px;color:#062b54;font-size:34px;line-height:1.08;font-weight:1000;letter-spacing:-.9px}}
+          .dash-hero-pro p{{margin:0;color:#4b617b;font-size:16px;font-weight:750;line-height:1.45}}
+          .dash-hero-actions{{display:grid;gap:12px}}
+          .dash-btn-main,.dash-btn-dark{{height:54px;border-radius:13px;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;font-weight:1000;font-size:15px;box-shadow:0 18px 34px rgba(0,150,83,.18)}}
+          .dash-btn-main{{background:#09a860;color:#fff}}
+          .dash-btn-dark{{background:#172334;color:#fff;box-shadow:0 18px 34px rgba(23,35,52,.18)}}
+          .dash-kpi-grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}}
+          .dash-kpi-pro{{min-height:106px;background:linear-gradient(135deg,#f0fff7 0%,#ffffff 74%);border:1px solid #d7e8f0;border-radius:18px;padding:18px 20px;display:flex;align-items:center;gap:16px;box-shadow:0 12px 28px rgba(15,43,67,.055);overflow:hidden;position:relative}}
+          .dash-kpi-pro:after{{content:'';position:absolute;right:-16px;bottom:-16px;width:74px;height:74px;border-radius:50%;background:rgba(0,158,87,.07)}}
+          .dash-kpi-ico{{width:56px;height:56px;border-radius:50%;background:#d9fbe8;color:#008c50;display:grid;place-items:center;font-size:27px;flex:0 0 56px}}
+          .dash-kpi-pro small{{display:block;color:#36506a;font-size:13px;font-weight:950;margin-bottom:3px}}
+          .dash-kpi-pro b{{display:block;color:#062b54;font-size:30px;line-height:1;font-weight:1000}}
+          .dash-kpi-pro span{{display:block;margin-top:4px;color:#50637d;font-size:12px;font-weight:800}}
+          .dash-two{{display:grid;grid-template-columns:1.08fr 1.52fr;gap:16px}}
+          .dash-card-pro{{background:#fff;border:1px solid #d7e8f0;border-radius:22px;padding:22px;box-shadow:0 14px 34px rgba(15,43,67,.06)}}
+          .dash-card-pro h2{{margin:0 0 14px;color:#062b54;font-size:21px;font-weight:1000}}
+          .dash-progress-wrap{{display:grid;grid-template-columns:176px 1fr;gap:20px;align-items:center}}
+          .dash-ring-pro{{width:164px;height:164px;border-radius:50%;background:conic-gradient(#0bbf72 {avance}%,#e8edf2 0);display:grid;place-items:center;box-shadow:inset 0 0 0 16px #f8fafc}}
+          .dash-ring-pro .inner{{width:104px;height:104px;border-radius:50%;background:#fff;display:grid;place-items:center;text-align:center;box-shadow:0 10px 20px rgba(15,43,67,.07)}}
+          .dash-ring-pro b{{font-size:32px;color:#062b54;line-height:1}}
+          .dash-ring-pro small{{display:block;color:#40566f;font-weight:900;font-size:12px}}
+          .dash-progress-list{{border:1px solid #e0ebf2;border-radius:16px;padding:12px 14px;background:#fbfefd}}
+          .dash-pro-row{{display:grid;grid-template-columns:18px 1fr 48px;align-items:center;gap:10px;padding:8px 0;color:#08284a;font-weight:900}}
+          .dot{{width:11px;height:11px;border-radius:50%;background:#0bbf72}}
+          .dot.orange{{background:#f59e0b}}.dot.red{{background:#ef4444}}.dot.blue{{background:#2f9bd8}}
+          .quick-grid-pro{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}}
+          .quick-grid-pro a{{min-height:88px;border-radius:16px;background:linear-gradient(135deg,#eafff3,#f8fffb);border:1px solid #baf0d1;text-decoration:none;color:#064431;font-weight:1000;display:grid;place-items:center;text-align:center;padding:12px;box-shadow:0 10px 22px rgba(0,150,83,.055)}}
+          .quick-grid-pro i{{font-style:normal;display:block;font-size:26px;margin-bottom:6px}}
+          .dash-360-flow{{background:#fff;border:1px solid #d7e8f0;border-radius:22px;padding:20px 22px;box-shadow:0 14px 34px rgba(15,43,67,.06)}}
+          .dash-360-flow h2{{margin:0 0 2px;color:#062b54;font-size:21px;font-weight:1000}}
+          .dash-360-flow p{{margin:0 0 18px;color:#50637d;font-weight:800}}
+          .flow-grid{{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;position:relative}}
+          .flow-card{{position:relative;text-align:center;padding:12px 8px;border-radius:16px;background:linear-gradient(180deg,#ffffff,#fbfffd);border:1px solid #e0ebf2}}
+          .flow-card:after{{content:'›';position:absolute;right:-12px;top:34px;color:#9bb2c6;font-size:28px;font-weight:1000}}
+          .flow-card:last-child:after{{display:none}}
+          .flow-ico{{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;margin:0 auto 8px;background:#dcfce7;font-size:22px}}
+          .flow-card.warn .flow-ico{{background:#fef3c7}}.flow-card.bad .flow-ico{{background:#fee2e2}}
+          .flow-card h4{{margin:0;color:#062b54;font-size:13px;font-weight:1000;line-height:1.15;min-height:30px}}
+          .flow-card b{{display:block;margin-top:6px;color:#062b54;font-size:24px;line-height:1;font-weight:1000}}
+          .flow-card small{{display:block;margin-top:7px;color:#52667f;font-weight:800;font-size:11px}}
+          .flow-line{{height:3px;width:48px;margin:10px auto 0;border-radius:10px;background:#0bbf72}}
+          .flow-card.warn .flow-line{{background:#f59e0b}}.flow-card.bad .flow-line{{background:#ef4444}}
+          .dash-bottom{{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}}
+          .doc-panel-pro{{background:linear-gradient(135deg,#ffffff 0%,#f1fff8 100%)}}
+          .doc-head{{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}}
+          .doc-head h2{{margin:0;color:#062b54;font-size:21px;font-weight:1000}}.doc-head h2 span{{color:#009b57}}
+          .doc-head p{{margin:6px 0 0;color:#50637d;font-weight:750}}
+          .doc-mini-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}}
+          .doc-mini{{border:1px solid #d7e8f0;border-radius:14px;background:#fff;padding:13px;display:flex;align-items:center;gap:10px}}
+          .doc-mini i{{font-style:normal;width:38px;height:38px;border-radius:12px;background:#dcfce7;display:grid;place-items:center}}
+          .doc-mini small{{display:block;color:#50637d;font-weight:900}}.doc-mini b{{display:block;color:#062b54;font-size:24px}}
+          .doc-actions-pro{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}}
+          .doc-actions-pro span{{border:1px solid #d7e8f0;border-radius:13px;background:#fff;padding:13px;text-align:center;font-weight:950;color:#062b54}}
+          .table-mini table{{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #d7e8f0;border-radius:14px;overflow:hidden}}
+          .table-mini th{{background:#009b57;color:#fff;text-align:left;padding:10px;font-size:12px}}.table-mini td{{padding:10px;border-top:1px solid #edf3f7;color:#0a2747;font-weight:750;font-size:12px}}
+          .dash-status{{display:inline-block;background:#dcfce7;color:#007a45;border:1px solid #a7ebc5;border-radius:99px;padding:4px 9px;font-weight:950;font-size:11px}}
+          .empty-row{{text-align:center;color:#50637d!important;font-weight:900!important}}
+          @media(max-width:1200px){{.dash-hero-pro,.dash-two,.dash-bottom{{grid-template-columns:1fr}}.dash-kpi-grid{{grid-template-columns:repeat(2,1fr)}}.quick-grid-pro{{grid-template-columns:repeat(2,1fr)}}.flow-grid{{grid-template-columns:repeat(3,1fr)}}.flow-card:after{{display:none}}}}
+          @media(max-width:760px){{.dash-kpi-grid,.quick-grid-pro,.flow-grid,.doc-mini-grid,.doc-actions-pro{{grid-template-columns:1fr}}.dash-progress-wrap{{grid-template-columns:1fr}}.dash-hero-pro{{padding:20px}}}}
+        </style>
+
+        <section class='dash-premium'>
+          <div class='dash-hero-pro'>
+            <div>
+              <h1>Centro de Control - Gestión Contratación</h1>
+              <p>Dashboard integrado del embudo: requerimiento, registro, médico, inducción, indumentaria, fotocheck, contratos y gestión documental.</p>
             </div>
-            <div class='dash360-actions'><a class='primary' href='/admin/contratacion?sec=nuevos'>Ver postulantes</a><a href='/admin/contratacion?sec=medica'>Evaluación médica</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=firma'>Firma digital</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a></div>
+            <div class='dash-hero-actions'>
+              <a class='dash-btn-main' href='/admin/contratacion?sec=requerimientos'>＋ Nuevo requerimiento</a>
+              <a class='dash-btn-dark' href='/admin/contratacion?sec=nuevos'>👤 Registrar trabajador</a>
+            </div>
           </div>
-          <div class='dash-grid'><div class='dash-card'><h2>Avance operativo</h2><div class='progress'><span style='width:{avance}%'>{avance}%</span></div><p class='muted2'>Mide registros con control médico, documentos, inducción, indumentaria y firma/fotocheck.</p></div><div class='dash-card'><h2>Accesos rápidos</h2><div class='quick-grid'><a href='/admin/contratacion?sec=requerimientos'>Requerimientos</a><a href='/admin/contratacion?sec=nuevos'>Altas</a><a href='/admin/contratacion?sec=medica'>Control médico</a><a href='/admin/contratacion?sec=induccion'>Inducción</a><a href='/admin/contratacion?sec=indumentaria'>Indumentaria</a><a href='/admin/contratacion?sec=fotocheck'>Fotocheck</a><a href='/admin/contratacion?sec=ia'>IA RR.HH.</a><a href='/panel'>Gestión Documental</a></div></div></div><div class='dash-card doc-dash-pro'><div><h2>Gestión <span>Documental</span></h2><p class='muted2'>Concentra documentos, cargas, PDFs, carpetas locales, aceptación/firma/aprobación y trazabilidad.</p></div><a class='c-btn' href='/panel'>Entrar a documentos</a><div class='doc-mini-kpis'><b>Total documentos<br><span>{total_docs_dash}</span></b><b>Pendientes<br><span>{pendientes_docs_dash}</span></b><b>Firmas<br><span>{total_firmas_dash}</span></b></div><div class='doc-actions'><span>📤 Subir documentos</span><span>🔎 Detectar PDFs</span><span>📁 Crear carpetas</span></div></div>
-          <div class='dash-card table-wrap'><h2>Últimos registros del embudo</h2><table class='c-table'><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Ingreso</th><th>Sede</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table></div>
+
+          <div class='dash-kpi-grid'>
+            <div class='dash-kpi-pro'><div class='dash-kpi-ico'>📋</div><div><small>Requerimientos</small><b>{total_req}</b><span>Activos</span></div></div>
+            <div class='dash-kpi-pro'><div class='dash-kpi-ico'>👥</div><div><small>Postulantes</small><b>{total_ing}</b><span>Registrados</span></div></div>
+            <div class='dash-kpi-pro'><div class='dash-kpi-ico'>🩺</div><div><small>Aptos médicos</small><b>{aptos}</b><span>Aprobados</span></div></div>
+            <div class='dash-kpi-pro'><div class='dash-kpi-ico'>✅</div><div><small>Listos para contratar</small><b>{listos_contratar_dash}</b><span>Completos</span></div></div>
+          </div>
+
+          <div class='dash-two'>
+            <div class='dash-card-pro'>
+              <h2>Avance global de contratación</h2>
+              <div class='dash-progress-wrap'>
+                <div class='dash-ring-pro'><div class='inner'><div><b>{avance}%</b><small>Completado</small></div></div></div>
+                <div class='dash-progress-list'>
+                  <div class='dash-pro-row'><span class='dot'></span><span>Documentos</span><b>{round((docs_ok_dash/max(total_ing,1))*100) if total_ing else 0}%</b></div>
+                  <div class='dash-pro-row'><span class='dot blue'></span><span>Médico</span><b>{round((aptos/max(total_ing,1))*100) if total_ing else 0}%</b></div>
+                  <div class='dash-pro-row'><span class='dot orange'></span><span>Inducción</span><b>{round((inducidos_dash/max(total_ing,1))*100) if total_ing else 0}%</b></div>
+                  <div class='dash-pro-row'><span class='dot orange'></span><span>Indumentaria</span><b>{round((indumentaria_ok_dash/max(total_ing,1))*100) if total_ing else 0}%</b></div>
+                  <div class='dash-pro-row'><span class='dot'></span><span>Fotocheck / Firma</span><b>{round((firmas_ok_dash/max(total_ing,1))*100) if total_ing else 0}%</b></div>
+                </div>
+              </div>
+            </div>
+
+            <div class='dash-card-pro'>
+              <h2>Accesos rápidos</h2>
+              <div class='quick-grid-pro'>
+                <a href='/admin/contratacion?sec=requerimientos'><span><i>📁</i>Requerimientos</span></a>
+                <a href='/admin/contratacion?sec=nuevos'><span><i>👥</i>Postulantes</span></a>
+                <a href='/admin/contratacion?sec=medica'><span><i>🩺</i>Evaluación Médica</span></a>
+                <a href='/admin/contratacion?sec=induccion'><span><i>🎓</i>Inducción</span></a>
+                <a href='/admin/contratacion?sec=indumentaria'><span><i>🦺</i>Indumentaria</span></a>
+                <a href='/admin/contratacion?sec=fotocheck'><span><i>📸</i>Fotocheck</span></a>
+                <a href='/admin/contratacion?sec=contratos'><span><i>📄</i>Contratos</span></a>
+                <a href='/panel'><span><i>📂</i>Gestión Documental</span></a>
+              </div>
+            </div>
+          </div>
+
+          <div class='dash-360-flow'>
+            <h2>Centro de Control 360°</h2>
+            <p>Resumen visual del embudo de contratación.</p>
+            <div class='flow-grid'>
+              <div class='flow-card'><div class='flow-ico'>✓</div><h4>Completos</h4><b>{completos_dash}</b><small>Listos para ingresar</small><div class='flow-line'></div></div>
+              <div class='flow-card'><div class='flow-ico'>♥</div><h4>Aptos médicos</h4><b>{aptos}</b><small>Con aptitud aprobada</small><div class='flow-line'></div></div>
+              <div class='flow-card warn'><div class='flow-ico'>□</div><h4>Pend. documentos</h4><b>{pendientes_docs_dash}</b><small>Documentos faltantes</small><div class='flow-line'></div></div>
+              <div class='flow-card warn'><div class='flow-ico'>✎</div><h4>Pend. fotocheck/firma</h4><b>{pendientes_firma_dash}</b><small>Firma / fotocheck</small><div class='flow-line'></div></div>
+              <div class='flow-card'><div class='flow-ico'>🎓</div><h4>Inducidos</h4><b>{inducidos_dash}</b><small>Inducción realizada</small><div class='flow-line'></div></div>
+              <div class='flow-card bad'><div class='flow-ico'>!</div><h4>Observados</h4><b>{observados_dash}</b><small>Requiere atención</small><div class='flow-line'></div></div>
+            </div>
+          </div>
+
+          <div class='dash-bottom'>
+            <div class='dash-card-pro table-mini'>
+              <h2>Últimos registros del embudo</h2>
+              <table><tr><th>Fecha</th><th>DNI</th><th>Trabajador</th><th>Ingreso</th><th>Sede</th><th>Cargo</th><th>Estado</th></tr>{ult_rows}</table>
+            </div>
+
+            <div class='dash-card-pro doc-panel-pro'>
+              <div class='doc-head'><div><h2>Gestión <span>Documental</span></h2><p>Documentos, PDFs, firmas, carpetas y trazabilidad.</p></div><a class='dash-btn-main' style='width:190px' href='/panel'>📁 Entrar</a></div>
+              <div class='doc-mini-grid'>
+                <div class='doc-mini'><i>📄</i><div><small>Total documentos</small><b>{total_docs_dash}</b></div></div>
+                <div class='doc-mini'><i>📌</i><div><small>Pendientes</small><b>{pendientes_docs_dash}</b></div></div>
+                <div class='doc-mini'><i>🖊️</i><div><small>Firmas</small><b>{total_firmas_dash}</b></div></div>
+              </div>
+              <div class='doc-actions-pro'><span>📤 Subir</span><span>🔎 Detectar PDFs</span><span>📁 Carpetas</span></div>
+            </div>
+          </div>
         </section>
         """)
     elif sec=='requerimientos':
