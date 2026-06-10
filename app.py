@@ -11870,6 +11870,210 @@ html,body{overflow-x:hidden!important;}
             </style>
             <div class='datos-postulantes-pro'><h2 class='c-title'>Datos Postulantes</h2>
             {modulo_requerimiento_header_html('📋','Datos Postulantes','Seleccione primero el requerimiento. El sistema muestra el flujo correcto: evaluación médica, inducción, indumentaria, fotocheck y contrato firmado.','datos_completos', "<option value=''>Seleccione requerimiento</option>" + opt_req, req_actual)}
+            <div class='c-card c-form requerimiento-first' style='padding:18px;margin-bottom:18px'><b>Elegir requerimiento</b><select onchange="location.href='/admin/contratacion?sec=datos_completos&req='+encodeURIComponent(this.value)">{req_select_opts}</select><b>Buscar postulante</b><input oninput="filtrarTabla(this,'tabla_datos_postulantes')" placeholder='DNI, trabajador, cargo, estado...'></div>
+            <div class='flujo-doc'>
+              <div class='flow-card'><div class='flow-icon'>🩺</div><b>1. Evaluación médica</b><small>Debe quedar APTO/APROBADO.</small><span>Pendientes: {pend_medica}</span></div>
+              <div class='flow-card'><div class='flow-icon'>🎓</div><b>2. Inducción</b><small>Capacitación de ingreso.</small><span>Pendientes: {pend_induccion}</span></div>
+              <div class='flow-card'><div class='flow-icon'>🦺</div><b>3. Indumentaria</b><small>EPP, uniforme y cargo.</small><span>Pendientes: {pend_indumentaria}</span></div>
+              <div class='flow-card'><div class='flow-icon'>🪪</div><b>4. Fotocheck</b><small>Foto validada e impresión.</small><span>Pendientes: {pend_fotocheck}</span></div>
+              <div class='flow-card'><div class='flow-icon'>✍️</div><b>5. Contrato firmado</b><small>Documento final firmado.</small><span>Pendientes: {pend_contrato}</span></div>
+            </div>
+            <div class='datos-kpi pro-360'><div class='pz-kpi iconic'><i>👥</i><div><span>Total postulantes</span><b>{total}</b></div></div><div class='pz-kpi iconic danger'><i>🩺</i><div><span>Pend. evaluación</span><b>{pend_medica}</b></div></div><div class='pz-kpi iconic warn'><i>🎓</i><div><span>Pend. inducción</span><b>{pend_induccion}</b></div></div><div class='pz-kpi iconic warn'><i>🦺</i><div><span>Pend. indumentaria</span><b>{pend_indumentaria}</b></div></div><div class='pz-kpi iconic warn'><i>🪪</i><div><span>Pend. fotocheck</span><b>{pend_fotocheck}</b></div></div><div class='pz-kpi iconic ok'><i>✅</i><div><span>Flujo completo</span><b>{completos_flujo}</b></div></div></div>
+            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_medico'>1. Evaluación médica</option><option value='estado_capacitacion'>2. Inducción / capacitación</option><option value='estado_indumentaria'>3. Indumentaria</option><option value='fotocheck_estado'>4. Fotocheck</option><option value='estado_documentos'>5. Contrato firmado / documentos</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>APTO</option><option>APROBADO</option><option>INDUCIDO</option><option>ENTREGADO</option><option>IMPRESO</option><option>FIRMADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th class='sticky-col'>DNI</th><th class='sticky-col-2'>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>1. Evaluación</th><th>2. Inducción</th><th>3. Indumentaria</th><th>4. Fotocheck</th><th>5. Contrato firmado</th><th>Detalle</th><th>Anular</th></tr>{tabla_rows}</table></div></form></div>
+            """)
+        else:
+            tit='Centro de Fotocheck'
+            req_actual = clean(request.args.get('req')) or requerimiento_sel
+            lista_foto = trabajadores_proceso_mostrar[:800]
+            total_foto = len(lista_foto)
+            sin_foto = sum(1 for r in lista_foto if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
+            foto_ok = total_foto - sin_foto
+            listos = sum(1 for r in lista_foto if (r['foto_ruta'] if 'foto_ruta' in r.keys() else '') and str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else '').upper() in ['LISTO PARA IMPRIMIR','FOTO APROBADA','APROBADO'])
+            impresos = sum(1 for r in lista_foto if str(r['fotocheck_estado'] if 'fotocheck_estado' in r.keys() else '').upper() in ['IMPRESO','ENTREGADO','CARGO GENERADO'])
+            def _ft_estado(v, foto):
+                vv = str(v or 'PENDIENTE').upper()
+                if not foto:
+                    return "<span class='status-pill warn'>PENDIENTE FOTO</span>"
+                ok = vv in ['LISTO PARA IMPRIMIR','ENVIADO A ZEBRA ZC300','IMPRESO','ENTREGADO','CARGO GENERADO','FOTO APROBADA','APROBADO']
+                return f"<span class='status-pill {'ok' if ok else ''}'>{h(vv)}</span>"
+            foto_rows=[]
+            for i, r in enumerate(lista_foto, 1):
+                extra = f"<a class='std-ico' title='Vista previa fotocheck' target='_blank' href='/admin/contratacion/fotocheck/preview_dni?dni={h(row_get(r,'dni'))}'>🪪</a>"
+                foto_rows.append(fila_estandar_postulante(r, req=req_actual, checkbox_name='ingreso_ids', extra_action=extra, idx=i))
+            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='14' class='std-empty'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
+            with db() as con_cfg_ui:
+                cfg_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
+                hist_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_historial ORDER BY id DESC LIMIT 8').fetchall()
+            cfg_impresora = cfg_zebra['impresora_nombre'] if cfg_zebra else 'Zebra ZC300'
+            cfg_tipo = cfg_zebra['tipo_conexion'] if cfg_zebra else 'COLA WINDOWS / USB'
+            cfg_bt_nombre = cfg_zebra['bluetooth_nombre'] if cfg_zebra else ''
+            cfg_bt_mac = cfg_zebra['bluetooth_mac'] if cfg_zebra else ''
+            cfg_ip = cfg_zebra['ip_impresora'] if cfg_zebra else ''
+            cfg_puerto = cfg_zebra['puerto'] if cfg_zebra else ''
+            cfg_tamano = cfg_zebra['tamano_tarjeta'] if cfg_zebra else 'CR80'
+            cfg_orientacion = cfg_zebra['orientacion'] if cfg_zebra else 'Horizontal'
+            cfg_caras = cfg_zebra['caras'] if cfg_zebra else 'Frente'
+            cfg_copias = cfg_zebra['copias'] if cfg_zebra else 1
+            cfg_plantilla = cfg_zebra['plantilla_diseno'] if cfg_zebra else 'PRIZE - FOTOCHECK ESTÁNDAR'
+            cfg_ruta = cfg_zebra['ruta_salida'] if cfg_zebra else str(UPLOAD_DIR/'contratacion'/'fotocheck'/'salida_impresion')
+            cfg_estado = cfg_zebra['estado_conexion'] if cfg_zebra else 'NO CONFIGURADA'
+            cfg_obs = cfg_zebra['observacion'] if cfg_zebra else ''
+            if cfg_zebra:
+                estado_minimo_zebra, detalle_minimo_zebra = zebra_validar_campos_config(cfg_zebra)
+                if estado_minimo_zebra == 'CONFIGURACIÓN INCOMPLETA':
+                    cfg_estado = estado_minimo_zebra
+                    cfg_obs = detalle_minimo_zebra
+                elif es_entorno_render() and cfg_estado in ['DETECTADA / LISTA','CONFIGURADA','LISTA PARA IMPRIMIR']:
+                    cfg_estado = 'PRUEBA LÓGICA / REQUIERE PC LOCAL'
+                    cfg_obs = 'Render no puede detectar ni usar la impresora física. La impresión real permanece bloqueada.'
+            def _sel(a,b): return 'selected' if str(a).upper()==str(b).upper() else ''
+            cfg_estado_class = 'ok' if zebra_permite_impresion(cfg_estado) else ('warn' if cfg_estado in ['PENDIENTE DE PRUEBA LOCAL','PENDIENTE DE PRUEBA REAL','PRUEBA LÓGICA / REQUIERE PC LOCAL'] else 'bad')
+            hist_rows = ''.join([f"<tr><td>{h(x['fecha'])}</td><td>{h(x['accion'])}</td><td>{h(x['impresora'])}</td><td>{h(x['tipo_conexion'])}</td><td>{h(x['estado'])}</td><td>{h(x['detalle'])}</td></tr>" for x in hist_zebra]) or "<tr><td colspan='6'>Sin pruebas ni impresiones registradas.</td></tr>"
+            content=wrap(f"""
+            {estilos_tabla_estandar_postulantes()}
+            <style>
+            .foto-kpis{{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:14px;margin:14px 0 18px}}
+            .foto-kpis .kpi{{background:#fff;border:1px solid #dbeafe;border-radius:16px;padding:15px;box-shadow:0 8px 22px rgba(15,23,42,.06)}}
+            .foto-kpis .kpi span{{display:block;color:#64748b;font-weight:900;font-size:11px;text-transform:uppercase}}
+            .foto-kpis .kpi b{{font-size:26px;color:#0f513f}}
+            .foto-flow{{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:12px 0}}
+            .foto-flow div{{background:#f8fafc;border:1px solid #dbeafe;border-radius:14px;padding:12px;text-align:center;font-weight:900;color:#0f513f}}
+            .foto-actions{{display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:#fff;border:1px solid #dce8e5;border-radius:16px;padding:14px;margin-bottom:14px}}
+            .foto-actions label{{display:grid;gap:5px;font-weight:900;color:#334155;font-size:12px}}
+            .foto-actions select,.foto-actions input{{min-width:190px;border:1px solid #cbd5e1;border-radius:10px;padding:10px}}
+            .zebra-config{{background:linear-gradient(135deg,#ffffff,#f0fdf4);border:1px solid #bbf7d0;border-radius:22px;padding:20px;margin:16px 0;box-shadow:0 14px 32px rgba(15,23,42,.07)}}
+            .zebra-status{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}}
+            .print-methods{{display:grid;grid-template-columns:repeat(4,minmax(210px,1fr));gap:14px;margin:12px 0 18px}}
+            .method-card{{border:1px solid #dbeafe;background:#fff;border-radius:18px;padding:14px;box-shadow:0 8px 20px rgba(15,23,42,.05)}}
+            .method-card h4{{margin:0 0 6px;color:#08213e;font-size:15px}}.method-card p{{margin:0;color:#64748b;font-size:12px;font-weight:700;line-height:1.35}}
+            .zebra-grid{{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:12px;align-items:end}}
+            .zebra-grid label{{display:grid;gap:6px;font-weight:900;color:#0f513f;font-size:12px}}
+            .zebra-grid input,.zebra-grid select{{border:1px solid #cbd5e1;border-radius:10px;padding:10px;background:white}}
+            .zebra-group-title{{grid-column:1/-1;margin:8px 0 0;padding:10px 12px;border-radius:14px;background:#eef6ff;color:#08213e;font-weight:950;border:1px solid #dbeafe}}
+            .status-pill.warn{{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}}
+            .status-pill.bad{{background:#fee2e2!important;color:#991b1b!important;border:1px solid #fecaca!important}}
+            .foto-design-panel{{display:grid;grid-template-columns:minmax(260px,1fr) 140px 140px;gap:16px;align-items:center;background:linear-gradient(135deg,#ffffff,#eef7ff);border:1px solid #cfe8ff;border-radius:22px;padding:18px;margin:0 0 16px;box-shadow:0 14px 32px rgba(15,23,42,.08)}}
+            .design-copy h3{{margin:0 0 6px;color:#08213e;font-size:22px}}.design-copy p{{margin:0;color:#536579;font-weight:700;line-height:1.45}}.design-checks{{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}}.design-checks span{{background:#ecfdf5;color:#047857;border:1px solid #86efac;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:950}}
+            .mini-fc{{height:205px;border-radius:12px;background:#fff;border:1px solid #cbd5e1;box-shadow:0 10px 22px rgba(15,23,42,.12);position:relative;overflow:hidden;text-align:center;padding:14px;color:#1d2a7b;font-weight:950}}
+            .front-mini:before{{content:'';position:absolute;left:-25px;top:-20px;width:150px;height:55px;background:linear-gradient(135deg,#084f9f,#0d7ee8);border-bottom-right-radius:80px}}.front-mini:after,.back-mini:after{{content:'';position:absolute;right:-25px;bottom:-20px;width:160px;height:55px;background:linear-gradient(135deg,#4461e9,#3127a6);border-top-left-radius:80px}}
+            .mini-fc b{{position:relative;z-index:2;display:block;color:#fff;text-align:left;font-style:italic;font-size:18px;margin-bottom:28px}}.mini-fc small{{display:block;position:relative;z-index:2;font-size:10px;text-transform:uppercase}}.mini-photo{{width:70px;height:78px;margin:10px auto;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px}}.mini-fc em{{display:block;margin-top:10px;font-style:normal;font-size:10px;text-transform:uppercase}}
+            .back-mini:before{{content:'';position:absolute;right:-28px;top:-20px;width:150px;height:58px;background:linear-gradient(135deg,#0d7ee8,#084f9f);border-bottom-left-radius:80px}}.mini-qr{{width:76px;height:76px;margin:26px auto 8px;border:8px solid #111;display:flex;align-items:center;justify-content:center;font-size:30px;color:#111;background:#fff}}.back-mini em{{font-size:9px;margin-top:8px}}
+            @media(max-width:1000px){{.foto-kpis,.foto-flow,.zebra-grid{{grid-template-columns:1fr 1fr}}.foto-actions{{display:grid}}}}
+            </style>
+            {modulo_requerimiento_header_html('🪪','Fotocheck','Seleccione primero el requerimiento, valide foto y DNI, revise vista previa y emita el fotocheck con QR igual al DNI.','fotocheck', "<option value=''>Seleccione requerimiento</option>" + opt_req, req_actual)}
+            <div style='display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px'>
+              <a class='c-btn' target='_blank' href='/admin/contratacion/fotocheck/preview_dni?dni=7432403'>👁 Vista previa DNI 7432403</a>
+              <span class='status-pill ok'>QR = número de DNI</span>
+              <span class='status-pill {cfg_estado_class}'>Impresión: {h(cfg_estado)}</span>
+            </div>
+            <div class='foto-design-panel'>
+              <div class='design-copy'>
+                <h3>Vista previa Fotocheck PRIZE implementada</h3>
+                <p>Anverso con logo, nombres, DNI, foto centrada y cargo. Reverso con QR generado con el <b>DNI del trabajador</b>, texto Código Único de Acceso y Control, valores corporativos y web.</p>
+                <div class='design-checks'><span>✅ Foto obligatoria</span><span>✅ QR = DNI</span><span>✅ Anverso y reverso</span><span>✅ PDF / impresión</span></div>
+              </div>
+              <div class='mini-fc front-mini'><b>Prize<small>SUPERFRUITS</small></b><small>NOMBRE TRABAJADOR</small><strong>12345678</strong><div class='mini-photo'>FOTO</div><em>APOYO GTH</em></div>
+              <div class='mini-fc back-mini'><div class='mini-qr'>QR<br>DNI</div><small>Código Único de Acceso y Control</small><div class='mini-values'>✓ Visión &nbsp; ◎ Cercanía<br>◉ Transparencia &nbsp; ♥ Pasión</div><em>www.prizesuperfruits.com</em></div>
+            </div>
+            
+            <form method='post' class='zebra-config'>
+              <input type='hidden' name='req_return' value='{h(req_actual)}'>
+              <div class='zebra-status'>
+                <h3 style='margin:0'>Configuración de impresión Fotocheck</h3>
+                <span class='status-pill {cfg_estado_class}'>{h(cfg_estado)}</span>
+                <small class='muted2'>Ahora está separado por método: papel/PDF, Windows/USB, WiFi/IP y Bluetooth. Zebra ZC300 usa los mismos campos según su conexión.</small>
+              </div>
+              <div class='print-methods'>
+                <div class='method-card'><h4>1. Papel / PDF</h4><p>Usa el navegador: vista previa → Imprimir / guardar PDF. Ideal para impresora común.</p></div>
+                <div class='method-card'><h4>2. Windows / USB</h4><p>Requiere nombre exacto de la impresora instalada en Windows. Ej.: Zebra ZC300.</p></div>
+                <div class='method-card'><h4>3. WiFi / IP</h4><p>Requiere IP de la impresora y puerto. Normalmente el puerto Zebra/red es 9100.</p></div>
+                <div class='method-card'><h4>4. Bluetooth</h4><p>Requiere impresora emparejada y puerto COM asignado por Windows.</p></div>
+              </div>
+              <div class='zebra-grid'>
+                <div class='zebra-group-title'>Método principal</div>
+                <label>Tipo conexión<select name='tipo_conexion' id='tipoConexionFotocheck' onchange='actualizarAyudaImpresion()'>
+                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL - NAVEGADOR/PDF')}>IMPRESORA PAPEL - NAVEGADOR/PDF</option>
+                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL WINDOWS/USB')}>IMPRESORA PAPEL WINDOWS/USB</option>
+                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL RED/IP - WIFI')}>IMPRESORA PAPEL RED/IP - WIFI</option>
+                  <option {_sel(cfg_tipo,'IMPRESORA BLUETOOTH')}>IMPRESORA BLUETOOTH</option>
+                  <option {_sel(cfg_tipo,'ZEBRA ZC300 WINDOWS/USB')}>ZEBRA ZC300 WINDOWS/USB</option>
+                  <option {_sel(cfg_tipo,'ZEBRA ZC300 WIFI/IP')}>ZEBRA ZC300 WIFI/IP</option>
+                  <option {_sel(cfg_tipo,'ZEBRA ZC300 BLUETOOTH')}>ZEBRA ZC300 BLUETOOTH</option>
+                </select></label>
+                <label>Plantilla diseño<input name='plantilla_diseno' value='{h(cfg_plantilla)}'></label>
+                <label>Tamaño tarjeta<select name='tamano_tarjeta'><option {_sel(cfg_tamano,'CR80')}>CR80</option><option {_sel(cfg_tamano,'CR79')}>CR79</option></select></label>
+                <label>Caras<select name='caras'><option {_sel(cfg_caras,'Frente')}>Frente</option><option {_sel(cfg_caras,'Frente y reverso')}>Frente y reverso</option></select></label>
+
+                <div class='zebra-group-title'>Windows / USB</div>
+                <label>Nombre exacto impresora Windows<input name='impresora_nombre' value='{h(cfg_impresora)}' placeholder='Ej. Zebra ZC300 / Canon / Epson'></label>
+                <label>Copias<input type='number' min='1' max='5' name='copias' value='{h(cfg_copias)}'></label>
+                <label>Orientación<select name='orientacion'><option {_sel(cfg_orientacion,'Horizontal')}>Horizontal</option><option {_sel(cfg_orientacion,'Vertical')}>Vertical</option></select></label>
+                <label>Ruta salida PDF/imagen<input name='ruta_salida' value='{h(cfg_ruta)}'></label>
+
+                <div class='zebra-group-title'>WiFi / IP</div>
+                <label>IP impresora<input name='ip_impresora' value='{h(cfg_ip)}' placeholder='Ej. 192.168.1.45'></label>
+                <label>Puerto<input name='puerto' value='{h(cfg_puerto)}' placeholder='9100 / COM / LPT'></label>
+                <label style='grid-column:span 2'>Ayuda según método<input id='ayudaMetodoImpresion' readonly value='Selecciona el tipo de conexión para ver qué campos debes completar.'></label>
+
+                <div class='zebra-group-title'>Bluetooth</div>
+                <label>Bluetooth nombre<input name='bluetooth_nombre' value='{h(cfg_bt_nombre)}' placeholder='Ej. ZC300-BT'></label>
+                <label>Bluetooth MAC / ID<input name='bluetooth_mac' value='{h(cfg_bt_mac)}' placeholder='Ej. 00:11:22:AA:BB:CC'></label>
+                <label style='grid-column:span 2'>Observación<input name='observacion_config' value='{h(cfg_obs)}' placeholder='Driver instalado, PC conectada, notas de Bluetooth/WiFi...'></label>
+
+                <button class='c-btn' name='accion' value='fotocheck_guardar_config_zebra'>Guardar configuración</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_probar_zebra'>Probar conexión</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_prueba_impresion'>Impresión de prueba</button>
+              </div>
+              <script>
+              function actualizarAyudaImpresion(){{
+                var t=(document.getElementById('tipoConexionFotocheck')||{{}}).value||'';
+                var a=document.getElementById('ayudaMetodoImpresion'); if(!a) return;
+                if(t.includes('NAVEGADOR')||t.includes('PDF')) a.value='No necesitas configurar impresora física: usa Vista previa > Imprimir / guardar PDF.';
+                else if(t.includes('WIFI')||t.includes('RED')||t.includes('IP')) a.value='Completa IP impresora y puerto. Para Zebra/red normalmente usa puerto 9100.';
+                else if(t.includes('BLUETOOTH')) a.value='Empareja la impresora en Windows y coloca el puerto COM asignado, más nombre o MAC.';
+                else a.value='Completa el nombre exacto de la impresora instalada en Windows/USB.';
+              }}
+              actualizarAyudaImpresion();
+              </script>
+            </form>
+            <div class='c-card c-form requerimiento-first' style='padding:18px;margin-bottom:18px'>
+              <b>Elegir requerimiento</b>
+              <select onchange="location.href='/admin/contratacion?sec=fotocheck&req='+encodeURIComponent(this.value)"><option value=''>Todos los requerimientos</option>{opt_req}</select>
+              <b>Buscar por DNI</b>
+              <input oninput="filtrarTabla(this,'tabla_fotocheck')" placeholder='Buscar por DNI'>
+            </div>
+            <div class='foto-kpis'>
+              <div class='pz-kpi'><span>Total</span><b>{total_foto}</b></div>
+              <div class='pz-kpi'><span>Sin foto</span><b>{sin_foto}</b></div>
+              <div class='pz-kpi'><span>Foto aprobada</span><b>{foto_ok}</b></div>
+              <div class='pz-kpi'><span>Listos imprimir</span><b>{listos}</b></div>
+              <div class='pz-kpi'><span>Impresos / cargo</span><b>{impresos}</b></div>
+            </div>
+            <form method='post'>
+              <input type='hidden' name='req_return' value='{h(req_actual)}'>
+              <div class='foto-actions'>
+                <label>Impresora<input name='impresora' value='{h(cfg_impresora)}'></label>
+                <label>Lote impresión<input name='lote_impresion' placeholder='Automático si se deja vacío'></label>
+                <label>Acción<select name='nuevo_estado'>
+                  <option>FOTO APROBADA</option>
+                  <option>LISTO PARA IMPRIMIR</option>
+                  <option>ENVIADO A ZEBRA ZC300</option>
+                  <option>IMPRESO</option>
+                  <option>CARGO GENERADO</option>
+                  <option>ENTREGADO</option>
+                  <option>OBSERVADO</option>
+                </select></label>
+                <label>Observación<input name='observacion' placeholder='Ej. impresión masiva / reimpresión'></label>
+                <button class='c-btn' name='accion' value='fotocheck_accion_masiva'>Actualizar seleccionados</button>
+                <button class='c-btn gray' name='accion' value='fotocheck_generar_cargo'>Generar cargo para firma</button>
+              </div>
+              <div class='std-card'><div class='std-table-wrap'>
+                <table id='tabla_fotocheck' class='std-table'>
+                  {tabla_estandar_postulantes_header('tabla_fotocheck')}
+                  {foto_rows_html}
+                </table>
+              </div></div>
+            </form>
             <div class='c-card' style='padding:18px;margin-top:16px'>
               <h3>Reglas automáticas</h3>
               <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto, DNI, nombre, cargo o si la Zebra no está en estado LISTA PARA IMPRIMIR. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
