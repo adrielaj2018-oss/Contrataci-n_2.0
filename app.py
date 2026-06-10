@@ -11958,122 +11958,104 @@ html,body{overflow-x:hidden!important;}
             .front-mini:before{{content:'';position:absolute;left:-25px;top:-20px;width:150px;height:55px;background:linear-gradient(135deg,#084f9f,#0d7ee8);border-bottom-right-radius:80px}}.front-mini:after,.back-mini:after{{content:'';position:absolute;right:-25px;bottom:-20px;width:160px;height:55px;background:linear-gradient(135deg,#4461e9,#3127a6);border-top-left-radius:80px}}
             .mini-fc b{{position:relative;z-index:2;display:block;color:#fff;text-align:left;font-style:italic;font-size:18px;margin-bottom:28px}}.mini-fc small{{display:block;position:relative;z-index:2;font-size:10px;text-transform:uppercase}}.mini-photo{{width:70px;height:78px;margin:10px auto;background:#e2e8f0;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px}}.mini-fc em{{display:block;margin-top:10px;font-style:normal;font-size:10px;text-transform:uppercase}}
             .back-mini:before{{content:'';position:absolute;right:-28px;top:-20px;width:150px;height:58px;background:linear-gradient(135deg,#0d7ee8,#084f9f);border-bottom-left-radius:80px}}.mini-qr{{width:76px;height:76px;margin:26px auto 8px;border:8px solid #111;display:flex;align-items:center;justify-content:center;font-size:30px;color:#111;background:#fff}}.back-mini em{{font-size:9px;margin-top:8px}}
+            .foto-kpis-premium{display:grid!important;grid-template-columns:repeat(5,minmax(150px,1fr))!important;gap:18px!important;margin:0 0 18px!important}
+            .foto-kpis-premium .pz-kpi{background:#fff!important;border:1px solid #dce8e5!important;border-radius:20px!important;padding:22px!important;display:flex!important;align-items:center!important;gap:18px!important;min-height:112px!important;box-shadow:0 18px 38px rgba(15,23,42,.07)!important}
+            .foto-kpis-premium .pz-kpi span{display:block!important;color:#48627f!important;font-size:14px!important;font-weight:1000!important;text-transform:uppercase!important;line-height:1.15!important}.foto-kpis-premium .pz-kpi b{font-size:34px!important;color:#062b54!important;line-height:1!important}.foto-kpis-premium .pz-kpi i{width:58px!important;height:58px!important;border-radius:50%!important;background:#009a53!important;color:#fff!important;display:grid!important;place-items:center!important;font-style:normal!important;font-size:24px!important;box-shadow:0 16px 30px rgba(0,154,83,.22)!important}.foto-kpis-premium .pz-kpi.warn i{background:#f9a90d!important}.foto-kpis-premium .pz-kpi.ok i{background:#0bbf72!important}
+            .fc-toolbar-premium{display:grid!important;grid-template-columns:40fr 20fr 20fr 10fr 10fr!important;gap:14px!important;align-items:end!important;background:#fff!important;border:1.5px solid #d6e5e2!important;border-radius:26px!important;padding:18px 22px!important;margin:0 0 18px!important;box-shadow:0 18px 40px rgba(15,23,42,.06)!important}.fc-field{display:grid!important;gap:8px!important;margin:0!important}.fc-field span{font-size:14px!important;font-weight:1000!important;color:#062b54!important;text-transform:uppercase!important}.fc-field input,.fc-field select{height:58px!important;border:1.5px solid #c8d9ee!important;border-radius:17px!important;background:#fff!important;color:#071b34!important;font-size:16px!important;font-weight:950!important;padding:0 18px!important;outline:none!important;width:100%!important;box-sizing:border-box!important}.fc-field input::placeholder{color:#7184a3!important;font-weight:700!important}.fc-btn-apply,.fc-btn-register{height:58px!important;border:0!important;border-radius:17px!important;background:#0bb56b!important;color:white!important;font-weight:1000!important;font-size:16px!important;display:flex!important;align-items:center!important;justify-content:center!important;text-decoration:none!important;box-shadow:0 20px 40px rgba(11,181,107,.22)!important;white-space:nowrap!important}.fc-btn-register{background:#078944!important;text-transform:uppercase!important}.fc-btn-apply:hover,.fc-btn-register:hover{filter:brightness(.97)!important;transform:translateY(-1px)!important}.fc-secondary-actions{display:flex!important;gap:12px!important;align-items:center!important;flex-wrap:wrap!important;margin:14px 0 18px!important}.fc-btn-secondary{border:0!important;border-radius:16px!important;background:#0bb56b!important;color:#fff!important;font-weight:1000!important;font-size:15px!important;padding:16px 24px!important;text-decoration:none!important}.fc-btn-secondary.light{background:#eef4fa!important;color:#062b54!important}.fc-config-details{background:#fff!important;border:1px solid #d6e5e2!important;border-radius:22px!important;padding:16px 18px!important;margin-top:18px!important;box-shadow:0 14px 30px rgba(15,23,42,.04)!important}.fc-config-details summary{cursor:pointer!important;font-weight:1000!important;color:#062b54!important;font-size:17px!important}
+
             @media(max-width:1000px){{.foto-kpis,.foto-flow,.zebra-grid{{grid-template-columns:1fr 1fr}}.foto-actions{{display:grid}}}}
             </style>
             {modulo_requerimiento_header_html('🪪','Fotocheck','Seleccione primero el requerimiento, valide foto y DNI, revise vista previa y emita el fotocheck con QR igual al DNI.','fotocheck', "<option value=''>Seleccione requerimiento</option>" + opt_req, req_actual)}
-            <div style='display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px'>
-              <a class='c-btn' target='_blank' href='/admin/contratacion/fotocheck/preview_dni?dni=7432403'>👁 Vista previa DNI 7432403</a>
-              <span class='status-pill ok'>QR = número de DNI</span>
-              <span class='status-pill {cfg_estado_class}'>Impresión: {h(cfg_estado)}</span>
+
+            <div class='foto-kpis foto-kpis-premium'>
+              <div class='pz-kpi iconic'><i>🪪</i><div><span>Total</span><b>{total_foto}</b></div></div>
+              <div class='pz-kpi iconic warn'><i>📷</i><div><span>Sin foto</span><b>{sin_foto}</b></div></div>
+              <div class='pz-kpi iconic ok'><i>✅</i><div><span>Foto aprobada</span><b>{foto_ok}</b></div></div>
+              <div class='pz-kpi iconic'><i>🖨️</i><div><span>Listos imprimir</span><b>{listos}</b></div></div>
+              <div class='pz-kpi iconic'><i>📦</i><div><span>Impresos / cargo</span><b>{impresos}</b></div></div>
             </div>
-            <div class='foto-design-panel'>
-              <div class='design-copy'>
-                <h3>Vista previa Fotocheck PRIZE implementada</h3>
-                <p>Anverso con logo, nombres, DNI, foto centrada y cargo. Reverso con QR generado con el <b>DNI del trabajador</b>, texto Código Único de Acceso y Control, valores corporativos y web.</p>
-                <div class='design-checks'><span>✅ Foto obligatoria</span><span>✅ QR = DNI</span><span>✅ Anverso y reverso</span><span>✅ PDF / impresión</span></div>
-              </div>
-              <div class='mini-fc front-mini'><b>Prize<small>SUPERFRUITS</small></b><small>NOMBRE TRABAJADOR</small><strong>12345678</strong><div class='mini-photo'>FOTO</div><em>APOYO GTH</em></div>
-              <div class='mini-fc back-mini'><div class='mini-qr'>QR<br>DNI</div><small>Código Único de Acceso y Control</small><div class='mini-values'>✓ Visión &nbsp; ◎ Cercanía<br>◉ Transparencia &nbsp; ♥ Pasión</div><em>www.prizesuperfruits.com</em></div>
-            </div>
-            
-            <form method='post' class='zebra-config'>
+
+            <form method='post' id='formFotocheckPremium'>
               <input type='hidden' name='req_return' value='{h(req_actual)}'>
-              <div class='zebra-status'>
-                <h3 style='margin:0'>Configuración de impresión Fotocheck</h3>
-                <span class='status-pill {cfg_estado_class}'>{h(cfg_estado)}</span>
-                <small class='muted2'>Ahora está separado por método: papel/PDF, Windows/USB, WiFi/IP y Bluetooth. Zebra ZC300 usa los mismos campos según su conexión.</small>
+              <input type='hidden' name='impresora' value='{h(cfg_impresora)}'>
+              <input type='hidden' name='lote_impresion' value=''>
+              <input type='hidden' name='observacion' value='Actualización masiva desde Fotocheck'>
+              <div class='fc-toolbar-premium'>
+                <label class='fc-field fc-dni'><span>Buscar por DNI</span><input oninput="filtrarTabla(this,'tabla_fotocheck')" placeholder='Buscar por DNI'></label>
+                <label class='fc-field fc-estado'><span>Estado</span><select onchange="filtrarTabla(this,'tabla_fotocheck')"><option>Todos los estados</option><option>PENDIENTE</option><option>FOTO APROBADA</option><option>LISTO PARA IMPRIMIR</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select></label>
+                <label class='fc-field fc-cambio'><span>Cambio estado</span><select name='nuevo_estado'><option>PENDIENTE</option><option>FOTO APROBADA</option><option>LISTO PARA IMPRIMIR</option><option>ENVIADO A ZEBRA ZC300</option><option>IMPRESO</option><option>CARGO GENERADO</option><option>ENTREGADO</option><option>OBSERVADO</option></select></label>
+                <button class='fc-btn-apply' name='accion' value='fotocheck_accion_masiva'>Aplicar estado</button>
+                <a class='fc-btn-register' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Registrar</a>
               </div>
-              <div class='print-methods'>
-                <div class='method-card'><h4>1. Papel / PDF</h4><p>Usa el navegador: vista previa → Imprimir / guardar PDF. Ideal para impresora común.</p></div>
-                <div class='method-card'><h4>2. Windows / USB</h4><p>Requiere nombre exacto de la impresora instalada en Windows. Ej.: Zebra ZC300.</p></div>
-                <div class='method-card'><h4>3. WiFi / IP</h4><p>Requiere IP de la impresora y puerto. Normalmente el puerto Zebra/red es 9100.</p></div>
-                <div class='method-card'><h4>4. Bluetooth</h4><p>Requiere impresora emparejada y puerto COM asignado por Windows.</p></div>
-              </div>
-              <div class='zebra-grid'>
-                <div class='zebra-group-title'>Método principal</div>
-                <label>Tipo conexión<select name='tipo_conexion' id='tipoConexionFotocheck' onchange='actualizarAyudaImpresion()'>
-                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL - NAVEGADOR/PDF')}>IMPRESORA PAPEL - NAVEGADOR/PDF</option>
-                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL WINDOWS/USB')}>IMPRESORA PAPEL WINDOWS/USB</option>
-                  <option {_sel(cfg_tipo,'IMPRESORA PAPEL RED/IP - WIFI')}>IMPRESORA PAPEL RED/IP - WIFI</option>
-                  <option {_sel(cfg_tipo,'IMPRESORA BLUETOOTH')}>IMPRESORA BLUETOOTH</option>
-                  <option {_sel(cfg_tipo,'ZEBRA ZC300 WINDOWS/USB')}>ZEBRA ZC300 WINDOWS/USB</option>
-                  <option {_sel(cfg_tipo,'ZEBRA ZC300 WIFI/IP')}>ZEBRA ZC300 WIFI/IP</option>
-                  <option {_sel(cfg_tipo,'ZEBRA ZC300 BLUETOOTH')}>ZEBRA ZC300 BLUETOOTH</option>
-                </select></label>
-                <label>Plantilla diseño<input name='plantilla_diseno' value='{h(cfg_plantilla)}'></label>
-                <label>Tamaño tarjeta<select name='tamano_tarjeta'><option {_sel(cfg_tamano,'CR80')}>CR80</option><option {_sel(cfg_tamano,'CR79')}>CR79</option></select></label>
-                <label>Caras<select name='caras'><option {_sel(cfg_caras,'Frente')}>Frente</option><option {_sel(cfg_caras,'Frente y reverso')}>Frente y reverso</option></select></label>
 
-                <div class='zebra-group-title'>Windows / USB</div>
-                <label>Nombre exacto impresora Windows<input name='impresora_nombre' value='{h(cfg_impresora)}' placeholder='Ej. Zebra ZC300 / Canon / Epson'></label>
-                <label>Copias<input type='number' min='1' max='5' name='copias' value='{h(cfg_copias)}'></label>
-                <label>Orientación<select name='orientacion'><option {_sel(cfg_orientacion,'Horizontal')}>Horizontal</option><option {_sel(cfg_orientacion,'Vertical')}>Vertical</option></select></label>
-                <label>Ruta salida PDF/imagen<input name='ruta_salida' value='{h(cfg_ruta)}'></label>
-
-                <div class='zebra-group-title'>WiFi / IP</div>
-                <label>IP impresora<input name='ip_impresora' value='{h(cfg_ip)}' placeholder='Ej. 192.168.1.45'></label>
-                <label>Puerto<input name='puerto' value='{h(cfg_puerto)}' placeholder='9100 / COM / LPT'></label>
-                <label style='grid-column:span 2'>Ayuda según método<input id='ayudaMetodoImpresion' readonly value='Selecciona el tipo de conexión para ver qué campos debes completar.'></label>
-
-                <div class='zebra-group-title'>Bluetooth</div>
-                <label>Bluetooth nombre<input name='bluetooth_nombre' value='{h(cfg_bt_nombre)}' placeholder='Ej. ZC300-BT'></label>
-                <label>Bluetooth MAC / ID<input name='bluetooth_mac' value='{h(cfg_bt_mac)}' placeholder='Ej. 00:11:22:AA:BB:CC'></label>
-                <label style='grid-column:span 2'>Observación<input name='observacion_config' value='{h(cfg_obs)}' placeholder='Driver instalado, PC conectada, notas de Bluetooth/WiFi...'></label>
-
-                <button class='c-btn' name='accion' value='fotocheck_guardar_config_zebra'>Guardar configuración</button>
-                <button class='c-btn gray' name='accion' value='fotocheck_probar_zebra'>Probar conexión</button>
-                <button class='c-btn gray' name='accion' value='fotocheck_prueba_impresion'>Impresión de prueba</button>
-              </div>
-              <script>
-              function actualizarAyudaImpresion(){{
-                var t=(document.getElementById('tipoConexionFotocheck')||{{}}).value||'';
-                var a=document.getElementById('ayudaMetodoImpresion'); if(!a) return;
-                if(t.includes('NAVEGADOR')||t.includes('PDF')) a.value='No necesitas configurar impresora física: usa Vista previa > Imprimir / guardar PDF.';
-                else if(t.includes('WIFI')||t.includes('RED')||t.includes('IP')) a.value='Completa IP impresora y puerto. Para Zebra/red normalmente usa puerto 9100.';
-                else if(t.includes('BLUETOOTH')) a.value='Empareja la impresora en Windows y coloca el puerto COM asignado, más nombre o MAC.';
-                else a.value='Completa el nombre exacto de la impresora instalada en Windows/USB.';
-              }}
-              actualizarAyudaImpresion();
-              </script>
-            </form>
-            <div class='c-card c-form requerimiento-first' style='padding:18px;margin-bottom:18px'>
-              <b>Elegir requerimiento</b>
-              <select onchange="location.href='/admin/contratacion?sec=fotocheck&req='+encodeURIComponent(this.value)"><option value=''>Todos los requerimientos</option>{opt_req}</select>
-              <b>Buscar por DNI</b>
-              <input oninput="filtrarTabla(this,'tabla_fotocheck')" placeholder='Buscar por DNI'>
-            </div>
-            <div class='foto-kpis'>
-              <div class='pz-kpi'><span>Total</span><b>{total_foto}</b></div>
-              <div class='pz-kpi'><span>Sin foto</span><b>{sin_foto}</b></div>
-              <div class='pz-kpi'><span>Foto aprobada</span><b>{foto_ok}</b></div>
-              <div class='pz-kpi'><span>Listos imprimir</span><b>{listos}</b></div>
-              <div class='pz-kpi'><span>Impresos / cargo</span><b>{impresos}</b></div>
-            </div>
-            <form method='post'>
-              <input type='hidden' name='req_return' value='{h(req_actual)}'>
-              <div class='foto-actions'>
-                <label>Impresora<input name='impresora' value='{h(cfg_impresora)}'></label>
-                <label>Lote impresión<input name='lote_impresion' placeholder='Automático si se deja vacío'></label>
-                <label>Acción<select name='nuevo_estado'>
-                  <option>FOTO APROBADA</option>
-                  <option>LISTO PARA IMPRIMIR</option>
-                  <option>ENVIADO A ZEBRA ZC300</option>
-                  <option>IMPRESO</option>
-                  <option>CARGO GENERADO</option>
-                  <option>ENTREGADO</option>
-                  <option>OBSERVADO</option>
-                </select></label>
-                <label>Observación<input name='observacion' placeholder='Ej. impresión masiva / reimpresión'></label>
-                <button class='c-btn' name='accion' value='fotocheck_accion_masiva'>Actualizar seleccionados</button>
-                <button class='c-btn gray' name='accion' value='fotocheck_generar_cargo'>Generar cargo para firma</button>
-              </div>
               <div class='std-card'><div class='std-table-wrap'>
                 <table id='tabla_fotocheck' class='std-table'>
                   {tabla_estandar_postulantes_header('tabla_fotocheck')}
                   {foto_rows_html}
                 </table>
               </div></div>
+
+              <div class='fc-secondary-actions'>
+                <button class='fc-btn-secondary' name='accion' value='fotocheck_generar_cargo'>Generar cargo para firma</button>
+                <a class='fc-btn-secondary light' target='_blank' href='/admin/contratacion/fotocheck/preview_dni?dni=74324033'>Vista previa demo</a>
+                <span class='status-pill ok'>QR = número de DNI</span>
+                <span class='status-pill {cfg_estado_class}'>Impresión: {h(cfg_estado)}</span>
+              </div>
             </form>
+
+            <details class='fc-config-details'>
+              <summary>Configuración de impresión Fotocheck</summary>
+              <form method='post' class='zebra-config'>
+                <input type='hidden' name='req_return' value='{h(req_actual)}'>
+                <div class='zebra-status'>
+                  <h3 style='margin:0'>Configuración de impresión Fotocheck</h3>
+                  <span class='status-pill {cfg_estado_class}'>{h(cfg_estado)}</span>
+                  <small class='muted2'>Separado por método: papel/PDF, Windows/USB, WiFi/IP y Bluetooth.</small>
+                </div>
+                <div class='zebra-grid'>
+                  <div class='zebra-group-title'>Método principal</div>
+                  <label>Tipo conexión<select name='tipo_conexion' id='tipoConexionFotocheck' onchange='actualizarAyudaImpresion()'>
+                    <option {_sel(cfg_tipo,'IMPRESORA PAPEL - NAVEGADOR/PDF')}>IMPRESORA PAPEL - NAVEGADOR/PDF</option>
+                    <option {_sel(cfg_tipo,'IMPRESORA PAPEL WINDOWS/USB')}>IMPRESORA PAPEL WINDOWS/USB</option>
+                    <option {_sel(cfg_tipo,'IMPRESORA PAPEL RED/IP - WIFI')}>IMPRESORA PAPEL RED/IP - WIFI</option>
+                    <option {_sel(cfg_tipo,'IMPRESORA BLUETOOTH')}>IMPRESORA BLUETOOTH</option>
+                    <option {_sel(cfg_tipo,'ZEBRA ZC300 WINDOWS/USB')}>ZEBRA ZC300 WINDOWS/USB</option>
+                    <option {_sel(cfg_tipo,'ZEBRA ZC300 WIFI/IP')}>ZEBRA ZC300 WIFI/IP</option>
+                    <option {_sel(cfg_tipo,'ZEBRA ZC300 BLUETOOTH')}>ZEBRA ZC300 BLUETOOTH</option>
+                  </select></label>
+                  <label>Plantilla diseño<input name='plantilla_diseno' value='{h(cfg_plantilla)}'></label>
+                  <label>Tamaño tarjeta<select name='tamano_tarjeta'><option {_sel(cfg_tamano,'CR80')}>CR80</option><option {_sel(cfg_tamano,'CR79')}>CR79</option></select></label>
+                  <label>Caras<select name='caras'><option {_sel(cfg_caras,'Frente')}>Frente</option><option {_sel(cfg_caras,'Frente y reverso')}>Frente y reverso</option></select></label>
+                  <div class='zebra-group-title'>Windows / USB</div>
+                  <label>Nombre exacto impresora Windows<input name='impresora_nombre' value='{h(cfg_impresora)}' placeholder='Ej. Zebra ZC300 / Canon / Epson'></label>
+                  <label>Copias<input type='number' min='1' max='5' name='copias' value='{h(cfg_copias)}'></label>
+                  <label>Orientación<select name='orientacion'><option {_sel(cfg_orientacion,'Horizontal')}>Horizontal</option><option {_sel(cfg_orientacion,'Vertical')}>Vertical</option></select></label>
+                  <label>Ruta salida PDF/imagen<input name='ruta_salida' value='{h(cfg_ruta)}'></label>
+                  <div class='zebra-group-title'>WiFi / IP</div>
+                  <label>IP impresora<input name='ip_impresora' value='{h(cfg_ip)}' placeholder='Ej. 192.168.1.45'></label>
+                  <label>Puerto<input name='puerto' value='{h(cfg_puerto)}' placeholder='9100 / COM / LPT'></label>
+                  <label style='grid-column:span 2'>Ayuda según método<input id='ayudaMetodoImpresion' readonly value='Selecciona el tipo de conexión para ver qué campos debes completar.'></label>
+                  <div class='zebra-group-title'>Bluetooth</div>
+                  <label>Bluetooth nombre<input name='bluetooth_nombre' value='{h(cfg_bt_nombre)}' placeholder='Ej. ZC300-BT'></label>
+                  <label>Bluetooth MAC / ID<input name='bluetooth_mac' value='{h(cfg_bt_mac)}' placeholder='Ej. 00:11:22:AA:BB:CC'></label>
+                  <label style='grid-column:span 2'>Observación<input name='observacion_config' value='{h(cfg_obs)}' placeholder='Driver instalado, PC conectada, notas de Bluetooth/WiFi...'></label>
+                  <button class='c-btn' name='accion' value='fotocheck_guardar_config_zebra'>Guardar configuración</button>
+                  <button class='c-btn gray' name='accion' value='fotocheck_probar_zebra'>Probar conexión</button>
+                  <button class='c-btn gray' name='accion' value='fotocheck_prueba_impresion'>Impresión de prueba</button>
+                </div>
+                <script>
+                function actualizarAyudaImpresion(){{
+                  var t=(document.getElementById('tipoConexionFotocheck')||{{}}).value||'';
+                  var a=document.getElementById('ayudaMetodoImpresion'); if(!a) return;
+                  if(t.includes('NAVEGADOR')||t.includes('PDF')) a.value='No necesitas configurar impresora física: usa Vista previa > Imprimir / guardar PDF.';
+                  else if(t.includes('WIFI')||t.includes('RED')||t.includes('IP')) a.value='Completa IP impresora y puerto. Para Zebra/red normalmente usa puerto 9100.';
+                  else if(t.includes('BLUETOOTH')) a.value='Empareja la impresora en Windows y coloca el puerto COM asignado, más nombre o MAC.';
+                  else a.value='Completa el nombre exacto de la impresora instalada en Windows/USB.';
+                }}
+                actualizarAyudaImpresion();
+                </script>
+              </form>
+            </details>
             <div class='c-card' style='padding:18px;margin-top:16px'>
               <h3>Reglas automáticas</h3>
               <p class='muted2'>El sistema bloquea impresión si el trabajador no tiene foto, DNI, nombre, cargo o si la Zebra no está en estado LISTA PARA IMPRIMIR. Para imprimir masivamente, filtra por requerimiento, selecciona trabajadores con foto aprobada y usa estado "ENVIADO A ZEBRA ZC300" o "IMPRESO". Luego genera el cargo para firma y queda archivado en documentos del trabajador.</p>
