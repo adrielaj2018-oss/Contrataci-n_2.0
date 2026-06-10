@@ -10340,6 +10340,114 @@ html,body{overflow-x:hidden!important;}
 @media(max-width:760px){
   .mod360-page .mod360-control,.dashboard-contratacion .dash-kpis,.dashboard-contratacion .dash360-grid,.dashboard-contratacion .quick-grid,.dashboard-contratacion .doc-dash-pro .doc-mini-kpis,.dashboard-contratacion .doc-dash-pro .doc-actions{grid-template-columns:1fr!important;}
 }
+
+/* ===== PATCH OMAR 214: indicadores compactos dashboard e inducción ===== */
+.dashboard-contratacion .dash-kpis{
+  grid-template-columns:repeat(4,minmax(190px,1fr))!important;
+  gap:18px!important;
+}
+.dashboard-contratacion .dash-kpis .dash-card{
+  min-height:82px!important;
+  padding:18px 22px!important;
+  border-radius:20px!important;
+  display:grid!important;
+  grid-template-columns:1fr auto!important;
+  grid-template-rows:auto auto!important;
+  align-items:center!important;
+  column-gap:12px!important;
+}
+.dashboard-contratacion .dash-kpis small{
+  grid-column:1/2!important;
+  font-size:14px!important;
+  line-height:1.15!important;
+  white-space:normal!important;
+}
+.dashboard-contratacion .dash-kpis b{
+  grid-column:2/3!important;
+  grid-row:1/3!important;
+  font-size:30px!important;
+  margin:0!important;
+  align-self:center!important;
+}
+.dashboard-contratacion .dash360-panel{
+  padding:18px!important;
+  border-radius:24px!important;
+}
+.dashboard-contratacion .dash360-grid{
+  grid-template-columns:235px repeat(6,minmax(130px,1fr))!important;
+  gap:14px!important;
+  align-items:stretch!important;
+}
+.dashboard-contratacion .dash360-head{
+  min-height:112px!important;
+  padding:16px 18px!important;
+  border-radius:18px!important;
+  align-items:center!important;
+}
+.dashboard-contratacion .dash360-head h2{
+  font-size:20px!important;
+  line-height:1.08!important;
+}
+.dashboard-contratacion .dash360-head p{
+  font-size:12px!important;
+  line-height:1.28!important;
+}
+.dashboard-contratacion .dash360-ring{
+  width:68px!important;height:68px!important;min-width:68px!important;
+  box-shadow:inset 0 0 0 8px #e6ebf0!important;
+}
+.dashboard-contratacion .dash360-ring b{
+  width:48px!important;height:48px!important;font-size:17px!important;
+}
+.dashboard-contratacion .dash360-ring small{font-size:9px!important;line-height:1!important;}
+.dashboard-contratacion .dash360-stage{
+  min-height:112px!important;
+  padding:16px 14px!important;
+  border-radius:18px!important;
+  display:grid!important;
+  grid-template-columns:54px 1fr!important;
+  grid-template-areas:'ico title' 'ico num' 'ico sub'!important;
+  column-gap:12px!important;
+  align-items:center!important;
+  text-align:left!important;
+  overflow:hidden!important;
+}
+.dashboard-contratacion .dash360-stage .ico{
+  grid-area:ico!important;
+  width:54px!important;height:54px!important;
+  font-size:23px!important;
+  margin:0!important;
+}
+.dashboard-contratacion .dash360-stage h4{
+  grid-area:title!important;
+  margin:0!important;
+  font-size:13px!important;
+  line-height:1.12!important;
+  min-height:auto!important;
+  display:block!important;
+  text-align:left!important;
+  white-space:normal!important;
+}
+.dashboard-contratacion .dash360-stage b{
+  grid-area:num!important;
+  font-size:28px!important;
+  line-height:.95!important;
+  margin:2px 0!important;
+}
+.dashboard-contratacion .dash360-stage small{
+  grid-area:sub!important;
+  font-size:11px!important;
+  line-height:1.15!important;
+  white-space:normal!important;
+  color:#52677f!important;
+}
+.dashboard-contratacion .dash360-actions{margin-top:14px!important;}
+@media(max-width:1300px){
+  .dashboard-contratacion .dash360-grid{grid-template-columns:repeat(3,minmax(180px,1fr))!important;}
+  .dashboard-contratacion .dash360-head{grid-column:1/-1!important;}
+}
+/* ===== FIN PATCH OMAR 214 ===== */
+
 /* ===== FIN PATCH OMAR 213 ===== */
 
 </style>"""
@@ -11697,6 +11805,77 @@ html,body{overflow-x:hidden!important;}
         .mod360-mass{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:20px 22px;display:grid;grid-template-columns:220px 1fr 220px 1fr auto;gap:14px;align-items:center;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.mod360-mass h3{{grid-column:1/-1;margin:0 0 4px;color:#071b34;font-weight:1000}}.mod360-mass b{{background:#eef6f3;border-radius:12px;padding:13px;text-align:right;color:#071b34}}.mod360-mass select,.mod360-mass input,.mod360-mass textarea{{height:48px;border:1px solid #cfe0ec;border-radius:13px;padding:0 14px;font-weight:850;color:#071b34;box-sizing:border-box}}.mod360-mass textarea{{grid-column:1/5;min-height:54px;height:54px;resize:vertical;padding:14px 16px;line-height:1.35;overflow:auto}}.mod360-mass .mass-ob-label{{grid-column:5/6;align-self:stretch;display:flex;align-items:center;justify-content:center;text-align:center}}.mod360-mass .mass-submit{{grid-column:5/6;grid-row:3/4;min-width:220px;min-height:58px}}
         .modal-toggle{{display:none}}.mod360-modal{{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;display:none;align-items:center;justify-content:center;padding:26px}}.modal-toggle:checked + .mod360-modal{{display:flex}}.mod360-modal-card{{background:#fff;border-radius:24px;width:min(980px,96vw);max-height:90vh;overflow:auto;padding:24px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.30)}}.mod360-modal-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}}.mod360-modal-head h3{{margin:0;color:#071b34;font-size:24px}}.mod360-close{{cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;border-radius:12px;padding:10px 14px;font-weight:1000;box-shadow:0 10px 20px rgba(0,138,72,.18)}}.mod360-form{{display:grid;grid-template-columns:180px 1fr 180px 1fr;gap:12px;align-items:center}}.mod360-form b{{background:#eef6f3;border-radius:12px;padding:13px;text-align:right;color:#071b34}}.mod360-form input,.mod360-form select{{height:48px;border:1px solid #cfe0ec;border-radius:13px;padding:0 14px;font-weight:850}}.mod360-form .full{{grid-column:1/-1}}
         @media(max-width:1200px){{.mod360-hero,.mod360-filter-card,.mod360-control,.mod360-mass,.mod360-form{{grid-template-columns:1fr 1fr}}.mod360-kpis{{grid-template-columns:repeat(3,1fr)}}}}@media(max-width:760px){{.mod360-hero,.mod360-filter-card,.mod360-control,.mod360-mass,.mod360-form{{grid-template-columns:1fr}}.mod360-kpis,.mod360-hero-kpis{{grid-template-columns:1fr 1fr}}.mod360-mass b,.mod360-form b{{text-align:left}}}}
+        </style>
+        <style>
+        /* Inducción: indicadores compactos tipo Postulantes, sin letras cortadas */
+        .mod360-page .mod360-control{{
+          grid-template-columns:repeat(4,minmax(210px,1fr))!important;
+          gap:20px!important;
+          padding:0!important;
+          background:transparent!important;
+          border:0!important;
+          box-shadow:none!important;
+          overflow:visible!important;
+        }}
+        .mod360-page .mod360-control:before,.mod360-page .mod360-control:after{{display:none!important;content:none!important;}}
+        .mod360-page .mod360-control .mod360-stage:nth-child(4){{display:none!important;}}
+        .mod360-page .mod360-stage{{
+          min-height:108px!important;
+          padding:18px 22px!important;
+          border-radius:22px!important;
+          background:#fff!important;
+          border:1px solid #dbe7ef!important;
+          border-bottom:3px solid #009b57!important;
+          box-shadow:0 16px 34px rgba(15,23,42,.06)!important;
+          display:grid!important;
+          grid-template-columns:66px minmax(0,1fr)!important;
+          grid-template-areas:'ico title' 'ico num' 'ico sub'!important;
+          align-items:center!important;
+          column-gap:16px!important;
+          text-align:left!important;
+          overflow:hidden!important;
+        }}
+        .mod360-page .mod360-stage .sico{{
+          grid-area:ico!important;
+          width:60px!important;height:60px!important;
+          margin:0!important;
+          border-radius:50%!important;
+          font-size:26px!important;
+          display:grid!important;place-items:center!important;
+        }}
+        .mod360-page .mod360-stage h4{{
+          grid-area:title!important;
+          margin:0!important;
+          font-size:15px!important;
+          line-height:1.15!important;
+          color:#071b34!important;
+          font-weight:1000!important;
+          white-space:normal!important;
+          text-align:left!important;
+        }}
+        .mod360-page .mod360-stage b{{
+          grid-area:num!important;
+          font-size:32px!important;
+          line-height:.95!important;
+          margin:2px 0!important;
+          color:#071b34!important;
+          font-weight:1000!important;
+          text-align:left!important;
+        }}
+        .mod360-page .mod360-stage small{{
+          grid-area:sub!important;
+          font-size:13px!important;
+          line-height:1.15!important;
+          color:#53627a!important;
+          font-weight:850!important;
+          white-space:normal!important;
+          text-align:left!important;
+        }}
+        .mod360-page .mod360-stage:nth-child(3) .sico{{background:#f59e0b!important;color:#fff!important;}}
+        .mod360-page .mod360-stage:nth-child(5){{border-bottom-color:#ef4444!important;}}
+        .mod360-page .mod360-stage:nth-child(5) .sico{{background:#009b57!important;color:#fff!important;}}
+        @media(max-width:1180px){{.mod360-page .mod360-control{{grid-template-columns:repeat(2,minmax(240px,1fr))!important;}}}}
+        @media(max-width:760px){{.mod360-page .mod360-control{{grid-template-columns:1fr!important;}}}}
         </style>
         <section class='mod360-page'>
           {modulo_requerimiento_header_html('🎓','Inducción laboral','Seleccione primero el requerimiento, revise postulantes aptos y cambie el estado de Pendiente a Aprobado.','induccion', "<option value=''>Seleccione requerimiento</option>" + req_options_induccion, req_filtro_induccion)}
