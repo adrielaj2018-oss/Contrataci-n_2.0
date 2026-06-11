@@ -11406,7 +11406,42 @@ html,body{overflow-x:hidden!important;}
           .med-req-star{{background:transparent!important;border:0!important;color:#071b34!important}}
           .med-req-star::after{{content:' *';color:#e11d48!important;font-weight:1000!important}}
           @media(max-width:1050px){{.med-pro-body{{padding:12px!important}}.med-pro-top,.med-pro-two,.med-support-grid,.med-select-row{{grid-template-columns:1fr!important}}.med-person{{grid-template-columns:1fr!important}}.med-person div{{border-right:0!important;border-bottom:1px solid #e6edf5!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important}}.med-field-row{{grid-template-columns:1fr!important}}.med-field-row b{{border-right:0!important;border-bottom:1px solid #e6edf5!important}}}}
-        </style>
+        
+          /* AJUSTE FINAL: boceto igualito, compacto y sin bloque PENDIENTE suelto */
+          #med_estado_card{{display:none!important;height:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden!important}}
+          .med-modal-card-pro{{width:min(1510px,98.6vw)!important;border-radius:22px!important;background:#fff!important}}
+          .med-head-pro{{height:82px!important;padding:16px 28px!important;background:#fff!important;border-bottom:1px solid #e5eef6!important}}
+          .med-head-pro h2{{font-size:30px!important;line-height:1!important;margin:0!important;color:#071b34!important;font-weight:1000!important}}
+          .med-title-icon{{width:50px!important;height:50px!important;border-radius:14px!important;font-size:28px!important;background:#ecfdf5!important;border:1.5px solid #a7f3d0!important}}
+          .med-close{{height:52px!important;min-width:98px!important;border-radius:14px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:16px!important;background:#00a862!important;color:#fff!important}}
+          .med-pro-body{{padding:14px 18px 18px!important;background:#fff!important}}
+          .med-pro-top{{grid-template-columns:242px 1fr!important;gap:44px!important;margin:0 16px 26px!important;align-items:stretch!important}}
+          .med-pro-photo{{height:268px!important;min-height:268px!important;border-radius:14px!important;padding:28px!important;box-shadow:none!important;border:1px solid #dbe7ef!important;background:#fff!important}}
+          .med-pro-photo .blank{{width:124px!important;height:124px!important;border-radius:18px!important;background:#f1f5f9!important;border:1px solid #dbe7ef!important}}
+          .med-pro-photo small{{margin-top:12px!important;font-size:15px!important;line-height:1.3!important;color:#435775!important;font-weight:900!important}}
+          .med-pro-card{{border:1px solid #dbe7ef!important;border-radius:14px!important;box-shadow:none!important;background:#fff!important;padding:20px!important}}
+          .med-pro-card-main{{min-height:268px!important;padding:20px!important}}
+          .med-step-title{{font-size:18px!important;font-weight:1000!important;color:#008248!important;margin:0 0 18px!important;text-transform:uppercase!important;letter-spacing:.1px!important}}
+          .med-select-row{{grid-template-columns:minmax(360px,430px) minmax(360px,1fr)!important;gap:90px!important;align-items:end!important;margin:0 0 16px!important}}
+          .med-field{{gap:8px!important}}.med-field span{{font-size:14px!important;color:#071b34!important;font-weight:950!important}}
+          .med-form-pro input,.med-form-pro select{{height:44px!important;border-radius:9px!important;font-size:15px!important;font-weight:700!important;padding:0 14px!important;border:1px solid #d1deeb!important;background:#fff!important}}
+          .med-form-pro textarea{{border-radius:9px!important;font-size:15px!important;border:1px solid #d1deeb!important;background:#fff!important}}
+          #med_dni_lookup{{border-color:#00a862!important;box-shadow:0 0 0 4px rgba(0,168,98,.14)!important}}
+          .med-status-card{{height:96px!important;min-height:96px!important;border-radius:14px!important;padding:18px!important;background:#fff!important;border:1px solid #dbe7ef!important;box-shadow:none!important}}
+          .med-status-card h3{{font-size:14px!important;color:#263b59!important;font-weight:950!important;margin:0 0 10px!important;text-transform:none!important}}
+          .med-status-card .med-status-value{{font-size:15px!important;min-width:132px!important;height:36px!important;padding:0 18px!important;border-radius:999px!important;background:#fff7dd!important;color:#b45309!important;border:1px solid #ffd36e!important}}
+          .med-block-msg{{height:54px!important;margin:0 0 20px!important;padding:0 16px!important;display:flex!important;align-items:center!important;justify-content:center!important;border-radius:12px!important;font-size:16px!important;background:#e8fff2!important;color:#007a3d!important;border:1px solid #b8f0d2!important}}
+          .med-person{{display:grid!important;grid-template-columns:1.28fr .78fr .98fr 1.05fr 1.15fr!important;gap:0!important;border:1px solid #dbe7ef!important;border-radius:14px!important;overflow:hidden!important;background:#fff!important}}
+          .med-person div{{min-height:78px!important;border:0!important;border-right:1px solid #e6edf5!important;border-radius:0!important;background:#fff!important;padding:17px 22px!important}}
+          .med-person div:last-child{{border-right:0!important}}.med-person small{{font-size:14px!important;color:#435775!important;font-weight:850!important}}.med-person b{{font-size:19px!important;color:#071b34!important;font-weight:1000!important}}
+          .med-pro-two{{display:grid!important;grid-template-columns:.88fr 1.12fr!important;gap:22px!important;margin:0 16px 22px!important}}
+          .med-field-row{{height:52px!important;border:1px solid #dbe7ef!important;border-radius:12px!important;overflow:hidden!important;margin-bottom:18px!important;background:#fff!important;display:grid!important;grid-template-columns:260px 1fr!important;align-items:center!important}}
+          .med-field-row b{{height:100%!important;display:flex!important;align-items:center!important;padding:0 20px!important;font-size:16px!important;color:#071b34!important;background:#fff!important;border:0!important;border-right:1px solid #e6edf5!important;text-align:left!important;justify-content:flex-start!important}}
+          .med-field-row select{{height:100%!important;border:0!important;border-radius:0!important;font-size:16px!important;font-weight:800!important}}
+          .med-date-grid{{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:34px!important;margin-top:22px!important}}.med-date-grid-2{{grid-template-columns:1fr 1fr!important;margin-top:32px!important}}
+          .med-support-grid{{display:grid!important;grid-template-columns:430px 1fr!important;gap:38px!important;align-items:start!important}}.med-submit-wrap{{text-align:center!important;margin-top:18px!important}}.med-submit-wrap .std-green-btn{{min-width:270px!important;height:48px!important;border-radius:8px!important}}
+          @media(max-width:1050px){{.med-pro-top,.med-pro-two,.med-select-row,.med-support-grid{{grid-template-columns:1fr!important;gap:16px!important;margin-left:0!important;margin-right:0!important}}.med-person{{grid-template-columns:1fr!important}}.med-field-row{{grid-template-columns:1fr!important;height:auto!important}}.med-field-row b{{height:42px!important;border-right:0!important;border-bottom:1px solid #e6edf5!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important;gap:16px!important}}}}
+</style>
 
         <div class='med-page-pro'>
           {modulo_requerimiento_header_html('🩺','Evaluación médica','Seleccione primero el requerimiento, revise postulantes y registre aptitud, restricciones y estado operativo.','medica', req_select_opts, req_actual)}
@@ -11444,7 +11479,7 @@ html,body{overflow-x:hidden!important;}
 
             <div class='med-pro-body'>
               <div class='med-pro-top'>
-                <div class='med-selected-photo med-pro-photo' id='med_foto_box'><div class='blank'>SIN FOTO</div><small>Sin fotografía registrada</small></div>
+                <div class='med-selected-photo med-pro-photo' id='med_foto_box'><div class='blank'></div><small>Sin fotografía<br>registrada</small></div>
 
                 <section class='med-pro-card med-pro-card-main'>
                   <div class='med-step-title'>1. SELECCIONAR POSTULANTE</div>
@@ -11572,7 +11607,7 @@ html,body{overflow-x:hidden!important;}
             medTrabHidden.value = '';
             setMedCard(medAptitudCard, medAptitudVal, 'PENDIENTE');
             setMedCard(medEstadoCard, medEstadoVal, 'PENDIENTE');
-            medFotoBox.innerHTML = `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`;
+            medFotoBox.innerHTML = `<div class='blank'></div><small>Sin fotografía<br>registrada</small>`;
             medDecisionMsg.textContent = msg || 'Digite un DNI que pertenezca al requerimiento seleccionado.';
             medDecisionMsg.className = 'med-block-msg blocked';
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
@@ -11633,7 +11668,7 @@ html,body{overflow-x:hidden!important;}
               }};
               Object.keys(ids).forEach(function(id){{ const el=document.getElementById(id); if(el && ids[id]) el.value=ids[id]; }});
             }}
-            medFotoBox.innerHTML = row.foto_url ? `<img src='${{row.foto_url}}'><small>Foto real del postulante</small>` : (row.foto ? `<img src='/foto/${{row.dni}}'><small>Foto real del postulante</small>` : `<div class='blank'>SIN FOTO</div><small>Foto pendiente</small>`);
+            medFotoBox.innerHTML = row.foto_url ? `<img src='${{row.foto_url}}'><small>Foto real del postulante</small>` : (row.foto ? `<img src='/foto/${{row.dni}}'><small>Foto real del postulante</small>` : `<div class='blank'></div><small>Sin fotografía<br>registrada</small>`);
             document.querySelectorAll('#tabla_medica_postulantes tr').forEach(tr=>tr.style.outline='');
             const tr = document.querySelector(`#tabla_medica_postulantes tr[data-dni='${{row.dni}}']`); if(tr) tr.style.outline='3px solid #00b86b';
             const blocked = medClass(apt)==='danger' || medClass(est)==='danger';
