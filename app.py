@@ -12819,7 +12819,148 @@ html,body{overflow-x:hidden!important;}
           <form id='form_masivo_indumentaria' method='post' class='ind-tools'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='indumentaria'><input type='hidden' name='campo_estado' value='estado_indumentaria'><div><label>Buscar por DNI</label><input type='text' oninput="filtrarTabla(this,'tabla_indumentaria_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='ind-state-filter' onchange="filtrarTabla(this,'tabla_indumentaria_360')"><option value=''>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select><select class='legacy-mass-select' name='nuevo_estado'><option>PENDIENTE</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='ind-btn mass-apply-btn' type='submit'>Aplicar estado</button></div><div><span class="registrar-title" style="display:none"></span><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn'>Registrar</label></div></div></form>
           <div class='ind-table-card'><div class='ind-table-head'><h2>LISTA DE POSTULANTES</h2></div><div class='std-table-wrap'><table id='tabla_indumentaria_360' class='std-table'>{tabla_estandar_postulantes_header('tabla_indumentaria_360')}{indumentaria_control_rows}</table></div></div><script>document.addEventListener('DOMContentLoaded',function(){{function b(t,f){{var form=document.getElementById(f);if(!form)return;document.querySelectorAll('#'+t+' input[name="ingreso_ids"]').forEach(function(x){{x.setAttribute('form',f);}});}}b('tabla_induccion_360','form_masivo_induccion');b('tabla_indumentaria_360','form_masivo_indumentaria');}});</script>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Cargos de entrega registrados</h2><small>{len(indumentarias_filtradas)} registro(s)</small></div><div class='ind-table-wrap'><table class='ind-table'><tr><th>Fecha registro</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Estado</th><th>Responsable</th><th>Fecha entrega</th><th>Acción</th></tr>{ind_rows}</table></div></div>
-          <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card ind-modal-epp-v2'><div class='ind-modal-head'><h2><span class='ind-head-icon'><i class='bi bi-shield-check'></i></span>Registro de entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar&nbsp; ×</label></div><div class='ind-modal-body-epp'><aside class='ind-photo-card'><div id='ind_photo_box' class='ind-photo-box'><i class='bi bi-person-fill'></i></div><b id='ind_photo_text'>Sin fotografía registrada</b></aside><form method='post' enctype='multipart/form-data' class='ind-form ind-form-epp-v2' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><input type='hidden' name='requerimiento' id='ind_requerimiento' value='{h(req_filtro_indumentaria)}'><div class='section'><span>1.</span> SELECCIONAR POSTULANTE</div><b class='req ind-lbl-dni'>DNI del postulante</b><div class='dni-search-wrap'><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI del requerimiento' required><button type='button' onclick='buscarIndumentariaDNI()' class='dni-search-btn'><i class='bi bi-search'></i></button></div><div class='ind-delivery-state'><strong>Estado de entrega</strong><span id='ind_estado_badge'><i class='bi bi-clock'></i> PENDIENTE</span></div><div class='full ind-req-line'><strong><i class='bi bi-info-circle'></i> Requerimiento seleccionado:</strong> <em>{h(req_filtro_indumentaria) or 'Seleccione requerimiento antes de registrar'}</em> <span>· Al digitar 8 números, los datos se cargan automáticamente.</span></div><div class='section'><span>2.</span> DATOS DEL TRABAJADOR</div><b class='req ind-lbl-trab'><i class='bi bi-person-circle'></i>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b class='ind-lbl-emp'><i class='bi bi-building'></i>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b class='ind-lbl-area'><i class='bi bi-diagram-3-fill'></i>Área</b><input id='ind_area' name='area' placeholder='Área'><b class='ind-lbl-cargo'><i class='bi bi-briefcase-fill'></i>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b class='ind-lbl-act'><i class='bi bi-clipboard2-check-fill'></i>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b class='ind-lbl-fecha'><i class='bi bi-calendar3'></i>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'><span>3.</span> DETALLE DE PRENDAS / EPP</div><b class='req ind-lbl-polo'><i class='bi bi-shirt'></i>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req ind-lbl-pantalon'><i class='bi bi-columns-gap'></i>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req ind-lbl-botas'><i class='bi bi-layers-fill'></i>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b class='ind-lbl-casaca'><i class='bi bi-person-standing'></i>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='ind-lbl-gorro'><i class='bi bi-cone-striped'></i>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b class='ind-lbl-lentes'><i class='bi bi-eyeglasses'></i>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b class='ind-lbl-guantes'><i class='bi bi-hand-index-thumb'></i>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b class='ind-lbl-otros'><i class='bi bi-bag-check-fill'></i>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b class='ind-lbl-estado'><i class='bi bi-shield-check'></i>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req ind-lbl-fecha'><i class='bi bi-calendar3'></i>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><b class='req ind-lbl-resp'><i class='bi bi-person-fill'></i>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b class='ind-lbl-firma'><i class='bi bi-pencil-square'></i>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b class='ind-lbl-obs'><i class='bi bi-chat-dots'></i>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><div class='ind-submit-cell'><button class='ind-btn green' type='submit'><i class='bi bi-check-circle-fill'></i> Registrar entrega</button></div></form></div><div class='ind-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span></div><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>        </section>
+          
+<style id='indumentaria-epp-clon-imagen-final'>
+/* =========================================================
+   INDUMENTARIA / EPP - VISTA CLON DEL MOCKUP VERDE
+   ========================================================= */
+.ind-modal-card.ind-modal-epp-v2{{
+  width:min(1480px,99vw)!important;
+  max-width:min(1480px,99vw)!important;
+  max-height:96vh!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  background:#fff!important;
+  border-radius:10px!important;
+  border:1px solid #d8e4ed!important;
+  box-shadow:0 30px 90px rgba(15,23,42,.30)!important;
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif!important;
+}}
+.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar{{width:12px!important}}
+.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar-track{{background:#f4f7f9!important;border-radius:20px!important}}
+.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar-thumb{{background:#8b949e!important;border-radius:20px!important;border:2px solid #f4f7f9!important}}
+.ind-modal-epp-v2 .ind-modal-head{{
+  height:94px!important;min-height:94px!important;padding:0 38px 0 28px!important;background:#fff!important;
+  border-bottom:1px solid #dce8f1!important;display:flex!important;align-items:center!important;justify-content:space-between!important;
+  gap:18px!important;position:sticky!important;top:0!important;z-index:50!important;
+}}
+.ind-modal-epp-v2 .ind-modal-head h2{{
+  margin:0!important;color:#082744!important;font-size:38px!important;line-height:1!important;font-weight:1000!important;
+  letter-spacing:-1.45px!important;text-transform:none!important;display:flex!important;align-items:center!important;gap:16px!important;
+  white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+}}
+.ind-modal-epp-v2 .ind-head-icon{{
+  width:54px!important;height:54px!important;min-width:54px!important;border-radius:14px!important;
+  background:linear-gradient(135deg,#e6fff0,#f7fffa)!important;border:1.6px solid #87e6ad!important;color:#008a48!important;
+  display:grid!important;place-items:center!important;
+}}
+.ind-modal-epp-v2 .ind-head-icon i{{color:#008a48!important;font-size:34px!important;font-weight:900!important}}
+.ind-modal-epp-v2 .ind-close{{
+  height:52px!important;min-width:126px!important;padding:0 23px!important;border-radius:10px!important;
+  background:linear-gradient(135deg,#008a48,#12b868)!important;color:#fff!important;font-size:17px!important;font-weight:1000!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;gap:8px!important;cursor:pointer!important;
+  box-shadow:0 12px 26px rgba(0,138,72,.23)!important;white-space:nowrap!important;
+}}
+.ind-modal-body-epp{{
+  padding:26px 28px 24px!important;display:grid!important;grid-template-columns:272px minmax(0,1fr)!important;
+  gap:24px!important;align-items:start!important;background:#fff!important;
+}}
+.ind-photo-card{{
+  min-height:336px!important;border:1.3px solid #d4e3ee!important;border-radius:12px!important;background:#fff!important;
+  display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:26px!important;padding:26px 18px!important;
+}}
+.ind-photo-box{{
+  width:156px!important;height:156px!important;border-radius:12px!important;background:linear-gradient(135deg,#f7fafc,#edf2f7)!important;
+  border:1.2px solid #cedce8!important;display:grid!important;place-items:center!important;
+}}
+.ind-photo-box i{{font-size:92px!important;color:#2a2a2a!important;opacity:.95!important}}
+.ind-photo-box img{{width:100%!important;height:100%!important;object-fit:cover!important;border-radius:11px!important}}
+.ind-photo-card b{{color:#53657d!important;font-size:18px!important;line-height:1.2!important;font-weight:1000!important;text-align:center!important;max-width:180px!important}}
+.ind-form-epp-v2{{
+  display:grid!important;grid-template-columns:220px minmax(280px,1fr) 220px minmax(280px,1fr)!important;
+  column-gap:14px!important;row-gap:10px!important;align-items:stretch!important;min-width:0!important;
+}}
+.ind-form-epp-v2 .section{{
+  grid-column:1/-1!important;height:37px!important;min-height:37px!important;border-radius:10px 10px 0 0!important;
+  background:linear-gradient(180deg,#079b56,#007c3f)!important;color:#fff!important;
+  box-shadow:inset 0 -1px 0 rgba(0,0,0,.05),0 7px 15px rgba(0,138,72,.09)!important;
+  display:flex!important;align-items:center!important;gap:10px!important;padding:0 20px!important;margin:0!important;
+  font-size:21px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-.35px!important;text-transform:uppercase!important;
+}}
+.ind-form-epp-v2 .section span{{
+  width:26px!important;height:26px!important;min-width:26px!important;border-radius:999px!important;background:#eafff2!important;color:#008a48!important;
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;font-weight:1000!important;
+}}
+.ind-form-epp-v2 b{{
+  min-height:45px!important;height:45px!important;border:1.25px solid #aeecc5!important;border-radius:7px!important;
+  background:linear-gradient(135deg,#ddf8e7,#f4fff8)!important;color:#082744!important;font-size:15px!important;font-weight:1000!important;
+  display:flex!important;align-items:center!important;gap:12px!important;padding:0 15px!important;line-height:1.05!important;
+  white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+}}
+.ind-form-epp-v2 b.req{{border-color:#7bea9e!important;background:linear-gradient(135deg,#d6f7e1,#f4fff8)!important}}
+.ind-form-epp-v2 b.req:after{{content:"*"!important;color:#ff1010!important;margin-left:auto!important;font-size:15px!important;font-weight:1000!important}}
+.ind-form-epp-v2 b i{{color:#008a48!important;font-size:22px!important;min-width:26px!important;width:26px!important;text-align:center!important;font-weight:900!important}}
+.ind-form-epp-v2 input,.ind-form-epp-v2 select,.ind-form-epp-v2 textarea{{
+  width:100%!important;min-width:0!important;height:45px!important;min-height:45px!important;border-radius:7px!important;
+  border:1.15px solid #d0dee9!important;background:#fff!important;color:#071b34!important;padding:0 16px!important;
+  font-size:15px!important;font-weight:900!important;outline:none!important;box-shadow:inset 0 1px 0 rgba(15,23,42,.02)!important;
+}}
+.ind-form-epp-v2 input::placeholder,.ind-form-epp-v2 textarea::placeholder{{color:#7788a0!important;font-weight:850!important}}
+.ind-form-epp-v2 select{{appearance:auto!important;cursor:pointer!important}}
+.ind-form-epp-v2 input:focus,.ind-form-epp-v2 select:focus,.ind-form-epp-v2 textarea:focus{{border-color:#13b86a!important;box-shadow:0 0 0 3px rgba(0,154,84,.10)!important}}
+.dni-search-wrap{{display:grid!important;grid-template-columns:1fr 61px!important;gap:0!important;min-width:0!important}}
+.dni-search-wrap input{{height:53px!important;min-height:53px!important;border-radius:7px 0 0 7px!important;font-size:17px!important;font-weight:850!important}}
+.dni-search-btn{{
+  height:53px!important;min-height:53px!important;border:0!important;border-radius:0 10px 10px 0!important;background:#008a48!important;color:#fff!important;
+  font-size:30px!important;display:grid!important;place-items:center!important;cursor:pointer!important;box-shadow:0 8px 16px rgba(0,138,72,.20)!important;
+}}
+.dni-search-btn i{{color:#fff!important;font-size:30px!important}}
+.ind-delivery-state{{
+  height:84px!important;min-height:84px!important;border-radius:12px!important;border:1.3px solid #aeecc5!important;
+  background:linear-gradient(135deg,#f8fffb,#eafff3)!important;padding:13px 20px!important;display:flex!important;flex-direction:column!important;justify-content:center!important;gap:9px!important;
+}}
+.ind-delivery-state strong{{color:#082744!important;font-size:16px!important;font-weight:1000!important}}
+.ind-delivery-state span{{
+  display:inline-flex!important;align-items:center!important;gap:8px!important;width:max-content!important;border-radius:999px!important;background:#fff4db!important;
+  border:1px solid #ffc66b!important;color:#f97316!important;padding:8px 21px!important;font-size:16px!important;line-height:1!important;font-weight:1000!important;
+}}
+.ind-req-line{{
+  grid-column:1/-1!important;height:40px!important;min-height:40px!important;border-radius:7px!important;border:1.15px solid #aeecc5!important;
+  background:linear-gradient(135deg,#e0fae9,#f4fff8)!important;color:#008a48!important;display:flex!important;align-items:center!important;gap:10px!important;
+  padding:0 17px!important;margin:0 0 10px 0!important;overflow:hidden!important;white-space:nowrap!important;font-size:14px!important;font-weight:900!important;
+}}
+.ind-req-line strong{{color:#082744!important;font-size:13px!important;font-weight:1000!important;display:inline-flex!important;align-items:center!important;gap:8px!important}}
+.ind-req-line strong i{{color:#008a48!important;font-size:18px!important}}
+.ind-req-line em{{background:#008a48!important;color:#fff!important;border-radius:6px!important;padding:7px 13px!important;font-size:13px!important;line-height:1!important;font-weight:1000!important;font-style:normal!important;white-space:nowrap!important}}
+.ind-req-line span{{color:#008a48!important;font-size:14px!important;font-weight:900!important;white-space:nowrap!important}}
+.ind-form-epp-v2 textarea{{height:67px!important;min-height:67px!important;padding:14px 16px!important;resize:vertical!important;line-height:1.22!important}}
+.ind-lbl-obs + textarea{{grid-column:2/4!important}}
+.ind-lbl-obs + textarea + span{{display:none!important}}
+.ind-submit-cell{{grid-column:4/5!important;align-self:stretch!important;display:block!important}}
+.ind-submit-cell .ind-btn.green{{
+  width:100%!important;height:67px!important;min-height:67px!important;border:0!important;border-radius:7px!important;background:linear-gradient(135deg,#008a48,#12b868)!important;color:#fff!important;
+  font-size:28px!important;font-weight:1000!important;letter-spacing:-.4px!important;box-shadow:0 16px 30px rgba(0,138,72,.25)!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;gap:13px!important;padding:0 18px!important;cursor:pointer!important;white-space:nowrap!important;
+}}
+.ind-submit-cell .ind-btn.green i{{color:#fff!important;font-size:34px!important}}
+.ind-alert{{display:none!important}}
+.ind-lbl-polo i,.ind-lbl-pantalon i,.ind-lbl-botas i,.ind-lbl-casaca i,.ind-lbl-gorro i,.ind-lbl-lentes i,.ind-lbl-guantes i,.ind-lbl-otros i,.ind-lbl-estado i,.ind-lbl-firma i,.ind-lbl-obs i{{color:#008a48!important}}
+@media(max-width:1180px){{
+  .ind-modal-body-epp{{grid-template-columns:1fr!important}}
+  .ind-photo-card{{display:none!important}}
+  .ind-form-epp-v2{{grid-template-columns:200px minmax(250px,1fr) 200px minmax(250px,1fr)!important}}
+  .ind-modal-epp-v2 .ind-modal-head h2{{font-size:30px!important}}
+}}
+@media(max-width:760px){{
+  .ind-modal-card.ind-modal-epp-v2{{width:99vw!important;max-width:99vw!important}}
+  .ind-modal-epp-v2 .ind-modal-head{{height:auto!important;min-height:72px!important;padding:14px!important}}
+  .ind-modal-epp-v2 .ind-modal-head h2{{font-size:24px!important}}
+  .ind-form-epp-v2{{grid-template-columns:1fr!important}}
+  .ind-form-epp-v2 .section,.ind-req-line,.dni-search-wrap,.ind-delivery-state,.ind-lbl-obs + textarea,.ind-submit-cell{{grid-column:1/-1!important}}
+}}
+
+</style>
+<input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card ind-modal-epp-v2'><div class='ind-modal-head'><h2><span class='ind-head-icon'><i class='bi bi-person-workspace'></i></span>Registro de entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close'>Cerrar&nbsp; ×</label></div><div class='ind-modal-body-epp'><aside class='ind-photo-card'><div id='ind_photo_box' class='ind-photo-box'><i class='bi bi-person-fill'></i></div><b id='ind_photo_text'>Sin fotografía registrada</b></aside><form method='post' enctype='multipart/form-data' class='ind-form ind-form-epp-v2' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><input type='hidden' name='requerimiento' id='ind_requerimiento' value='{h(req_filtro_indumentaria)}'><div class='section'><span>1.</span> SELECCIONAR POSTULANTE</div><b class='req ind-lbl-dni'>DNI del postulante</b><div class='dni-search-wrap'><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI del requerimiento' required><button type='button' onclick='buscarIndumentariaDNI()' class='dni-search-btn'><i class='bi bi-search'></i></button></div><div class='ind-delivery-state'><strong>Estado de entrega</strong><span id='ind_estado_badge'><i class='bi bi-clock'></i> PENDIENTE</span></div><div class='full ind-req-line'><strong><i class='bi bi-info-circle'></i> Requerimiento seleccionado:</strong> <em>{h(req_filtro_indumentaria) or 'Seleccione requerimiento antes de registrar'}</em> <span>· Al digitar 8 números, los datos se cargan automáticamente.</span></div><div class='section'><span>2.</span> DATOS DEL TRABAJADOR</div><b class='req ind-lbl-trab'><i class='bi bi-person-circle'></i>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b class='ind-lbl-emp'><i class='bi bi-building'></i>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b class='ind-lbl-area'><i class='bi bi-diagram-3-fill'></i>Área</b><input id='ind_area' name='area' placeholder='Área'><b class='ind-lbl-cargo'><i class='bi bi-briefcase-fill'></i>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b class='ind-lbl-act'><i class='bi bi-clipboard2-check-fill'></i>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b class='ind-lbl-fecha'><i class='bi bi-calendar3'></i>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'><span>3.</span> DETALLE DE PRENDAS / EPP</div><b class='req ind-lbl-polo'><i class='bi bi-shirt'></i>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req ind-lbl-pantalon'><i class='bi bi-pause-fill'></i>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req ind-lbl-botas'><i class='bi bi-bootstrap-reboot'></i>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b class='ind-lbl-casaca'><i class='bi bi-person-standing'></i>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='ind-lbl-gorro'><i class='bi bi-cone'></i>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b class='ind-lbl-lentes'><i class='bi bi-eyeglasses'></i>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b class='ind-lbl-guantes'><i class='bi bi-hand-index-thumb'></i>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b class='ind-lbl-otros'><i class='bi bi-bag-check-fill'></i>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b class='ind-lbl-estado'><i class='bi bi-shield-check'></i>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req ind-lbl-fecha'><i class='bi bi-calendar3'></i>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><b class='req ind-lbl-resp'><i class='bi bi-person-fill'></i>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b class='ind-lbl-firma'><i class='bi bi-pencil-square'></i>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b class='ind-lbl-obs'><i class='bi bi-chat-dots'></i>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><div class='ind-submit-cell'><button class='ind-btn green' type='submit'><i class='bi bi-check-circle-fill'></i> Registrar entrega</button></div></form></div><div class='ind-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span></div><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>        </section>
         <script>
         const trabajadoresIndumentaria = {trabajadores_js};
         function setAlertaIndumentaria(txt, peligro=false){{
