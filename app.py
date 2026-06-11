@@ -8336,9 +8336,12 @@ def admin_contratacion():
                 ('Fecha resultado', 'fecha_resultado'),
                 ('Fecha vencimiento', 'fecha_vencimiento'),
                 ('Responsable seguimiento', 'responsable_seguimiento'),
+                ('Observación', 'observacion'),
             ]
             faltantes_med = [etq for etq, campo in obligatorios_med if not clean(request.form.get(campo))]
-            f_pre = request.files.get('archivo')  # opcional: puede registrarse sin PDF/imagen
+            f_pre = request.files.get('archivo')
+            if not f_pre or not clean(getattr(f_pre, 'filename', '')):
+                faltantes_med.append('Resultado PDF/imagen')
             if aptitud_med in ('', 'PENDIENTE'):
                 faltantes_med.append('Aptitud médica distinta a PENDIENTE')
             if ('RESTRICC' in aptitud_med or 'NO APTO' in aptitud_med) and not clean(request.form.get('restricciones')):
@@ -11437,38 +11440,7 @@ html,body{overflow-x:hidden!important;}
           .med-field-row select{{height:100%!important;border:0!important;border-radius:0!important;font-size:16px!important;font-weight:800!important}}
           .med-date-grid{{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:34px!important;margin-top:22px!important}}.med-date-grid-2{{grid-template-columns:1fr 1fr!important;margin-top:32px!important}}
           .med-support-grid{{display:grid!important;grid-template-columns:430px 1fr!important;gap:38px!important;align-items:start!important}}.med-submit-wrap{{text-align:center!important;margin-top:18px!important}}.med-submit-wrap .std-green-btn{{min-width:270px!important;height:48px!important;border-radius:8px!important}}
-          
-          /* FIX MÉDICA 2026-06: tabla visible, archivo opcional, APTO resaltado y sin cambio masivo obligatorio */
-          .med-modal{{overflow:hidden!important;align-items:center!important}}
-          .med-modal-card-pro{{width:min(1460px,96vw)!important;max-height:92vh!important;overflow-y:auto!important;overflow-x:hidden!important}}
-          .med-head-pro{{height:74px!important;padding:12px 26px!important}}
-          .med-head-pro h2{{font-size:28px!important}}
-          .med-pro-body{{padding:12px 24px 20px!important}}
-          .med-pro-top{{grid-template-columns:220px minmax(0,1fr)!important;gap:28px!important;margin:0 14px 18px!important}}
-          .med-pro-photo{{height:224px!important;min-height:224px!important;padding:18px!important}}
-          .med-pro-photo img{{width:118px!important;height:138px!important}}
-          .med-pro-card-main{{min-height:224px!important;padding:16px!important}}
-          .med-step-title{{height:42px!important;line-height:42px!important;margin:-16px -16px 14px!important;padding:0 22px!important;background:linear-gradient(135deg,#008248,#039855)!important;color:#fff!important;border-radius:14px 14px 0 0!important;font-size:17px!important}}
-          .med-select-row{{grid-template-columns:minmax(320px,430px) minmax(240px,360px)!important;gap:26px!important;margin-bottom:12px!important}}
-          .med-search-control input{{height:48px!important}}
-          .med-search-control button{{height:48px!important}}
-          .med-status-card{{height:78px!important;min-height:78px!important;padding:12px 16px!important;background:#ecfdf5!important;border-color:#86efac!important}}
-          .med-status-card .med-status-value{{font-size:17px!important;min-width:142px!important;height:40px!important;font-weight:1000!important}}
-          .med-status-card.ok{{background:#dcfce7!important;border:2px solid #16a34a!important;box-shadow:0 0 0 4px rgba(22,163,74,.12)!important}}
-          .med-status-card.ok .med-status-value{{background:#16a34a!important;color:#fff!important;border-color:#16a34a!important;box-shadow:0 8px 18px rgba(22,163,74,.24)!important}}
-          .med-block-msg{{height:44px!important;margin:0 0 12px!important;font-size:14px!important;justify-content:flex-start!important}}
-          .med-person{{grid-template-columns:1.7fr .75fr 1fr 1fr 1.25fr!important;display:grid!important;visibility:visible!important;max-height:none!important;min-height:64px!important}}
-          .med-person div{{min-height:64px!important;padding:10px 14px!important;overflow:hidden!important}}
-          .med-person small{{font-size:12px!important;margin-bottom:4px!important}}
-          .med-person b{{display:block!important;font-size:14px!important;line-height:1.15!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;word-break:break-word!important;color:#071b34!important}}
-          .med-pro-two{{margin:0 14px 18px!important;gap:20px!important}}
-          .med-field-row{{height:48px!important;margin-bottom:14px!important;grid-template-columns:230px minmax(0,1fr)!important}}
-          .med-date-grid{{gap:18px!important;margin-top:14px!important}}
-          .med-date-grid-2{{margin-top:18px!important}}
-          .med-support-grid{{grid-template-columns:1fr 1fr!important;gap:18px!important}}
-          .std-filter-card .legacy-mass-select,.std-filter-card .mass-apply-btn{{display:none!important}}
-          .std-filter-card div:nth-child(2) label::after{{content:' (opcional)';font-weight:800;color:#64748b}}
-@media(max-width:1050px){{.med-pro-top,.med-pro-two,.med-select-row,.med-support-grid{{grid-template-columns:1fr!important;gap:16px!important;margin-left:0!important;margin-right:0!important}}.med-person{{grid-template-columns:1fr!important}}.med-field-row{{grid-template-columns:1fr!important;height:auto!important}}.med-field-row b{{height:42px!important;border-right:0!important;border-bottom:1px solid #e6edf5!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important;gap:16px!important}}}}
+          @media(max-width:1050px){{.med-pro-top,.med-pro-two,.med-select-row,.med-support-grid{{grid-template-columns:1fr!important;gap:16px!important;margin-left:0!important;margin-right:0!important}}.med-person{{grid-template-columns:1fr!important}}.med-field-row{{grid-template-columns:1fr!important;height:auto!important}}.med-field-row b{{height:42px!important;border-right:0!important;border-bottom:1px solid #e6edf5!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important;gap:16px!important}}}}
 
           /* FIX EXACTO BOCETO IMAGEN 2: tamaño real compacto, limpio y alineado */
           .med-modal{{padding:8px!important;align-items:flex-start!important;justify-content:center!important;background:rgba(15,23,42,.56)!important}}
@@ -11660,9 +11632,9 @@ html,body{overflow-x:hidden!important;}
                 <div class='med-step-title'>4. OBSERVACIONES Y SUSTENTO</div>
                 <div class='med-support-grid'>
                   <label class='med-field'><span>Recomendaciones</span><input id='med_recomendaciones' name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'></label>
-                  <label class='med-field'><span>Resultado PDF / imagen <small style='color:#64748b;font-weight:900'>(opcional)</small></span><input id='med_archivo_resultado' type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'></label>
+                  <label class='med-field'><span>Resultado PDF / imagen <em>*</em></span><input id='med_archivo_resultado' type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg' required></label>
                 </div>
-                <label class='med-field med-obs-field'><span>Observaciones <small style='color:#64748b;font-weight:900'>(opcional / obligatorio si NO APTO)</small></span><textarea id='med_observacion' name='observacion' rows='3' placeholder='Detalle, sustento o recomendación. Para NO APTO indique motivo y acción de seguimiento.'></textarea></label>
+                <label class='med-field med-obs-field'><span>Observaciones <em>*</em></span><textarea id='med_observacion' name='observacion' rows='3' required placeholder='Obligatorio: sustento del resultado. Para NO APTO/BLOQUEADO indique motivo y acción de seguimiento.'></textarea></label>
               </section>
 
               <div class='med-submit-row'><button type='submit' class='c-btn med-submit-pro' onclick="return validarMedicaSeleccionada()">💾 Registrar evaluación</button></div>
@@ -11875,7 +11847,9 @@ html,body{overflow-x:hidden!important;}
               ['Riesgo del puesto', document.getElementById('med_riesgo')],
               ['Fecha resultado', document.getElementById('med_fecha_resultado')],
               ['Fecha vencimiento', document.getElementById('med_fecha_vencimiento')],
-              ['Responsable seguimiento', document.getElementById('med_responsable')]
+              ['Responsable seguimiento', document.getElementById('med_responsable')],
+              ['Observación', document.getElementById('med_observacion')],
+              ['Resultado PDF/imagen', document.getElementById('med_archivo_resultado')]
             ];
             reqs.forEach(([label, el])=>{{ if(!el || !(el.value||'').trim()) faltantes.push(label); }});
             if(apt==='PENDIENTE') faltantes.push('Aptitud médica distinta a PENDIENTE');
@@ -11884,12 +11858,8 @@ html,body{overflow-x:hidden!important;}
             if((apt.includes('RESTRICC') || apt.includes('NO APTO') || ['OBSERVADO','BLOQUEADO'].includes(est)) && (!restricciones || !restricciones.value.trim())){{
               faltantes.push('Restricciones');
             }}
-            const obsMed=document.getElementById('med_observacion');
-            if(apt.includes('NO APTO') && (!obsMed || !obsMed.value.trim())){{
-              faltantes.push('Observación');
-            }}
             if(faltantes.length){{
-              const mapa = {{'Aptitud médica':medAptitudSelect,'Tipo examen':document.getElementById('med_tipo_examen'),'Riesgo del puesto':document.getElementById('med_riesgo'),'Fecha resultado':document.getElementById('med_fecha_resultado'),'Fecha vencimiento':document.getElementById('med_fecha_vencimiento'),'Responsable seguimiento':document.getElementById('med_responsable'),'Observación':document.getElementById('med_observacion'),'Restricciones':document.getElementById('med_restricciones')}};
+              const mapa = {{'Aptitud médica':medAptitudSelect,'Tipo examen':document.getElementById('med_tipo_examen'),'Riesgo del puesto':document.getElementById('med_riesgo'),'Fecha resultado':document.getElementById('med_fecha_resultado'),'Fecha vencimiento':document.getElementById('med_fecha_vencimiento'),'Responsable seguimiento':document.getElementById('med_responsable'),'Observación':document.getElementById('med_observacion'),'Restricciones':document.getElementById('med_restricciones'),'Resultado PDF/imagen':document.getElementById('med_archivo_resultado')}};
               Object.values(mapa).forEach(el=>{{ if(el) el.classList.remove('campo-error'); }});
               const primero = mapa[faltantes[0]];
               faltantes.forEach(x=>{{ if(mapa[x]) mapa[x].classList.add('campo-error'); }});
@@ -12401,6 +12371,44 @@ html,body{overflow-x:hidden!important;}
 .ind-lbl-obs + textarea{{grid-column:2/4!important}}.ind-lbl-obs + textarea + span{{display:none!important}}.ind-lbl-obs + textarea + span + div{{grid-column:4/5!important;align-self:stretch!important;display:block!important}}.ind-lbl-obs + textarea + span + div .ind-btn.green{{height:100%!important;width:100%!important;}}
 .ind-form .ind-btn.green{{min-height:38px!important;height:38px!important;border-radius:7px!important;background:linear-gradient(135deg,#008a48,#11b76a)!important;color:#fff!important;font-size:18px!important;font-weight:1000!important;box-shadow:0 12px 22px rgba(0,138,72,.23)!important;padding:0 10px!important;}}
 @media(max-width:820px){{.ind-modal-card{{width:98vw!important}}.ind-modal-head h2{{font-size:20px!important}}.ind-form{{grid-template-columns:1fr!important}}.ind-form .section,#ind_dni,.ind-req-line,.ind-lbl-obs + textarea,.ind-lbl-obs + textarea + span + div{{grid-column:1/-1!important}}.ind-form b{{white-space:normal!important}}.ind-close{{min-width:78px!important;font-size:13px!important}}.ind-head-icon{{width:38px!important;height:38px!important;min-width:38px!important}}.ind-head-icon:before{{font-size:26px!important}}}}
+
+
+/* === FIX FINAL INDUMENTARIA: MISMA PROPORCIÓN QUE IMAGEN 1, GRANDE Y PROFESIONAL === */
+.ind-modal{{padding:8px!important;align-items:flex-start!important;justify-content:center!important;background:rgba(15,23,42,.58)!important;overflow-y:auto!important;overflow-x:hidden!important;}}
+.ind-modal-check:checked + .ind-modal{{display:flex!important;}}
+.ind-modal-card{{width:min(1320px,98vw)!important;max-width:1320px!important;max-height:96vh!important;border-radius:10px!important;border:1px solid #cfdbe5!important;background:#fff!important;box-shadow:0 26px 80px rgba(15,23,42,.36)!important;overflow-y:auto!important;overflow-x:hidden!important;}}
+.ind-modal-card::-webkit-scrollbar{{width:10px!important;height:0!important}}.ind-modal-card::-webkit-scrollbar-thumb{{background:#8f989f!important;border-radius:999px!important}}.ind-modal-card::-webkit-scrollbar-track{{background:#eef2f5!important;border-radius:999px!important}}
+.ind-modal-head{{height:78px!important;min-height:78px!important;padding:8px 18px 8px 16px!important;border-bottom:3px solid #008a48!important;background:#fff!important;position:sticky!important;top:0!important;z-index:10!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:16px!important;}}
+.ind-modal-head h2{{flex:1 1 auto!important;min-width:0!important;display:flex!important;align-items:center!important;gap:14px!important;margin:0!important;color:#071b34!important;font-size:34px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-1px!important;text-transform:uppercase!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}}
+.ind-head-icon{{width:58px!important;height:58px!important;min-width:58px!important;border-radius:12px!important;background:#ecfdf5!important;border:1.5px solid #a7f3d0!important;color:#008a48!important;display:inline-grid!important;place-items:center!important;}}
+.ind-head-icon i{{display:none!important}}.ind-head-icon:before{{content:'🦺'!important;font-size:38px!important;line-height:1!important;font-family:Arial,'Segoe UI Emoji','Apple Color Emoji',sans-serif!important;}}
+.ind-close{{flex:0 0 auto!important;min-width:114px!important;height:48px!important;min-height:48px!important;padding:0 16px!important;border-radius:8px!important;background:linear-gradient(135deg,#008a48,#12b76a)!important;color:#fff!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;font-weight:1000!important;white-space:nowrap!important;box-shadow:0 10px 18px rgba(0,138,72,.22)!important;}}
+.ind-form{{padding:12px 16px 14px!important;display:grid!important;grid-template-columns:230px minmax(260px,1fr) 230px minmax(320px,1fr)!important;gap:8px 10px!important;align-items:center!important;background:#fff!important;min-width:0!important;width:100%!important;box-sizing:border-box!important;}}
+.ind-form *{{box-sizing:border-box!important;min-width:0!important;}}.ind-form input,.ind-form select,.ind-form textarea{{max-width:100%!important;width:100%!important;}}
+.ind-form .section{{grid-column:1/-1!important;height:34px!important;min-height:34px!important;margin:5px 0 5px!important;border-radius:8px 8px 0 0!important;background:linear-gradient(135deg,#007f43,#11b76a)!important;color:#fff!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 16px!important;font-size:18px!important;line-height:1!important;font-weight:1000!important;text-transform:uppercase!important;box-shadow:0 8px 16px rgba(0,138,72,.16)!important;letter-spacing:-.2px!important;}}
+.ind-form .section span{{width:24px!important;height:24px!important;border-radius:999px!important;background:#fff!important;color:#008a48!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:17px!important;font-weight:1000!important;}}
+.ind-form b{{min-height:46px!important;height:46px!important;border-radius:7px!important;background:linear-gradient(135deg,#e0faeb,#f6fff9)!important;border:1px solid #b2ebc9!important;color:#071b34!important;font-size:15px!important;font-weight:1000!important;text-align:left!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 12px!important;line-height:1.05!important;box-shadow:none!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}}
+.ind-form b.req{{background:linear-gradient(135deg,#dcfce7,#f5fff9)!important;border:1.5px solid #86efac!important;color:#071b34!important;}}
+.ind-form b.req:after{{content:'*'!important;color:#ef1111!important;margin-left:auto!important;font-size:17px!important;font-weight:1000!important;}}
+.ind-form input,.ind-form select,.ind-form textarea{{min-height:46px!important;height:46px!important;border:1px solid #cbdced!important;border-radius:7px!important;background:#fff!important;color:#071b34!important;font-size:15px!important;font-weight:850!important;padding:0 12px!important;box-shadow:0 1px 2px rgba(15,23,42,.03) inset!important;}}
+.ind-form input::placeholder,.ind-form textarea::placeholder{{color:#6f809a!important;font-weight:850!important;}}
+.ind-form select{{appearance:auto!important;}}
+.ind-form textarea{{height:50px!important;min-height:50px!important;padding:13px 12px!important;resize:vertical!important;line-height:1.2!important;}}
+.ind-form input[type=file]{{font-size:13px!important;padding:10px 10px!important;overflow:hidden!important;white-space:nowrap!important;}}
+#ind_dni{{grid-column:2/5!important;}}
+.ind-req-line{{grid-column:1/-1!important;min-height:42px!important;height:42px!important;border-radius:7px!important;background:linear-gradient(135deg,#e4faee,#f4fff8)!important;border:1px solid #a7f3d0!important;color:#008a48!important;font-size:14px!important;font-weight:900!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 16px!important;overflow:hidden!important;white-space:nowrap!important;}}
+.ind-req-line strong{{color:#071b34!important;font-size:13px!important;font-weight:1000!important;font-style:normal!important;}}
+.ind-req-line em{{background:#008a48!important;color:#fff!important;border-radius:5px!important;padding:7px 12px!important;font-size:13px!important;font-weight:1000!important;font-style:normal!important;}}
+.ind-req-line span{{color:#008a48!important;font-size:14px!important;font-weight:900!important;}}
+.ind-form b[class*="ind-lbl-"]::before{{font-size:22px!important;line-height:1!important;min-width:28px!important;text-align:center!important;display:inline-block!important;color:#008a48!important;font-family:Arial,'Segoe UI Emoji','Apple Color Emoji',sans-serif!important;font-weight:400!important;filter:none!important;}}
+.ind-lbl-dni::before{{content:'🪪'!important}}.ind-lbl-trab::before{{content:'👤'!important}}.ind-lbl-emp::before{{content:'🏢'!important}}.ind-lbl-area::before{{content:'🏭'!important}}.ind-lbl-cargo::before{{content:'💼'!important}}.ind-lbl-act::before{{content:'📋'!important}}.ind-lbl-fecha::before{{content:'📅'!important}}.ind-lbl-polo::before{{content:'👕'!important}}.ind-lbl-pantalon::before{{content:'👖'!important}}.ind-lbl-botas::before{{content:'🥾'!important}}.ind-lbl-casaca::before{{content:'🧥'!important}}.ind-lbl-gorro::before{{content:'⛑️'!important}}.ind-lbl-lentes::before{{content:'👓'!important}}.ind-lbl-guantes::before{{content:'🧤'!important}}.ind-lbl-otros::before{{content:'🧰'!important}}.ind-lbl-estado::before{{content:'✅'!important}}.ind-lbl-resp::before{{content:'👤'!important}}.ind-lbl-firma::before{{content:'🖊️'!important}}.ind-lbl-obs::before{{content:'💬'!important}}
+.ind-lbl-obs + textarea{{grid-column:2/4!important;}}
+.ind-lbl-obs + textarea + span{{display:none!important;}}
+.ind-lbl-obs + textarea + span + div{{grid-column:4/5!important;align-self:stretch!important;display:block!important;}}
+.ind-lbl-obs + textarea + span + div .ind-btn.green{{height:100%!important;width:100%!important;}}
+.ind-form .ind-btn.green{{min-height:50px!important;height:50px!important;border-radius:7px!important;background:linear-gradient(135deg,#008a48,#11b76a)!important;color:#fff!important;font-size:24px!important;font-weight:1000!important;box-shadow:0 12px 22px rgba(0,138,72,.23)!important;padding:0 10px!important;}}
+@media(max-width:900px){{.ind-modal-card{{width:99vw!important;max-width:99vw!important;}}.ind-modal-head h2{{font-size:24px!important;}}.ind-form{{grid-template-columns:170px minmax(230px,1fr) 170px minmax(260px,1fr)!important;}}.ind-form b{{font-size:13px!important;}}.ind-form input,.ind-form select,.ind-form textarea{{font-size:13px!important;}}}}
+@media(max-width:720px){{.ind-modal-card{{width:99vw!important;}}.ind-modal-head{{height:auto!important;min-height:64px!important;flex-wrap:wrap!important;}}.ind-close{{width:100%!important;}}.ind-form{{grid-template-columns:1fr!important;}}.ind-form .section,#ind_dni,.ind-req-line,.ind-lbl-obs + textarea,.ind-lbl-obs + textarea + span + div{{grid-column:1/-1!important;}}.ind-form b{{white-space:normal!important;}}}}
 
 
         </style>
