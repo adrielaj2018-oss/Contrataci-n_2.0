@@ -11357,6 +11357,55 @@ html,body{overflow-x:hidden!important;}
           .med-form-grid textarea.full{{grid-column:2/-1!important}}
           .med-form-grid .span-all{{grid-column:1/-1!important}}
           @media(max-width:900px){{.med-modal{{padding:8px!important}}.med-modal-card .med-selected{{grid-template-columns:1fr!important;margin:12px!important}}.med-person{{grid-template-columns:1fr!important}}.med-modal-card #form_medica{{margin:0 12px 16px!important}}.med-form-grid{{grid-template-columns:1fr!important;padding:16px!important}}.med-form-grid b{{justify-content:flex-start!important;text-align:left!important}}.med-form-grid .full,.med-form-grid textarea.full{{grid-column:1/-1!important}}}}
+          /* NUEVO DISEÑO PRO 2026 - Evaluación médica tipo boceto aprobado */
+          .med-modal-card-pro{{width:min(1500px,98vw)!important;max-height:94vh!important;background:#fff!important;border-radius:24px!important;overflow:auto!important}}
+          .med-head-pro h2{{display:flex!important;align-items:center!important;gap:14px!important;font-size:28px!important;letter-spacing:-.5px!important;color:#071b34!important}}
+          .med-title-icon{{width:44px!important;height:44px!important;border-radius:14px!important;background:#ecfdf5!important;color:#007a3d!important;display:inline-grid!important;place-items:center!important;border:1px solid #b8f0d2!important}}
+          .med-form-pro.med-form-grid{{display:block!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;background:#fff!important}}
+          .med-pro-body{{padding:14px 28px 26px!important;background:#fff!important}}
+          .med-pro-top{{display:grid!important;grid-template-columns:242px minmax(0,1fr)!important;gap:22px!important;align-items:stretch!important;margin-bottom:22px!important}}
+          .med-pro-photo{{min-height:244px!important;margin:0!important;border-radius:16px!important;background:#fff!important;box-shadow:0 14px 32px rgba(15,23,42,.06)!important}}
+          .med-pro-photo .blank{{width:124px!important;height:124px!important;border-radius:18px!important;background:#f1f5f9!important;color:#94a3b8!important;border:1px solid #dbe7ef!important;font-size:0!important;position:relative!important}}
+          .med-pro-photo .blank::before{{content:'👤';font-size:54px!important;color:#cbd5e1!important}}
+          .med-pro-photo small{{font-size:15px!important;color:#435775!important;font-weight:800!important}}
+          .med-pro-photo img{{width:124px!important;height:144px!important;border-radius:18px!important}}
+          .med-pro-card{{background:#fff!important;border:1px solid #dbe7ef!important;border-radius:16px!important;padding:20px!important;box-shadow:0 14px 32px rgba(15,23,42,.055)!important}}
+          .med-pro-card-main{{min-height:244px!important}}
+          .med-step-title{{color:#008248!important;font-size:18px!important;font-weight:1000!important;letter-spacing:.2px!important;margin:0 0 18px!important;text-transform:uppercase!important}}
+          .med-select-row{{display:grid!important;grid-template-columns:minmax(320px,420px) minmax(260px,1fr)!important;gap:28px!important;align-items:end!important;margin-bottom:16px!important}}
+          .med-field{{display:grid!important;gap:8px!important;color:#071b34!important;font-weight:900!important}}
+          .med-field span{{font-size:14px!important;color:#071b34!important;font-weight:950!important}}
+          .med-field em{{color:#e11d48!important;font-style:normal!important}}
+          .med-form-pro input,.med-form-pro select,.med-form-pro textarea{{width:100%!important;min-width:0!important;border:1px solid #d1deeb!important;border-radius:10px!important;background:#fff!important;color:#17233b!important;font-size:15px!important;font-weight:700!important;outline:none!important;box-shadow:none!important}}
+          .med-form-pro input,.med-form-pro select{{height:44px!important;padding:0 14px!important}}
+          .med-form-pro textarea{{min-height:64px!important;padding:12px 14px!important;resize:vertical!important}}
+          .med-form-pro input:focus,.med-form-pro select:focus,.med-form-pro textarea:focus{{border-color:#00a862!important;box-shadow:0 0 0 4px rgba(0,168,98,.10)!important}}
+          .med-status-card{{min-height:96px!important;border-radius:16px!important;padding:18px!important;box-shadow:none!important;display:flex!important;flex-direction:column!important;justify-content:center!important}}
+          .med-status-card h3{{color:#263b59!important;text-transform:none!important;font-size:14px!important;margin:0 0 10px!important}}
+          .med-status-card .med-status-value{{display:inline-flex!important;align-items:center!important;justify-content:center!important;width:max-content!important;min-width:120px!important;border-radius:999px!important;padding:8px 14px!important;font-size:15px!important;font-weight:1000!important;background:#fff7dd!important;color:#b45309!important;border:1px solid #ffd36e!important}}
+          .med-status-card.ok .med-status-value{{background:#e6fff0!important;color:#007a3d!important;border-color:#9be7bc!important}}
+          .med-status-card.warn .med-status-value{{background:#fff7dd!important;color:#9a6500!important;border-color:#ffd36e!important}}
+          .med-status-card.danger .med-status-value{{background:#ffe2e2!important;color:#b00020!important;border-color:#ffb0b0!important}}
+          .med-block-msg{{margin:0 0 16px!important;padding:12px 14px!important;border-radius:12px!important;font-size:14px!important;text-align:left!important;background:#ecfdf5!important;border:1px solid #b8f0d2!important;color:#007a3d!important}}
+          .med-block-msg.blocked{{background:#fff7ed!important;border-color:#fdba74!important;color:#c2410c!important}}
+          .med-person{{display:grid!important;grid-template-columns:2fr 1fr 1.25fr 1.35fr 1.6fr!important;gap:0!important;border:1px solid #dbe7ef!important;border-radius:14px!important;overflow:hidden!important;background:#fff!important}}
+          .med-person div{{border:0!important;border-right:1px solid #e6edf5!important;border-radius:0!important;min-height:78px!important;padding:14px 18px!important;background:#fff!important}}
+          .med-person div:last-child{{border-right:0!important}}
+          .med-person small{{font-size:13px!important;color:#415875!important;font-weight:800!important;margin-bottom:8px!important}}
+          .med-person b{{font-size:15px!important;color:#071b34!important;font-weight:1000!important;line-height:1.25!important}}
+          .med-pro-two{{display:grid!important;grid-template-columns:minmax(360px,.85fr) minmax(520px,1.15fr)!important;gap:22px!important;margin-bottom:22px!important}}
+          .med-field-row{{display:grid!important;grid-template-columns:210px minmax(0,1fr)!important;gap:0!important;border:1px solid #dbe7ef!important;border-radius:12px!important;overflow:hidden!important;margin-bottom:18px!important;background:#fff!important}}
+          .med-field-row b{{display:flex!important;align-items:center!important;justify-content:flex-start!important;background:#fbfdfc!important;border:0!important;border-right:1px solid #e6edf5!important;border-radius:0!important;color:#071b34!important;min-height:50px!important;padding:0 16px!important;font-size:15px!important;text-align:left!important}}
+          .med-field-row select{{border:0!important;border-radius:0!important;height:50px!important}}
+          .med-date-grid{{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:18px!important;margin-bottom:20px!important}}
+          .med-date-grid-2{{grid-template-columns:1fr 1fr!important;margin-bottom:0!important}}
+          .med-support-grid{{display:grid!important;grid-template-columns:1fr 1fr!important;gap:36px!important;margin-bottom:14px!important}}
+          .med-obs-field{{margin-top:8px!important}}
+          .med-submit-row{{display:flex!important;justify-content:center!important;padding:18px 0 2px!important}}
+          .med-submit-pro{{min-width:270px!important;height:50px!important;border-radius:10px!important;background:linear-gradient(135deg,#008248,#00a862)!important;color:#fff!important;font-size:17px!important;font-weight:1000!important;box-shadow:0 16px 28px rgba(0,130,72,.20)!important}}
+          .med-req-star{{background:transparent!important;border:0!important;color:#071b34!important}}
+          .med-req-star::after{{content:' *';color:#e11d48!important;font-weight:1000!important}}
+          @media(max-width:1050px){{.med-pro-body{{padding:12px!important}}.med-pro-top,.med-pro-two,.med-support-grid,.med-select-row{{grid-template-columns:1fr!important}}.med-person{{grid-template-columns:1fr!important}}.med-person div{{border-right:0!important;border-bottom:1px solid #e6edf5!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important}}.med-field-row{{grid-template-columns:1fr!important}}.med-field-row b{{border-right:0!important;border-bottom:1px solid #e6edf5!important}}}}
         </style>
 
         <div class='med-page-pro'>
@@ -11384,46 +11433,68 @@ html,body{overflow-x:hidden!important;}
             </div>
           </div>
 
-          <input type='checkbox' id='modal_medica_registro' class='med-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='med-modal'><div class='med-modal-card'><div class='med-modal-head'><h2>Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar</label></div>
-          <div class='med-selected'>
-            <div class='med-selected-photo' id='med_foto_box'><div class='blank'>SIN FOTO</div><small>Foto del postulante</small></div>
-            <div id='med_aptitud_card' class='med-status-card pending'><h3>Aptitud médica</h3><div id='med_aptitud_val' class='med-status-value'>PENDIENTE</div></div>
-            <div id='med_decision_msg' class='med-block-msg'>Seleccione un postulante del requerimiento para registrar evaluación médica.</div>
-            <div class='med-person'>
-              <div><small>Trabajador</small><b id='med_nombre'>—</b></div>
-              <div><small>DNI</small><b id='med_dni_show'>—</b></div>
-              <div><small>Requerimiento</small><b id='med_req'>—</b></div>
-              <div><small>Empresa</small><b id='med_empresa'>—</b></div>
-              <div><small>Área / Cargo</small><b id='med_area_cargo'>—</b></div>
-            </div>
-          </div>
+          <input type='checkbox' id='modal_medica_registro' class='med-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='med-modal'><div class='med-modal-card med-modal-card-pro'><div class='med-modal-head med-head-pro'><h2><span class='med-title-icon'>🩺</span> Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar</label></div>
 
-          <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid' novalidate>
+          <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid med-form-pro' novalidate>
             <input type='hidden' name='accion' value='guardar_medica'>
             <input type='hidden' id='med_trabajador_hidden' name='trabajador'>
-            <b class='med-req-star'>DNI del postulante</b><input id='med_dni_lookup' name='dni' maxlength='8' minlength='8' inputmode='numeric' required placeholder='Digite DNI del requerimiento seleccionado' oninput='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onkeyup='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onchange='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' autocomplete='off'>
             <input type='hidden' id='med_req_input' name='requerimiento' value='{h(req_actual)}'>
-            <div class='span-all med-req-actual'>Requerimiento seleccionado: <b>{h(req_actual) or 'Seleccione requerimiento antes de registrar'}</b></div>
-
-            <b class='med-req-star'>Aptitud médica</b><select id='med_aptitud_select' name='aptitud' required><option value=''>Seleccione aptitud</option><option>PENDIENTE</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option></select>
             <input type='hidden' id='med_estado_select' name='estado' value='PENDIENTE'>
+            <div id='med_estado_card' style='display:none'><div id='med_estado_val'>PENDIENTE</div></div>
 
-            <b class='med-req-star'>Tipo examen</b><select id='med_tipo_examen' name='tipo_examen' required><option value=''>Seleccione tipo</option><option>PRE OCUPACIONAL</option><option>PERIÓDICO</option><option>RETIRO</option><option>CAMBIO DE PUESTO</option></select>
-            <b class='med-req-star'>Riesgo del puesto</b><select id='med_riesgo' name='riesgo_puesto' required><option value=''>Seleccione riesgo</option><option>BAJO</option><option>MEDIO</option><option>ALTO</option></select>
-            <b>Fecha programada</b><input type='date' name='fecha_programada' value='{hoy_iso()}'>
+            <div class='med-pro-body'>
+              <div class='med-pro-top'>
+                <div class='med-selected-photo med-pro-photo' id='med_foto_box'><div class='blank'>SIN FOTO</div><small>Sin fotografía registrada</small></div>
 
-            <b class='med-req-star'>Fecha resultado</b><input id='med_fecha_resultado' type='date' name='fecha_resultado' required value='{hoy_iso()}'>
-            <b class='med-req-star'>Fecha vencimiento</b><input id='med_fecha_vencimiento' type='date' name='fecha_vencimiento' required value='{hoy_iso()}'>
+                <section class='med-pro-card med-pro-card-main'>
+                  <div class='med-step-title'>1. SELECCIONAR POSTULANTE</div>
+                  <div class='med-select-row'>
+                    <label class='med-field med-dni-field'><span>DNI del postulante <em>*</em></span><input id='med_dni_lookup' name='dni' maxlength='8' minlength='8' inputmode='numeric' required placeholder='Digite DNI del requerimiento' oninput='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onkeyup='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onchange='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' autocomplete='off'></label>
+                    <div id='med_aptitud_card' class='med-status-card pending'><h3>Estado médico</h3><div id='med_aptitud_val' class='med-status-value'>PENDIENTE</div></div>
+                  </div>
+                  <div id='med_decision_msg' class='med-block-msg'>Seleccione un postulante del requerimiento para registrar evaluación médica.</div>
+                  <div class='med-person'>
+                    <div><small>Trabajador</small><b id='med_nombre'>—</b></div>
+                    <div><small>DNI</small><b id='med_dni_show'>—</b></div>
+                    <div><small>Requerimiento</small><b id='med_req'>—</b></div>
+                    <div><small>Empresa</small><b id='med_empresa'>—</b></div>
+                    <div><small>Área / Cargo</small><b id='med_area_cargo'>—</b></div>
+                  </div>
+                </section>
+              </div>
 
-            <b>Restricciones</b><input id='med_restricciones' class='full' name='restricciones' placeholder='Ej. no cargar peso, uso de lentes, control médico, etc.'>
-            <b>Recomendaciones</b><input id='med_recomendaciones' class='full' name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'>
+              <div class='med-pro-two'>
+                <section class='med-pro-card'>
+                  <div class='med-step-title'>2. RESULTADO MÉDICO</div>
+                  <div class='med-field-row'><b class='med-req-star'>Aptitud médica</b><select id='med_aptitud_select' name='aptitud' required><option value=''>Seleccione aptitud</option><option>PENDIENTE</option><option>APTO</option><option>APTO CON RESTRICCIONES</option><option>NO APTO</option></select></div>
+                  <div class='med-field-row'><b class='med-req-star'>Tipo examen</b><select id='med_tipo_examen' name='tipo_examen' required><option value=''>Seleccione tipo</option><option>PRE OCUPACIONAL</option><option>PERIÓDICO</option><option>RETIRO</option><option>CAMBIO DE PUESTO</option></select></div>
+                  <div class='med-field-row'><b class='med-req-star'>Riesgo del puesto</b><select id='med_riesgo' name='riesgo_puesto' required><option value=''>Seleccione riesgo</option><option>BAJO</option><option>MEDIO</option><option>ALTO</option></select></div>
+                </section>
 
-            <b class='med-req-star'>Responsable seguimiento</b><input id='med_responsable' name='responsable_seguimiento' required placeholder='RRHH / SST / Médico ocupacional'>
-            <b class='med-req-star'>Resultado PDF/imagen</b><input id='med_archivo_resultado' type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg' required>
+                <section class='med-pro-card'>
+                  <div class='med-step-title'>3. VIGENCIA Y SEGUIMIENTO</div>
+                  <div class='med-date-grid'>
+                    <label class='med-field'><span>Fecha programada</span><input type='date' name='fecha_programada' value='{hoy_iso()}'></label>
+                    <label class='med-field'><span>Fecha resultado <em>*</em></span><input id='med_fecha_resultado' type='date' name='fecha_resultado' required value='{hoy_iso()}'></label>
+                    <label class='med-field'><span>Fecha vencimiento <em>*</em></span><input id='med_fecha_vencimiento' type='date' name='fecha_vencimiento' required value='{hoy_iso()}'></label>
+                  </div>
+                  <div class='med-date-grid med-date-grid-2'>
+                    <label class='med-field'><span>Responsable seguimiento <em>*</em></span><input id='med_responsable' name='responsable_seguimiento' required placeholder='RRHH / SST / Médico ocupacional'></label>
+                    <label class='med-field'><span>Restricciones</span><input id='med_restricciones' name='restricciones' placeholder='Opcional: no cargar peso, uso de EPP, etc.'></label>
+                  </div>
+                </section>
+              </div>
 
-            <b class='med-req-star'>Observación</b><textarea id='med_observacion' class='full' name='observacion' rows='2' required placeholder='Obligatorio: sustento del resultado. Para NO APTO/BLOQUEADO indique motivo y acción de seguimiento'></textarea>
-            <div class='span-all' style='display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap'>
-              <button type='submit' class='c-btn' onclick="return validarMedicaSeleccionada()">💾 Registrar evaluación</button>
+              <section class='med-pro-card'>
+                <div class='med-step-title'>4. OBSERVACIONES Y SUSTENTO</div>
+                <div class='med-support-grid'>
+                  <label class='med-field'><span>Recomendaciones</span><input id='med_recomendaciones' name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'></label>
+                  <label class='med-field'><span>Resultado PDF / imagen <em>*</em></span><input id='med_archivo_resultado' type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg' required></label>
+                </div>
+                <label class='med-field med-obs-field'><span>Observaciones <em>*</em></span><textarea id='med_observacion' name='observacion' rows='3' required placeholder='Obligatorio: sustento del resultado. Para NO APTO/BLOQUEADO indique motivo y acción de seguimiento.'></textarea></label>
+              </section>
+
+              <div class='med-submit-row'><button type='submit' class='c-btn med-submit-pro' onclick="return validarMedicaSeleccionada()">💾 Registrar evaluación</button></div>
             </div>
           </form>
           </div></div>
