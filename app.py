@@ -11441,6 +11441,63 @@ html,body{overflow-x:hidden!important;}
           .med-date-grid{{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:34px!important;margin-top:22px!important}}.med-date-grid-2{{grid-template-columns:1fr 1fr!important;margin-top:32px!important}}
           .med-support-grid{{display:grid!important;grid-template-columns:430px 1fr!important;gap:38px!important;align-items:start!important}}.med-submit-wrap{{text-align:center!important;margin-top:18px!important}}.med-submit-wrap .std-green-btn{{min-width:270px!important;height:48px!important;border-radius:8px!important}}
           @media(max-width:1050px){{.med-pro-top,.med-pro-two,.med-select-row,.med-support-grid{{grid-template-columns:1fr!important;gap:16px!important;margin-left:0!important;margin-right:0!important}}.med-person{{grid-template-columns:1fr!important}}.med-field-row{{grid-template-columns:1fr!important;height:auto!important}}.med-field-row b{{height:42px!important;border-right:0!important;border-bottom:1px solid #e6edf5!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important;gap:16px!important}}}}
+
+          /* FIX EXACTO BOCETO IMAGEN 2: tamaño real compacto, limpio y alineado */
+          .med-modal{{padding:8px!important;align-items:flex-start!important;justify-content:center!important;background:rgba(15,23,42,.56)!important}}
+          .med-modal-card-pro{{width:min(1220px,98.5vw)!important;max-height:96vh!important;border-radius:16px!important;border:1px solid #dfe8f1!important;box-shadow:0 20px 60px rgba(15,23,42,.28)!important;background:#fff!important;overflow:auto!important}}
+          .med-head-pro{{height:58px!important;min-height:58px!important;padding:10px 14px!important;background:#fff!important;border-bottom:1px solid #e8eef5!important;box-sizing:border-box!important}}
+          .med-head-pro h2{{font-size:22px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-.4px!important;gap:10px!important;margin:0!important;color:#071b34!important}}
+          .med-title-icon{{width:34px!important;height:34px!important;border-radius:10px!important;font-size:21px!important;background:#ecfdf5!important;border:1px solid #b8f0d2!important;color:#008248!important;flex:0 0 34px!important}}
+          .med-close{{height:36px!important;min-width:88px!important;padding:0 13px!important;border-radius:8px!important;font-size:13px!important;font-weight:1000!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:10px!important;background:#008c4a!important;color:#fff!important;box-shadow:0 8px 18px rgba(0,140,74,.18)!important}}
+          .med-close span{{font-size:17px!important;line-height:1!important;font-weight:700!important}}
+          .med-pro-body{{padding:14px!important;background:#fff!important}}
+          .med-pro-top{{display:grid!important;grid-template-columns:192px minmax(0,1fr)!important;gap:28px!important;margin:0 0 16px!important;align-items:stretch!important}}
+          .med-pro-photo{{height:208px!important;min-height:208px!important;width:auto!important;border-radius:13px!important;padding:18px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:12px!important;background:#fff!important;border:1px solid #dbe7ef!important;box-shadow:0 8px 22px rgba(15,23,42,.045)!important}}
+          .med-pro-photo .blank{{width:100px!important;height:100px!important;border-radius:13px!important;background:#f1f5f9!important;border:1px solid #dbe7ef!important;display:grid!important;place-items:center!important}}
+          .med-pro-photo .blank::before{{content:'👤'!important;font-size:44px!important;color:#cbd5e1!important;filter:grayscale(1)!important}}
+          .med-pro-photo small{{font-size:13px!important;line-height:1.35!important;text-align:center!important;color:#475569!important;font-weight:650!important}}
+          .med-pro-photo img{{width:100px!important;height:116px!important;border-radius:13px!important;object-fit:cover!important}}
+          .med-pro-card{{border:1px solid #dbe7ef!important;border-radius:13px!important;background:#fff!important;padding:16px!important;box-shadow:0 8px 22px rgba(15,23,42,.045)!important;box-sizing:border-box!important}}
+          .med-pro-card-main{{min-height:208px!important;height:208px!important;padding:16px!important;overflow:hidden!important}}
+          .med-step-title{{font-size:15px!important;line-height:1.1!important;margin:0 0 20px!important;color:#008248!important;font-weight:1000!important;text-transform:uppercase!important;letter-spacing:.2px!important}}
+          .med-select-row{{display:grid!important;grid-template-columns:minmax(300px,360px) minmax(330px,1fr)!important;gap:92px!important;align-items:end!important;margin:0 0 16px!important}}
+          .med-field{{gap:7px!important;color:#071b34!important;font-weight:900!important}}
+          .med-field span{{font-size:12px!important;line-height:1.15!important;font-weight:900!important;color:#071b34!important}}
+          .med-field em{{color:#e11d48!important;font-style:normal!important}}
+          .med-form-pro input,.med-form-pro select,.med-form-pro textarea{{font-size:13px!important;font-weight:500!important;border:1px solid #d1deeb!important;border-radius:8px!important;color:#334155!important;background:#fff!important;box-shadow:none!important;box-sizing:border-box!important}}
+          .med-form-pro input,.med-form-pro select{{height:36px!important;padding:0 12px!important}}
+          .med-form-pro input[type=date]{{width:100%!important;min-width:0!important;display:block!important}}
+          .med-search-control{{display:grid!important;grid-template-columns:1fr 39px!important;width:100%!important;height:36px!important}}
+          .med-search-control input{{border-radius:8px 0 0 8px!important;border-right:0!important;height:36px!important;box-shadow:none!important}}
+          .med-search-control button{{height:36px!important;border:1px solid #008248!important;border-radius:0 8px 8px 0!important;background:#f8fffb!important;color:#071b34!important;font-size:22px!important;line-height:1!important;cursor:pointer!important;display:grid!important;place-items:center!important;padding:0!important}}
+          #med_dni_lookup{{border-color:#d1deeb!important;box-shadow:none!important}}
+          .med-search-control:focus-within{{box-shadow:0 0 0 3px rgba(0,168,98,.12)!important;border-radius:8px!important}}
+          .med-status-card{{height:76px!important;min-height:76px!important;border-radius:12px!important;padding:14px!important;border:1px solid #dbe7ef!important;background:#fff!important;box-shadow:none!important;align-items:flex-start!important;display:flex!important;flex-direction:column!important;justify-content:center!important}}
+          .med-status-card h3{{font-size:12px!important;line-height:1!important;margin:0 0 8px!important;color:#263b59!important;font-weight:850!important;text-transform:none!important}}
+          .med-status-card .med-status-value{{height:28px!important;min-width:108px!important;padding:0 12px!important;border-radius:999px!important;font-size:13px!important;font-weight:1000!important;background:#fff7dd!important;color:#b45309!important;border:1px solid #ffd36e!important;display:inline-flex!important;align-items:center!important;justify-content:center!important}}
+          .med-status-card .med-status-value:before{{content:'◷';font-size:14px!important;margin-right:7px!important;color:#d97706!important}}
+          .med-block-msg{{height:42px!important;margin:0 0 12px!important;padding:0 12px!important;border-radius:10px!important;display:flex!important;align-items:center!important;justify-content:center!important;background:#ecfdf5!important;border:1px solid #b8f0d2!important;color:#007a3d!important;font-size:13px!important;font-weight:850!important;text-align:center!important}}
+          .med-person{{height:65px!important;display:grid!important;grid-template-columns:1.35fr .9fr 1.15fr 1.15fr 1.2fr!important;border:1px solid #dbe7ef!important;border-radius:12px!important;overflow:hidden!important;background:#fff!important;gap:0!important}}
+          .med-person div{{min-height:0!important;height:65px!important;padding:12px 14px!important;background:#fff!important;border:0!important;border-right:1px solid #e6edf5!important;border-radius:0!important;box-sizing:border-box!important}}
+          .med-person div:last-child{{border-right:0!important}}
+          .med-person small{{font-size:11px!important;line-height:1!important;color:#415875!important;font-weight:650!important;margin:0 0 10px!important}}
+          .med-person b{{font-size:15px!important;line-height:1!important;color:#071b34!important;font-weight:900!important;display:block!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}}
+          .med-pro-two{{display:grid!important;grid-template-columns:1fr 1.28fr!important;gap:18px!important;margin:0 0 16px!important}}
+          .med-pro-two .med-pro-card{{min-height:205px!important;padding:16px!important}}
+          .med-field-row{{height:46px!important;margin-bottom:12px!important;border:1px solid #dbe7ef!important;border-radius:10px!important;overflow:hidden!important;display:grid!important;grid-template-columns:185px minmax(0,1fr)!important;background:#fff!important;align-items:stretch!important}}
+          .med-field-row b{{height:44px!important;min-height:44px!important;padding:0 12px!important;background:#fbfdfc!important;border:0!important;border-right:1px solid #e6edf5!important;color:#071b34!important;font-size:13px!important;font-weight:900!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;text-align:left!important;box-sizing:border-box!important}}
+          .med-field-row select{{height:44px!important;border:0!important;border-radius:0!important;font-size:13px!important;font-weight:500!important;color:#334155!important;padding:0 12px!important;background:#fff!important;min-width:0!important}}
+          .med-date-grid{{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:38px!important;margin:16px 0 24px!important}}
+          .med-date-grid-2{{grid-template-columns:1fr 1fr!important;gap:28px!important;margin:0!important}}
+          .med-date-grid .med-field input{{height:36px!important;width:100%!important;min-width:0!important;padding:0 12px!important}}
+          .med-support-grid{{display:grid!important;grid-template-columns:380px 1fr!important;gap:32px!important;margin-bottom:12px!important;align-items:start!important}}
+          .med-support-grid input[type=file]{{height:36px!important;padding:6px 8px!important;font-size:12px!important;border:0!important;background:transparent!important}}
+          .med-obs-field{{margin-top:0!important}}
+          .med-form-pro textarea{{height:50px!important;min-height:50px!important;font-size:12px!important;line-height:1.3!important;border-radius:8px!important;padding:10px 12px!important}}
+          .med-submit-row{{display:flex!important;justify-content:center!important;padding:12px 0 2px!important}}
+          .med-submit-pro{{min-width:220px!important;width:220px!important;height:42px!important;border-radius:8px!important;background:#008c4a!important;color:#fff!important;font-size:14px!important;font-weight:1000!important;box-shadow:0 12px 22px rgba(0,140,74,.22)!important;border:0!important}}
+          @media(max-width:1050px){{.med-modal-card-pro{{width:99vw!important}}.med-pro-top,.med-pro-two,.med-select-row,.med-support-grid{{grid-template-columns:1fr!important;gap:14px!important}}.med-pro-card-main{{height:auto!important;min-height:0!important}}.med-person{{grid-template-columns:1fr!important;height:auto!important}}.med-person div{{height:auto!important;border-right:0!important;border-bottom:1px solid #e6edf5!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important;gap:12px!important}}.med-field-row{{grid-template-columns:1fr!important;height:auto!important}}.med-field-row b{{border-right:0!important;border-bottom:1px solid #e6edf5!important}}}}
+
 </style>
 
         <div class='med-page-pro'>
@@ -11468,7 +11525,7 @@ html,body{overflow-x:hidden!important;}
             </div>
           </div>
 
-          <input type='checkbox' id='modal_medica_registro' class='med-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='med-modal'><div class='med-modal-card med-modal-card-pro'><div class='med-modal-head med-head-pro'><h2><span class='med-title-icon'>🩺</span> Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar</label></div>
+          <input type='checkbox' id='modal_medica_registro' class='med-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='med-modal'><div class='med-modal-card med-modal-card-pro'><div class='med-modal-head med-head-pro'><h2><span class='med-title-icon'>🩺</span> Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar <span>×</span></label></div>
 
           <form id='form_medica' method='post' enctype='multipart/form-data' class='c-card med-form-grid med-form-pro' novalidate>
             <input type='hidden' name='accion' value='guardar_medica'>
@@ -11484,7 +11541,7 @@ html,body{overflow-x:hidden!important;}
                 <section class='med-pro-card med-pro-card-main'>
                   <div class='med-step-title'>1. SELECCIONAR POSTULANTE</div>
                   <div class='med-select-row'>
-                    <label class='med-field med-dni-field'><span>DNI del postulante <em>*</em></span><input id='med_dni_lookup' name='dni' maxlength='8' minlength='8' inputmode='numeric' required placeholder='Digite DNI del requerimiento' oninput='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onkeyup='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onchange='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' autocomplete='off'></label>
+                    <label class='med-field med-dni-field'><span>DNI del postulante <em>*</em></span><div class='med-search-control'><input id='med_dni_lookup' name='dni' maxlength='8' minlength='8' inputmode='numeric' required placeholder='Digite DNI del requerimiento' oninput='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onkeyup='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' onchange='window.buscarMedicaPorDni&&buscarMedicaPorDni(this.value)' autocomplete='off'><button type='button' aria-label='Buscar postulante' onclick='window.buscarMedicaPorDni&&buscarMedicaPorDni(document.getElementById("med_dni_lookup").value)'>⌕</button></div></label>
                     <div id='med_aptitud_card' class='med-status-card pending'><h3>Estado médico</h3><div id='med_aptitud_val' class='med-status-value'>PENDIENTE</div></div>
                   </div>
                   <div id='med_decision_msg' class='med-block-msg'>Seleccione un postulante del requerimiento para registrar evaluación médica.</div>
