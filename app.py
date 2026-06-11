@@ -11498,6 +11498,57 @@ html,body{overflow-x:hidden!important;}
           .med-submit-pro{{min-width:220px!important;width:220px!important;height:42px!important;border-radius:8px!important;background:#008c4a!important;color:#fff!important;font-size:14px!important;font-weight:1000!important;box-shadow:0 12px 22px rgba(0,140,74,.22)!important;border:0!important}}
           @media(max-width:1050px){{.med-modal-card-pro{{width:99vw!important}}.med-pro-top,.med-pro-two,.med-select-row,.med-support-grid{{grid-template-columns:1fr!important;gap:14px!important}}.med-pro-card-main{{height:auto!important;min-height:0!important}}.med-person{{grid-template-columns:1fr!important;height:auto!important}}.med-person div{{height:auto!important;border-right:0!important;border-bottom:1px solid #e6edf5!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important;gap:12px!important}}.med-field-row{{grid-template-columns:1fr!important;height:auto!important}}.med-field-row b{{border-right:0!important;border-bottom:1px solid #e6edf5!important}}}}
 
+
+          /* OVERRIDE FINAL 2026: Evaluación médica estilo Indumentaria/EPP: letras negras, campos grandes, más verde */
+          .med-modal{{padding:6px 10px!important;background:rgba(15,23,42,.56)!important;align-items:flex-start!important}}
+          .med-modal-card-pro{{width:min(1500px,98vw)!important;max-height:96vh!important;border-radius:24px!important;background:#fff!important;border:1.5px solid #c7dde8!important;box-shadow:0 28px 80px rgba(2,6,23,.34)!important;overflow:auto!important}}
+          .med-head-pro{{min-height:88px!important;height:88px!important;padding:18px 30px!important;background:#fff!important;border-bottom:1.5px solid #dbe7ef!important}}
+          .med-head-pro h2{{font-size:34px!important;font-weight:1000!important;color:#031a35!important;letter-spacing:-1px!important;display:flex!important;align-items:center!important;gap:14px!important}}
+          .med-title-icon{{width:48px!important;height:48px!important;border-radius:16px!important;background:#d8fbe3!important;border:1.5px solid #53de91!important;color:#007a3d!important;font-size:28px!important;display:grid!important;place-items:center!important}}
+          .med-close{{height:52px!important;min-width:112px!important;border-radius:15px!important;background:#07a85b!important;color:#02172f!important;font-size:17px!important;font-weight:1000!important;box-shadow:0 16px 35px rgba(7,168,91,.22)!important}}
+          .med-close span{{font-size:25px!important;color:#fff!important}}
+          .med-pro-body{{padding:22px 30px 26px!important;background:#fff!important}}
+          .med-pro-top{{display:grid!important;grid-template-columns:250px minmax(0,1fr)!important;gap:24px!important;margin:0 0 22px!important;align-items:stretch!important}}
+          .med-pro-photo{{height:278px!important;min-height:278px!important;border-radius:18px!important;border:1.5px solid #d2e3ec!important;background:#fff!important;box-shadow:none!important;padding:22px!important}}
+          .med-pro-photo .blank{{width:142px!important;height:142px!important;border-radius:18px!important;background:#f3f6f8!important;border:1.5px solid #cfdbe7!important}}
+          .med-pro-photo .blank::before{{font-size:62px!important}}
+          .med-pro-photo img{{width:142px!important;height:162px!important;border-radius:18px!important;object-fit:cover!important}}
+          .med-pro-photo small{{font-size:16px!important;line-height:1.35!important;color:#061b34!important;font-weight:900!important}}
+          .med-pro-card{{background:#fff!important;border:1.5px solid #d2e3ec!important;border-radius:18px!important;padding:0 18px 18px!important;box-shadow:none!important;overflow:hidden!important}}
+          .med-pro-card-main{{height:278px!important;min-height:278px!important;padding:0 18px 18px!important}}
+          .med-step-title{{margin:0 -18px 18px!important;padding:12px 18px!important;background:linear-gradient(180deg,#078d42,#006e32)!important;color:#fff!important;font-size:20px!important;font-weight:1000!important;line-height:1.1!important;text-transform:uppercase!important;letter-spacing:-.2px!important}}
+          .med-select-row{{display:grid!important;grid-template-columns:minmax(420px,1fr) minmax(430px,1.15fr)!important;gap:42px!important;align-items:end!important;margin:0 0 20px!important}}
+          .med-field{{display:grid!important;gap:9px!important}}
+          .med-field span{{font-size:16px!important;color:#031a35!important;font-weight:1000!important}}
+          .med-field em,.med-req-star:after{{color:#e11d48!important;font-style:normal!important}}
+          .med-form-pro input,.med-form-pro select,.med-form-pro textarea{{border:1.5px solid #c6dae8!important;border-radius:14px!important;background:#fff!important;color:#031a35!important;font-size:17px!important;font-weight:850!important;box-shadow:none!important}}
+          .med-form-pro input,.med-form-pro select{{height:56px!important;padding:0 18px!important}}
+          .med-search-control{{height:56px!important;grid-template-columns:1fr 58px!important}}
+          .med-search-control input{{height:56px!important;border-radius:14px 0 0 14px!important;border:1.5px solid #54dc91!important;border-right:0!important;font-size:18px!important;font-weight:850!important}}
+          .med-search-control button{{height:56px!important;border-radius:0 14px 14px 0!important;background:#008a48!important;color:#fff!important;border:1.5px solid #008a48!important;font-size:34px!important}}
+          .med-status-card{{height:88px!important;min-height:88px!important;border-radius:15px!important;background:#ecfff5!important;border:1.5px solid #8fe9b6!important;padding:14px 18px!important;box-shadow:none!important}}
+          .med-status-card h3{{font-size:16px!important;color:#031a35!important;font-weight:1000!important;margin:0 0 10px!important}}
+          .med-status-card .med-status-value{{height:34px!important;min-width:138px!important;padding:0 16px!important;border-radius:999px!important;font-size:17px!important;font-weight:1000!important;background:#fff7dd!important;color:#b45309!important;border:1.5px solid #ffc76b!important}}
+          .med-block-msg{{height:42px!important;margin:0 0 16px!important;border-radius:14px!important;background:#dffbe9!important;border:1.5px solid #86efac!important;color:#007a3d!important;font-size:16px!important;font-weight:1000!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;padding:0 18px!important}}
+          .med-person{{height:80px!important;grid-template-columns:1.45fr .8fr 1.15fr 1.1fr 1.18fr!important;border:1.5px solid #c6dae8!important;border-radius:16px!important;overflow:hidden!important}}
+          .med-person div{{height:80px!important;padding:14px 18px!important;background:#fff!important;border-right:1.5px solid #dbe7ef!important}}
+          .med-person small{{font-size:15px!important;line-height:1!important;color:#031a35!important;font-weight:900!important;margin:0 0 12px!important}}
+          .med-person b{{font-size:20px!important;line-height:1.05!important;color:#031a35!important;font-weight:1000!important}}
+          .med-pro-two{{display:grid!important;grid-template-columns:.86fr 1.14fr!important;gap:24px!important;margin:0 0 22px!important}}
+          .med-pro-two .med-pro-card{{min-height:250px!important;padding:0 18px 18px!important}}
+          .med-field-row{{height:58px!important;margin-bottom:14px!important;border:1.5px solid #c6dae8!important;border-radius:15px!important;display:grid!important;grid-template-columns:230px minmax(0,1fr)!important;overflow:hidden!important;background:#fff!important}}
+          .med-field-row b{{height:58px!important;min-height:58px!important;background:#d8fbe3!important;border-right:1.5px solid #60e89c!important;color:#031a35!important;font-size:17px!important;font-weight:1000!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;text-align:right!important;padding:0 18px!important}}
+          .med-field-row select{{height:58px!important;border:0!important;border-radius:0!important;font-size:18px!important;font-weight:1000!important;color:#031a35!important;padding:0 20px!important}}
+          .med-date-grid{{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:36px!important;margin:18px 0 30px!important}}
+          .med-date-grid-2{{grid-template-columns:1fr 1fr!important;gap:42px!important;margin:0!important}}
+          .med-date-grid .med-field input{{height:56px!important;font-size:17px!important;font-weight:850!important}}
+          .med-support-grid{{display:grid!important;grid-template-columns:470px 1fr!important;gap:42px!important;margin-bottom:18px!important}}
+          .med-support-grid input[type=file]{{height:56px!important;padding:13px 16px!important;border:1.5px solid #c6dae8!important;background:#fff!important;font-size:15px!important;font-weight:800!important}}
+          .med-form-pro textarea{{height:76px!important;min-height:76px!important;font-size:16px!important;line-height:1.35!important;border-radius:14px!important;padding:14px 16px!important;font-weight:800!important}}
+          .med-submit-row{{display:flex!important;justify-content:center!important;padding:18px 0 0!important}}
+          .med-submit-pro{{min-width:500px!important;width:500px!important;height:62px!important;border-radius:16px!important;background:linear-gradient(180deg,#11b970,#008a48)!important;color:#fff!important;font-size:24px!important;font-weight:1000!important;box-shadow:0 20px 44px rgba(0,140,74,.28)!important;border:0!important}}
+          @media(max-width:1050px){{.med-head-pro{{height:auto!important;min-height:76px!important}}.med-head-pro h2{{font-size:26px!important}}.med-pro-top,.med-pro-two,.med-select-row,.med-support-grid{{grid-template-columns:1fr!important;gap:16px!important}}.med-pro-card-main{{height:auto!important;min-height:0!important}}.med-person{{grid-template-columns:1fr!important;height:auto!important}}.med-person div{{height:auto!important;border-right:0!important;border-bottom:1px solid #dbe7ef!important}}.med-field-row{{grid-template-columns:1fr!important;height:auto!important}}.med-field-row b{{justify-content:flex-start!important;text-align:left!important;border-right:0!important;border-bottom:1px solid #60e89c!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important;gap:14px!important}}.med-submit-pro{{width:100%!important;min-width:0!important}}}}
+
 </style>
 
         <div class='med-page-pro'>
