@@ -12444,6 +12444,374 @@ html,body{overflow-x:hidden!important;}
 
 
 
+
+/* === OVERRIDE FINAL 2026: INDUMENTARIA IGUAL A MOCKUP APROBADO === */
+.ind-modal{{
+  padding:4px!important;
+  align-items:flex-start!important;
+  justify-content:center!important;
+  background:rgba(15,23,42,.55)!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+}}
+.ind-modal-card.ind-modal-epp-v2{{
+  width:min(1510px,99vw)!important;
+  max-width:1510px!important;
+  max-height:98vh!important;
+  margin:0 auto!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  border:1px solid #cfdbe5!important;
+  box-shadow:0 28px 80px rgba(15,23,42,.30)!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+}}
+.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar{{width:10px!important;height:0!important}}
+.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar-thumb{{background:#8b8f93!important;border-radius:999px!important}}
+.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar-track{{background:#eef2f5!important;border-radius:999px!important}}
+.ind-modal-epp-v2 .ind-modal-head{{
+  height:86px!important;
+  min-height:86px!important;
+  padding:0 36px 0 30px!important;
+  background:#fff!important;
+  border-bottom:3px solid #008a48!important;
+  position:sticky!important;
+  top:0!important;
+  z-index:30!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:18px!important;
+}}
+.ind-modal-epp-v2 .ind-modal-head h2{{
+  margin:0!important;
+  color:#082744!important;
+  font-size:42px!important;
+  line-height:1!important;
+  font-weight:1000!important;
+  letter-spacing:-1.4px!important;
+  text-transform:none!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:20px!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}}
+.ind-modal-epp-v2 .ind-head-icon{{
+  width:56px!important;
+  height:56px!important;
+  min-width:56px!important;
+  border-radius:12px!important;
+  background:#eafff2!important;
+  border:1.5px solid #93e7b3!important;
+  color:#008a48!important;
+  display:grid!important;
+  place-items:center!important;
+}}
+.ind-modal-epp-v2 .ind-head-icon i{{
+  display:inline-block!important;
+  font-size:34px!important;
+  color:#008a48!important;
+}}
+.ind-modal-epp-v2 .ind-head-icon:before{{display:none!important;content:''!important}}
+.ind-modal-epp-v2 .ind-close{{
+  width:124px!important;
+  min-width:124px!important;
+  height:56px!important;
+  min-height:56px!important;
+  padding:0 18px!important;
+  border-radius:12px!important;
+  background:linear-gradient(135deg,#008a48,#10b565)!important;
+  color:#fff!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  font-size:18px!important;
+  font-weight:1000!important;
+  box-shadow:0 16px 28px rgba(0,138,72,.24)!important;
+  white-space:nowrap!important;
+}}
+.ind-modal-body-epp{{
+  display:grid!important;
+  grid-template-columns:280px minmax(0,1fr)!important;
+  gap:22px!important;
+  padding:18px 30px 14px!important;
+}}
+.ind-photo-card{{
+  border:1.4px solid #d8e2ec!important;
+  border-radius:14px!important;
+  min-height:340px!important;
+  padding:20px!important;
+  background:#fff!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:28px!important;
+}}
+.ind-photo-box{{
+  width:158px!important;
+  height:165px!important;
+  border:1.2px solid #d4dde9!important;
+  border-radius:13px!important;
+  background:linear-gradient(145deg,#f8fafc,#eef3f8)!important;
+  display:grid!important;
+  place-items:center!important;
+  overflow:hidden!important;
+}}
+.ind-photo-box i{{font-size:74px!important;color:#202020!important}}
+.ind-photo-box img{{width:100%!important;height:100%!important;object-fit:cover!important}}
+.ind-photo-card b{{
+  color:#45556f!important;
+  font-size:17px!important;
+  line-height:1.28!important;
+  font-weight:1000!important;
+  text-align:center!important;
+  max-width:190px!important;
+}}
+.ind-form.ind-form-epp-v2{{
+  padding:0!important;
+  display:grid!important;
+  grid-template-columns:220px minmax(280px,1fr) 220px minmax(280px,1fr)!important;
+  gap:10px 12px!important;
+  align-items:center!important;
+  background:#fff!important;
+  width:100%!important;
+  min-width:0!important;
+  overflow-x:hidden!important;
+}}
+.ind-form-epp-v2 *{{box-sizing:border-box!important;min-width:0!important}}
+.ind-form-epp-v2 input,
+.ind-form-epp-v2 select,
+.ind-form-epp-v2 textarea{{
+  width:100%!important;
+  max-width:100%!important;
+  height:46px!important;
+  min-height:46px!important;
+  border:1.3px solid #d4e0eb!important;
+  border-radius:8px!important;
+  background:#fff!important;
+  color:#071b34!important;
+  font-size:15px!important;
+  font-weight:850!important;
+  padding:0 14px!important;
+  box-shadow:0 1px 2px rgba(15,23,42,.03) inset!important;
+}}
+.ind-form-epp-v2 input::placeholder,
+.ind-form-epp-v2 textarea::placeholder{{color:#71819a!important;font-weight:850!important}}
+.ind-form-epp-v2 select{{appearance:auto!important}}
+.ind-form-epp-v2 textarea{{
+  height:64px!important;
+  min-height:64px!important;
+  padding:14px!important;
+  resize:vertical!important;
+  line-height:1.2!important;
+}}
+.ind-form-epp-v2 input[type=file]{{
+  font-size:13px!important;
+  padding:10px!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+}}
+.ind-form-epp-v2 .section{{
+  grid-column:1/-1!important;
+  height:40px!important;
+  min-height:40px!important;
+  margin:0!important;
+  border-radius:10px 10px 0 0!important;
+  padding:0 20px!important;
+  background:linear-gradient(135deg,#007f43,#10b565)!important;
+  color:#fff!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:12px!important;
+  font-size:21px!important;
+  font-weight:1000!important;
+  text-transform:uppercase!important;
+  letter-spacing:-.3px!important;
+  box-shadow:0 8px 18px rgba(0,138,72,.16)!important;
+}}
+.ind-form-epp-v2 .section span{{
+  width:26px!important;
+  height:26px!important;
+  border-radius:999px!important;
+  background:#fff!important;
+  color:#008a48!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  font-size:18px!important;
+  font-weight:1000!important;
+  margin:0!important;
+}}
+.ind-form-epp-v2 b{{
+  height:46px!important;
+  min-height:46px!important;
+  border-radius:8px!important;
+  background:linear-gradient(135deg,#e3faed,#f6fff9)!important;
+  border:1.4px solid #b6ebcb!important;
+  color:#071b34!important;
+  font-size:14px!important;
+  font-weight:1000!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:11px!important;
+  text-align:left!important;
+  padding:0 14px!important;
+  line-height:1.08!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  box-shadow:0 6px 14px rgba(0,138,72,.04)!important;
+}}
+.ind-form-epp-v2 b.req{{
+  background:linear-gradient(135deg,#d9f8e4,#f5fff9)!important;
+  border:1.7px solid #69e392!important;
+}}
+.ind-form-epp-v2 b.req:after{{
+  content:'*'!important;
+  color:#ef1111!important;
+  margin-left:auto!important;
+  font-size:16px!important;
+  font-weight:1000!important;
+}}
+.ind-form-epp-v2 b[class*="ind-lbl-"]::before{{display:none!important;content:''!important}}
+.ind-form-epp-v2 b i{{
+  display:inline-block!important;
+  min-width:28px!important;
+  color:#008a48!important;
+  font-size:22px!important;
+  line-height:1!important;
+  text-align:center!important;
+  font-weight:900!important;
+}}
+.dni-search-wrap{{
+  display:grid!important;
+  grid-template-columns:1fr 62px!important;
+  gap:0!important;
+}}
+.dni-search-wrap input{{border-radius:8px 0 0 8px!important}}
+.dni-search-btn{{
+  height:52px!important;
+  min-height:52px!important;
+  border:0!important;
+  border-radius:0 12px 12px 0!important;
+  background:#008a48!important;
+  color:#fff!important;
+  font-size:30px!important;
+  display:grid!important;
+  place-items:center!important;
+  cursor:pointer!important;
+  box-shadow:0 8px 18px rgba(0,138,72,.20)!important;
+}}
+.ind-delivery-state{{
+  height:84px!important;
+  min-height:84px!important;
+  border-radius:12px!important;
+  border:1.3px solid #b8efd0!important;
+  background:linear-gradient(135deg,#f7fffa,#ebfff3)!important;
+  padding:13px 20px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  gap:8px!important;
+  justify-content:center!important;
+}}
+.ind-delivery-state strong{{
+  color:#071b34!important;
+  font-size:17px!important;
+  font-weight:1000!important;
+}}
+.ind-delivery-state span{{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  width:max-content!important;
+  border-radius:999px!important;
+  background:#fff4db!important;
+  border:1px solid #ffd28a!important;
+  color:#f97316!important;
+  padding:9px 20px!important;
+  font-size:16px!important;
+  font-weight:1000!important;
+}}
+.ind-req-line{{
+  grid-column:1/-1!important;
+  height:42px!important;
+  min-height:42px!important;
+  border-radius:8px!important;
+  margin:0!important;
+  background:linear-gradient(135deg,#e2faea,#f2fff7)!important;
+  border:1.3px solid #a8e7c1!important;
+  color:#008a48!important;
+  font-size:14px!important;
+  font-weight:1000!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:10px!important;
+  padding:0 18px!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+}}
+.ind-req-line strong{{color:#071b34!important;font-size:13px!important;font-weight:1000!important}}
+.ind-req-line em{{
+  background:#008a48!important;
+  color:#fff!important;
+  border-radius:6px!important;
+  padding:7px 12px!important;
+  font-size:13px!important;
+  font-style:normal!important;
+  font-weight:1000!important;
+}}
+.ind-req-line span{{color:#008a48!important;font-size:14px!important;font-weight:1000!important}}
+.ind-lbl-obs + textarea{{grid-column:2/4!important}}
+.ind-lbl-obs + textarea + span{{display:none!important}}
+.ind-lbl-obs + textarea + span + .ind-submit-cell,
+.ind-submit-cell{{
+  grid-column:4/5!important;
+  align-self:stretch!important;
+  display:block!important;
+}}
+.ind-submit-cell .ind-btn.green{{
+  width:100%!important;
+  height:64px!important;
+  min-height:64px!important;
+  border-radius:9px!important;
+  border:0!important;
+  background:linear-gradient(135deg,#008a48,#11b76a)!important;
+  color:#fff!important;
+  font-size:28px!important;
+  font-weight:1000!important;
+  box-shadow:0 16px 30px rgba(0,138,72,.24)!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:10px!important;
+  padding:0 14px!important;
+}}
+.ind-alert{{display:none!important}}
+.field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.14)!important}}
+@media(max-width:1050px){{
+  .ind-modal-card.ind-modal-epp-v2{{width:99vw!important;max-width:99vw!important}}
+  .ind-modal-epp-v2 .ind-modal-head h2{{font-size:30px!important}}
+  .ind-modal-body-epp{{grid-template-columns:240px minmax(0,1fr)!important;padding:14px!important}}
+  .ind-form.ind-form-epp-v2{{grid-template-columns:180px minmax(180px,1fr) 180px minmax(220px,1fr)!important}}
+}}
+@media(max-width:760px){{
+  .ind-modal-body-epp{{grid-template-columns:1fr!important}}
+  .ind-photo-card{{min-height:auto!important;padding:18px!important}}
+  .ind-form.ind-form-epp-v2{{grid-template-columns:1fr!important}}
+  .ind-form-epp-v2 .section,
+  .dni-search-wrap,
+  .ind-delivery-state,
+  .ind-req-line,
+  .ind-lbl-obs + textarea,
+  .ind-submit-cell{{grid-column:1/-1!important}}
+  .ind-modal-epp-v2 .ind-modal-head{{height:auto!important;min-height:74px!important;flex-wrap:wrap!important;padding:12px!important}}
+  .ind-modal-epp-v2 .ind-modal-head h2{{font-size:24px!important;white-space:normal!important}}
+  .ind-modal-epp-v2 .ind-close{{width:100%!important}}
+}}
+
         </style>
         <section class='ind-page'>
           {modulo_requerimiento_header_html('🦺','Indumentaria y EPP','Seleccione primero el requerimiento, revise postulantes y registre una sola entrega con prendas, cargo firmado y responsable.','indumentaria', "<option value=''>Seleccione requerimiento</option>" + req_options_indumentaria, req_filtro_indumentaria)}
