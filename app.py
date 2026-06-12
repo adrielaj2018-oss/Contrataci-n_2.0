@@ -8558,6 +8558,10 @@ def admin_contratacion():
                 except Exception:
                     pass
             nuevo_estado = clean(request.form.get('nuevo_estado')) or 'LISTO PARA IMPRIMIR'
+            if nuevo_estado.upper() == 'IMPRIMIR':
+                nuevo_estado = 'IMPRESO'
+            elif nuevo_estado.upper() in ('GENERAR CARGO', 'GENERAR CARGO FIRMADO'):
+                nuevo_estado = 'CARGO GENERADO'
             req_return = clean(request.form.get('req_return'))
             with db() as con_cfg:
                 cfg_zebra_actual = con_cfg.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
@@ -9525,8 +9529,10 @@ def admin_contratacion():
     def h(v):
         return html.escape(str(v or ''))
     requerimiento_sel = clean(request.args.get('req'))
-    ingresos_mostrar = [r for r in ingresos if not requerimiento_sel or clean(r['requerimiento']) == requerimiento_sel]
-    trabajadores_proceso_mostrar = [r for r in trabajadores_proceso if not requerimiento_sel or clean(r['requerimiento']) == requerimiento_sel]
+    def _req_key_cmp(v):
+        return re.sub(r'\s+', ' ', clean(v)).strip().upper()
+    ingresos_mostrar = [r for r in ingresos if not requerimiento_sel or _req_key_cmp(row_get(r,'requerimiento')) == _req_key_cmp(requerimiento_sel)]
+    trabajadores_proceso_mostrar = [r for r in trabajadores_proceso if not requerimiento_sel or _req_key_cmp(row_get(r,'requerimiento')) == _req_key_cmp(requerimiento_sel)]
     req_sel_row = None
     for _rq in requerimientos:
         if requerimiento_sel and clean(_rq['requerimiento']) == requerimiento_sel:
@@ -10934,7 +10940,7 @@ html,body{overflow-x:hidden!important;}
             <input type='hidden' name='volver' value='nuevos'>
             <input type='hidden' name='campo_estado' value='estado'>
           <div class='pp-filter-card'><div class='pp-field'><label>Buscar por DNI</label><div class='pp-search-wrap'><input class='pp-control' oninput="filtrarTabla(this,'tabla_pp_final')" placeholder='Buscar por DNI'><span>⌕</span></div></div><div class='pp-field'><label>Filtrar / cambio masivo de estado</label><select class='pp-control pp-state-filter' onchange="filtrarTabla(this,'tabla_pp_final')"><option value=''>Todos los estados</option><option>Completo</option><option>En validación</option><option>Incompleto</option><option>Observado</option></select><select class='pp-control pp-mass-select legacy-mass-select' name='nuevo_estado'><option>EN PROCESO</option><option>APROBADO</option><option>OBSERVADO</option><option>ANULADO</option></select><button class='pp-btn-green pp-mass-btn' type='submit'>Aplicar estado</button></div><div class='pp-field'><span class="registrar-title" style="display:none"></span><label for='modal_postulante_registro' class='pp-btn-green pp-register-btn'>Registrar</label></div></div>
-          <div class='pp-table-card'><div class='pp-table-head'><h3>LISTA DE POSTULANTES</h3><div class='pp-table-actions'><a class='pp-light-btn' href='/admin/plantilla_gestion/contratacion' title='Descargar / exportar formato Excel'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 3h10l6 6v12H4z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M14 3v6h6M8 12l4 6m0-6l-4 6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Exportar Excel</span></a><button type='button' class='pp-light-btn' onclick='window.print()' title='Imprimir lista'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z' fill='none' stroke='currentColor' stroke-width='2' stroke-linejoin='round'/></svg><span>Imprimir</span></button><button type='button' class='pp-btn-green' onclick='abrirFicha360Seleccionada()' title='Abrir ficha del primer/seleccionado postulante'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 2h9l5 5v15H6z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M15 2v6h5M9 13h6M9 17h6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Ver ficha 360°</span></button></div></div><div class='pp-table-wrap'><table id='tabla_pp_final' class='pp-table'><thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_pp_final input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr></thead><tbody>{tabla_postulantes}</tbody></table></div><div class='pp-demo-note'>ⓘ Mostrando {len(real_rows) if real_rows else 3} de {len(real_rows) if real_rows else 3} postulantes{'' if real_rows else ' (demos visuales hasta seleccionar un requerimiento con datos reales)'}.</div></div>
+          <div class='pp-table-card'><div class='pp-table-head'><h3>LISTA DE POSTULANTES</h3><div class='pp-table-actions'><a class='pp-light-btn' href='/admin/plantilla_gestion/contratacion' title='Descargar / exportar formato Excel'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 3h10l6 6v12H4z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M14 3v6h6M8 12l4 6m0-6l-4 6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Exportar Excel</span></a><button type='button' class='pp-light-btn' onclick='window.print()' title='Imprimir lista'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z' fill='none' stroke='currentColor' stroke-width='2' stroke-linejoin='round'/></svg><span>Imprimir</span></button><button type='button' class='pp-btn-green' onclick='abrirFicha360Seleccionada()' title='Abrir ficha del primer/seleccionado postulante'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 2h9l5 5v15H6z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M15 2v6h5M9 13h6M9 17h6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Ver ficha 360°</span></button></div></div><div class='pp-table-wrap'><table id='tabla_pp_final' class='pp-table'><thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_medica_postulantes input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr></thead><tbody>{tabla_postulantes}</tbody></table></div><div class='pp-demo-note'>ⓘ Mostrando {len(real_rows) if real_rows else 3} de {len(real_rows) if real_rows else 3} postulantes{'' if real_rows else ' (demos visuales hasta seleccionar un requerimiento con datos reales)'}.</div></div>
         </section>
           </form>
         <div class='pp-registro-separador'><h3>Registro de postulante</h3><p>Formulario operativo restaurado desde contratación.py.</p></div>
@@ -11165,7 +11171,10 @@ html,body{overflow-x:hidden!important;}
                 return 'ok'
             return 'pending'
 
-        lista_med = [r for r in trabajadores_proceso_mostrar if flujo_postulante_completo(r)] if req_actual else []
+        # En Evaluación Médica deben aparecer TODOS los postulantes registrados en el requerimiento.
+        # Antes se filtraba con flujo_postulante_completo(), por eso algunos DNI registrados en Postulantes
+        # no aparecían si aún tenían campos pendientes. La evaluación médica es parte del flujo y no debe ocultarlos.
+        lista_med = list(trabajadores_proceso_mostrar) if req_actual else []
         total_med_req = len(lista_med)
         aptos_med_req = 0
         no_aptos_med_req = 0
@@ -11228,7 +11237,7 @@ html,body{overflow-x:hidden!important;}
 
         medica_json = json.dumps(medica_data, ensure_ascii=False)
         if req_actual:
-            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='13'>No hay postulantes registrados para este requerimiento.</td></tr>"
+            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='13'><div class='med-empty'>No hay postulantes visibles para este requerimiento. Verifique que el registro en Postulantes tenga el mismo requerimiento seleccionado y que no esté ANULADO/CANCELADO.</div></td></tr>"
         else:
             med_table_html = "<tr><td colspan='13'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
 
@@ -11619,11 +11628,12 @@ html,body{overflow-x:hidden!important;}
             <div class='med-table-head'><h3>LISTA DE POSTULANTES</h3></div>
             <div class='pp-table-wrap med-postulantes-wrap'>
               <table id='tabla_medica_postulantes' class='pp-table med-pp-table'>
-                <thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_pp_final input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr></thead>
+                <thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_medica_postulantes input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr></thead>
                 <tbody>{med_table_html}</tbody>
               </table>
             </div>
           </div>
+          </form>
 
           <input type='checkbox' id='modal_medica_registro' class='med-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='med-modal'><div class='med-modal-card med-modal-card-pro'><div class='med-modal-head med-head-pro'><h2><span class='med-title-icon'>🩺</span> Registro de evaluación médica</h2><label for='modal_medica_registro' class='med-close'>Cerrar <span>×</span></label></div>
 
@@ -12762,7 +12772,7 @@ html,body{overflow-x:hidden!important;}
               <div class='fc-toolbar-premium'>
                 <label class='fc-field fc-dni'><span>Buscar por DNI</span><input oninput="filtrarTabla(this,'tabla_fotocheck')" placeholder='Buscar por DNI'></label>
                 <label class='fc-field fc-estado'><span>Estado</span><select onchange="filtrarTabla(this,'tabla_fotocheck')"><option>Todos los estados</option><option>PENDIENTE</option><option>FOTO APROBADA</option><option>LISTO PARA IMPRIMIR</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select></label>
-                <label class='fc-field fc-cambio'><span>Cambio estado</span><select name='nuevo_estado'><option>PENDIENTE</option><option>FOTO APROBADA</option><option>LISTO PARA IMPRIMIR</option><option>ENVIADO A ZEBRA ZC300</option><option>IMPRESO</option><option>CARGO GENERADO</option><option>ENTREGADO</option><option>OBSERVADO</option></select></label>
+                <label class='fc-field fc-cambio'><span>Cambio estado</span><select name='nuevo_estado'><option value='IMPRIMIR'>IMPRIMIR</option><option value='GENERAR CARGO'>GENERAR CARGO</option></select></label>
                 <button class='fc-btn-apply' name='accion' value='fotocheck_accion_masiva'>Aplicar estado</button>
                 <a class='fc-btn-register' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Registrar</a>
               </div>
@@ -15301,6 +15311,41 @@ ONE_LINE_PREMIUM_FIX = """
 """
 BASE = BASE.replace('</style>', ONE_LINE_PREMIUM_FIX + '\n</style>')
 
+
+
+# =============================
+# AJUSTE 2026-06-12: ocultar cambio masivo fuera de Inducción y Fotocheck
+# =============================
+try:
+    OCULTAR_MASIVO_NO_PERMITIDO = """
+    <style>
+      /* Se mantiene cambio masivo SOLO en Inducción (.mod360) y Fotocheck (.fc-*).
+         Se oculta en Postulantes, Evaluación Médica e Indumentaria. */
+      .main .pp-filter-card .pp-mass-select,
+      .main .pp-filter-card .pp-mass-btn,
+      .main .std-filter-card .legacy-mass-select,
+      .main .std-filter-card .mass-apply-btn,
+      .main form.ind-tools .legacy-mass-select,
+      .main form.ind-tools .mass-apply-btn{
+        display:none!important;
+        visibility:hidden!important;
+      }
+      .main .pp-filter-card,
+      .main .std-filter-card,
+      .main form.ind-tools{
+        grid-template-columns:minmax(280px,1fr) minmax(220px,.55fr) auto!important;
+      }
+      .main .mod360-filter-card .legacy-mass-select,
+      .main .mod360-filter-card .mass-apply-btn{
+        display:inline-flex!important;
+        visibility:visible!important;
+      }
+      .fc-field.fc-cambio select option{font-weight:900!important;}
+    </style>
+    """
+    BASE = BASE.replace('</body>', OCULTAR_MASIVO_NO_PERMITIDO + '\n</body>')
+except Exception:
+    pass
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
