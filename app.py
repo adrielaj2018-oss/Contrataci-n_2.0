@@ -11567,6 +11567,37 @@ html,body{overflow-x:hidden!important;}
           .med-field .campo-opcional{{color:#64748b!important;font-size:13px!important;font-weight:850!important;margin-left:6px!important}}
           @media(max-width:1050px){{.med-select-row,.med-support-grid{{grid-template-columns:1fr!important}}.med-person{{min-height:0!important}}.med-person div{{min-height:74px!important}}.med-status-card .med-status-value,.med-status-card.warn .med-status-value{{min-width:0!important;white-space:normal!important}}}}
 
+
+          /* CORRECCIÓN FINAL 2026-06-12: evaluación médica presentable, sin scroll horizontal */
+          .med-modal{{overflow:hidden!important;padding:8px 10px!important;box-sizing:border-box!important}}
+          .med-modal-card-pro{{width:min(1320px,96vw)!important;max-width:96vw!important;overflow-y:auto!important;overflow-x:hidden!important;box-sizing:border-box!important}}
+          .med-modal-card-pro *{{box-sizing:border-box!important;max-width:100%!important}}
+          .med-pro-body{{padding:18px 22px 22px!important;overflow-x:hidden!important}}
+          .med-pro-top{{grid-template-columns:250px minmax(0,1fr)!important;gap:28px!important;margin:0 0 18px!important;max-width:100%!important}}
+          .med-pro-photo{{height:286px!important;min-height:286px!important;align-self:start!important}}
+          .med-pro-card-main{{min-height:286px!important;height:auto!important;overflow:hidden!important}}
+          .med-select-row{{grid-template-columns:minmax(0,1fr) 330px!important;gap:26px!important;align-items:stretch!important;max-width:100%!important}}
+          .med-search-control{{grid-template-columns:minmax(0,1fr) 58px!important;max-width:100%!important}}
+          .med-status-card{{width:100%!important;min-width:0!important;max-width:330px!important;min-height:112px!important;height:auto!important;overflow:hidden!important;align-self:stretch!important;padding:18px!important;background:#ecfff5!important;border:1.5px solid #8fe9b6!important;border-radius:16px!important}}
+          .med-status-card h3{{font-size:16px!important;color:#031a35!important;font-weight:1000!important;margin:0 0 12px!important;white-space:normal!important}}
+          .med-status-card .med-status-value{{max-width:100%!important;white-space:normal!important;text-align:center!important;line-height:1.15!important;word-break:normal!important;overflow-wrap:break-word!important}}
+          .med-status-card.danger{{background:#f94144!important;border-color:#f94144!important;color:#031a35!important}}
+          .med-status-card.danger h3{{color:#031a35!important}}
+          .med-status-card.danger .med-status-value{{background:#ffe4e6!important;color:#a00020!important;border-color:#ffe4e6!important;min-width:150px!important;width:max-content!important;max-width:100%!important}}
+          .med-status-card.warn{{background:#ecfff5!important;border-color:#8fe9b6!important}}
+          .med-status-card.warn .med-status-value{{min-width:0!important;width:max-content!important;max-width:100%!important;background:#fff7dd!important;color:#9a6500!important;border-color:#ffc76b!important}}
+          .med-status-card.ok{{background:#ecfff5!important;border-color:#8fe9b6!important}}
+          .med-status-card.ok .med-status-value{{min-width:132px!important;width:max-content!important;max-width:100%!important;background:#e7fff1!important;color:#007a3d!important;border-color:#7be6aa!important}}
+          .med-person{{grid-template-columns:minmax(230px,1.55fr) minmax(105px,.65fr) minmax(150px,.95fr) minmax(150px,.9fr) minmax(170px,1fr)!important;min-width:0!important;width:100%!important;overflow:hidden!important}}
+          .med-person div{{min-width:0!important;overflow:hidden!important;padding:14px 16px!important}}
+          .med-person b{{font-size:17px!important;line-height:1.2!important;white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important;display:block!important}}
+          #med_nombre{{font-size:18px!important;line-height:1.15!important}}
+          .med-pro-two{{grid-template-columns:minmax(0,.86fr) minmax(0,1.14fr)!important;gap:22px!important;max-width:100%!important;overflow:hidden!important}}
+          .med-date-grid{{gap:18px!important}}.med-date-grid-2{{gap:22px!important}}
+          .med-support-grid{{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr)!important;gap:24px!important;max-width:100%!important;overflow:hidden!important}}
+          #med_archivo_resultado{{height:auto!important;min-height:56px!important;white-space:normal!important;overflow:hidden!important}}
+          @media(max-width:1050px){{.med-modal-card-pro{{width:96vw!important;max-width:96vw!important}}.med-pro-top,.med-select-row,.med-pro-two,.med-support-grid{{grid-template-columns:1fr!important;gap:16px!important}}.med-status-card{{max-width:none!important}}.med-person{{grid-template-columns:1fr!important}}.med-pro-photo{{height:auto!important;min-height:220px!important}}}}
+
 </style>
 
         <div class='med-page-pro'>
