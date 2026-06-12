@@ -10784,44 +10784,53 @@ html,body{overflow-x:hidden!important;}
         <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar requerimiento, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Requerimiento</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle / eliminar postulantes</th><th>Anular</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
         let scanReqStream=null, scanReqCount=0, scanReqNuevos=0, scanReqReingresos=0, scanReqSaving=false, scanReqLast='', scanReqLastAt=0, scanReqPoll=null, scanReqDetector=null, scanReqDetecting=false;
-        const relacionesReq = {relaciones_req_js};
+        const relacionesReqBase = {relaciones_req_js};
+        const relacionesReqDemo = [
+          {{empresa:'AQUANQA I',area:'Campo',cargo:'Obrero de Campo',actividad:'OB_PODA / COSECHA',regimen_laboral:'AGRARIO',tipo_contrato:'INTERMITENTE',modalidad:'CAMPAÑA'}},
+          {{empresa:'AQUANQA I',area:'Packing',cargo:'Operario Packing',actividad:'PACKING',regimen_laboral:'AGRARIO',tipo_contrato:'INTERMITENTE',modalidad:'CAMPAÑA'}},
+          {{empresa:'AQUANQA I',area:'RR.HH.',cargo:'Auxiliar de RRHH',actividad:'RRHH',regimen_laboral:'GENERAL',tipo_contrato:'TEMPORAL',modalidad:'PERMANENTE'}},
+          {{empresa:'AQUANQA II',area:'Campo',cargo:'Obrero de Campo',actividad:'COSECHA',regimen_laboral:'AGRARIO',tipo_contrato:'INTERMITENTE',modalidad:'CAMPAÑA'}}
+        ];
+        const relacionesReq = Array.isArray(relacionesReqBase) && relacionesReqBase.length ? relacionesReqBase : relacionesReqDemo;
+        relacionesReqDemo.forEach(d=>{{ if(!relacionesReq.some(r=>normReq(r.empresa)===normReq(d.empresa)&&normReq(r.area)===normReq(d.area)&&normReq(r.cargo)===normReq(d.cargo)&&normReq(r.actividad)===normReq(d.actividad))) relacionesReq.push(d); }});
         const requerimientosInfoReq = {req_info_js};
         function normReq(v){{return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase();}}
-        function escReq(v){{return String(v||'').replace(/[&<>]/g,m=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[m]));}}
-        function uniqReq(a){{const seen=new Set(), out=[]; (a||[]).forEach(v=>{{v=String(v||'').trim(); const k=normReq(v); if(v && !seen.has(k)){{seen.add(k); out.push(v);}} }}); return out.sort((x,y)=>String(x).localeCompare(String(y),'es'));}}
-        function sameReq(a,b){{return !b || normReq(a)===normReq(b);}}
+        function uniqReq(a){{return [...new Set((a||[]).filter(Boolean))].sort((x,y)=>String(x).localeCompare(String(y),'es'));}}
+        function escReq(v){{return String(v||'').replace(/[&<>"']/g,m=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[m]));}}
         function fillReqSelect(id, vals, ph){{
           const el=document.getElementById(id); if(!el)return;
-          const prev=el.value; vals=uniqReq(vals);
-          el.innerHTML='<option value="">'+ph+'</option>'+vals.map(v=>'<option value="'+escReq(v)+'">'+escReq(v)+'</option>').join('');
-          const keep=vals.find(v=>normReq(v)===normReq(prev)); if(keep) el.value=keep;
+          const prev=el.value;
+          el.innerHTML='<option value="">'+escReq(ph)+'</option>'+vals.map(v=>'<option value="'+escReq(v)+'">'+escReq(v)+'</option>').join('');
+          const found=(vals||[]).find(v=>normReq(v)===normReq(prev));
+          if(found) el.value=found;
+        }}
+        function relMatchReq(r, emp, area, cargo, act){{
+          return (!emp||normReq(r.empresa)===normReq(emp)) && (!area||normReq(r.area)===normReq(area)) && (!cargo||normReq(r.cargo)===normReq(cargo)) && (!act||normReq(r.actividad)===normReq(act));
         }}
         function syncReqCascade(){{
-          const emp=document.getElementById('req_empresa')?.value||'';
-          let relEmp=relacionesReq.filter(r=>sameReq(r.empresa, emp));
-          if(!relEmp.length) relEmp=relacionesReq.slice();  // respaldo: no dejar combos vacíos por diferencias de espacios/mayúsculas
-          fillReqSelect('req_area', relEmp.map(r=>r.area), 'Seleccione área');
-
-          const area2=document.getElementById('req_area')?.value||'';
-          let relArea=relEmp.filter(r=>sameReq(r.area, area2));
-          if(!relArea.length) relArea=relEmp.slice();
-          fillReqSelect('req_cargo', relArea.map(r=>r.cargo), 'Seleccione cargo');
-
-          const cargo2=document.getElementById('req_cargo')?.value||'';
-          let relCargo=relArea.filter(r=>sameReq(r.cargo, cargo2));
-          if(!relCargo.length) relCargo=relArea.slice();
-          fillReqSelect('req_actividad', relCargo.map(r=>r.actividad), 'Seleccione actividad');
-
-          const act2=document.getElementById('req_actividad')?.value||'';
-          const rel=relCargo.find(r=>sameReq(r.actividad, act2)) || relCargo[0] || null;
-          if(rel){{
-            const reg=document.getElementById('req_regimen_laboral');
-            const tc=document.getElementById('req_tipo_contrato');
-            if(reg && rel.regimen_laboral){{ const o=[...reg.options].find(x=>normReq(x.value)===normReq(rel.regimen_laboral)||normReq(x.text)===normReq(rel.regimen_laboral)); if(o) reg.value=o.value; }}
-            if(tc && rel.tipo_contrato){{ const o=[...tc.options].find(x=>normReq(x.value)===normReq(rel.tipo_contrato)||normReq(x.text)===normReq(rel.tipo_contrato)); if(o) tc.value=o.value; }}
-          }}
+          const empEl=document.getElementById('req_empresa'), areaEl=document.getElementById('req_area'), cargoEl=document.getElementById('req_cargo'), actEl=document.getElementById('req_actividad');
+          if(!empEl||!areaEl||!cargoEl||!actEl) return;
+          const emp=empEl.value||'';
+          const areaPrev=areaEl.value||'';
+          fillReqSelect('req_area', uniqReq(relacionesReq.filter(r=>relMatchReq(r,emp,'','','')).map(r=>r.area)), 'Seleccione área');
+          const area=areaEl.value || areaPrev;
+          if(area && !areaEl.value){{ const f=[...areaEl.options].find(o=>normReq(o.value)===normReq(area)); if(f) areaEl.value=f.value; }}
+          const area2=areaEl.value||'';
+          const cargoPrev=cargoEl.value||'';
+          fillReqSelect('req_cargo', uniqReq(relacionesReq.filter(r=>relMatchReq(r,emp,area2,'','')).map(r=>r.cargo)), 'Seleccione cargo');
+          const cargo=cargoEl.value || cargoPrev;
+          if(cargo && !cargoEl.value){{ const f=[...cargoEl.options].find(o=>normReq(o.value)===normReq(cargo)); if(f) cargoEl.value=f.value; }}
+          const cargo2=cargoEl.value||'';
+          const actPrev=actEl.value||'';
+          fillReqSelect('req_actividad', uniqReq(relacionesReq.filter(r=>relMatchReq(r,emp,area2,cargo2,'')).map(r=>r.actividad)), 'Seleccione actividad');
+          const act=actEl.value || actPrev;
+          if(act && !actEl.value){{ const f=[...actEl.options].find(o=>normReq(o.value)===normReq(act)); if(f) actEl.value=f.value; }}
+          const act2=actEl.value||'';
+          const rel=relacionesReq.find(r=>relMatchReq(r,emp,area2,cargo2,act2));
+          if(rel){{ const reg=document.getElementById('req_regimen_laboral'); const tc=document.getElementById('req_tipo_contrato'); if(reg && rel.regimen_laboral) reg.value=rel.regimen_laboral; if(tc && rel.tipo_contrato) tc.value=rel.tipo_contrato; }}
         }}
-        document.addEventListener('DOMContentLoaded',()=>{{['req_empresa','req_area','req_cargo','req_actividad','req_regimen_laboral'].forEach(id=>document.getElementById(id)?.addEventListener('change',syncReqCascade)); syncReqCascade();}});
+        function initReqCascade(){{['req_empresa','req_area','req_cargo','req_actividad'].forEach(id=>document.getElementById(id)?.addEventListener('change',syncReqCascade)); syncReqCascade(); setTimeout(syncReqCascade,100); setTimeout(syncReqCascade,450);}}
+        if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',initReqCascade); else initReqCascade();
         function limpiarDniReq(v){{return (v||'').replace(/\D/g,'').slice(-8);}}
         function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const freqs=(tipo==='error'?[620,420,620]:[tipo==='reingreso'?[880,1040]:[520,760]][0]); let t=ctx.currentTime; (Array.isArray(freqs)?freqs:[freqs]).forEach(f=>{{const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type=tipo==='error'?'square':'sine'; osc.frequency.value=f; gain.gain.value=tipo==='error'?0.10:0.07; osc.connect(gain); gain.connect(ctx.destination); osc.start(t); osc.stop(t+0.20); t+=0.23;}}); setTimeout(()=>ctx.close(),1000);}}catch(e){{}}}}
         function mostrarAlarmaReq(msg){{beepReq('error'); try{{if(navigator.vibrate) navigator.vibrate([180,80,180]);}}catch(e){{}} const old=document.querySelector('.req-cap-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-cap-alert'; a.innerHTML='🚨 '+(msg||'No se pudo registrar.')+'<small>Revise cupo, requerimiento activo o DNI duplicado.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},7000);}}
