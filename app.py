@@ -10741,7 +10741,7 @@ html,body{overflow-x:hidden!important;}
         </div>
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Requerimiento de contratación</h1><p class='muted2'>Primero crea el requerimiento por empresa, área y actividad. Luego escanea DNI o código de barras en este mismo módulo para armar la base del requerimiento.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Completar ficha trabajador</a></div>
         <div class='req-pro-grid'>
-          <form method='post' class='pro-card nice-form req-cascade-form' id='form_req_laboral'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Requerimiento / Requerimiento</b><input name='requerimiento' required placeholder='Ej. REQ-2026-0001'><b>Régimen laboral</b><select name='regimen_laboral' id='req_regimen_laboral' required>{opt_regimen_select}</select><b class='ind-lbl-emp'><i class='bi bi-buildings'></i>Empresa</b><select name='empresa' id='req_empresa' required>{opt_empresa_select}</select><b class='ind-lbl-area'><i class='bi bi-diagram-3'></i>Área</b><select name='area' id='req_area' required><option value=''>Seleccione área</option></select><b class='ind-lbl-cargo'><i class='bi bi-briefcase'></i>Cargo</b><select name='cargo' id='req_cargo' required><option value=''>Seleccione cargo</option></select><b class='ind-lbl-act'><i class='bi bi-clipboard-check'></i>Actividad</b><select name='actividad' id='req_actividad' required><option value=''>Seleccione actividad</option></select><b>Tipo contrato</b><select name='tipo_contrato' id='req_tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha inicio contrato</b><input type='date' name='fecha_inicio_contrato' id='req_fecha_inicio_contrato' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato' id='req_fecha_fin_contrato' required><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b class='ind-lbl-estado'><i class='bi bi-shield-check'></i>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear requerimiento</button><span class='muted2'>Los datos del requerimiento pasarán automáticamente a Postulantes.</span></div></form>
+          <form method='post' class='pro-card nice-form req-cascade-form' id='form_req_laboral'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Requerimiento / Requerimiento</b><input name='requerimiento' required placeholder='Ej. REQ-2026-0001'><b>Régimen laboral</b><select name='regimen_laboral' id='req_regimen_laboral' required>{opt_regimen_select}</select><b class='ind-lbl-emp'>Empresa</b><select name='empresa' id='req_empresa' required>{opt_empresa_select}</select><b class='ind-lbl-area'>Área</b><select name='area' id='req_area' required><option value=''>Seleccione área</option></select><b class='ind-lbl-cargo'>Cargo</b><select name='cargo' id='req_cargo' required><option value=''>Seleccione cargo</option></select><b class='ind-lbl-act'>Actividad</b><select name='actividad' id='req_actividad' required><option value=''>Seleccione actividad</option></select><b>Tipo contrato</b><select name='tipo_contrato' id='req_tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha inicio contrato</b><input type='date' name='fecha_inicio_contrato' id='req_fecha_inicio_contrato' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato' id='req_fecha_fin_contrato' required><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b class='ind-lbl-estado'>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear requerimiento</button><span class='muted2'>Los datos del requerimiento pasarán automáticamente a Postulantes.</span></div></form>
           <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='requerimiento_req' id='requerimiento_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
         </div>
         <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar requerimiento, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Requerimiento</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle / eliminar postulantes</th><th>Anular</th><th>Responsable</th></tr>{req_rows}</table></div>
@@ -10967,7 +10967,7 @@ html,body{overflow-x:hidden!important;}
         <form id='form_ingreso' method='post' enctype='multipart/form-data' class='c-card c-form ingreso-form compact-form pro-form ficha-registro-pro' style='padding:20px' data-req-activo='{h(requerimiento_sel)}' onsubmit='if(!validarDniRequerimiento()){{emitirBeepBloqueo();return false;}}'><input type='hidden' name='accion' value='guardar_ingreso'><input type='hidden' name='foto_base64' id='foto_base64'><input type='hidden' name='origen_validacion' id='origen_validacion' value='BASE INTERNA / NISIRA PENDIENTE'><input type='hidden' name='requerimiento' id='requerimiento_ingreso_hidden' value='{h(requerimiento_sel)}'><h3 class='section-head'>2) Completar ficha del postulante conectado al requerimiento</h3><div class='missing-note'>Campos obligatorios alineados a plantillas: DNI, nombre, cargo, fechas, dirección, contacto, remuneración y duración del contrato.</div><div id='bloqueo_req_msg' class='full req-lock-alert' style='display:none'><b>Primero seleccione un requerimiento arriba.</b><small>La ficha queda bloqueada para evitar registros sueltos sin requerimiento.</small></div><div id='dni_req_msg' class='full req-lock-alert dni-alert-pro' style='display:none'>
   <div class='alerta-icono-dni'>⚠</div>
   <div><b>DNI no pertenece al requerimiento seleccionado.</b><small>Solo se permite completar ficha de los DNI ya registrados/importados en este requerimiento.</small></div>
-</div><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='validarDniRequerimiento();detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'>{opt_empresa_select}</select><b>Celular <span class='req-mark'>*</span></b><input name='celular' id='celular_ingreso' required><b>Correo <span class='req-mark'>*</span></b><input name='correo' id='correo_ingreso' type='email' required><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b class='ind-lbl-act'>Actividad</b><input name='actividad' list='lista_actividades_cfg' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_fin_contrato' required><b>Tipo contrato <span class='req-mark'>*</span></b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required>{opt_regimen_select}</select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneración básica <span class='req-mark'>*</span></b><input name='remuneracion_basica' id='remuneracion_basica' required inputmode='decimal' oninput='actualizarRemuneracionLetras()' placeholder='Ej. 1130.00'><b>Remuneración en letras <span class='req-mark'>*</span></b><input name='remuneracion_letra' id='remuneracion_letra' required readonly class='fixed-field' placeholder='Se genera automáticamente'><b>Moneda</b><input name='nombre_moneda' value='{h(_moneda_nombre)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='{h(_moneda_simbolo)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'>{opt_periodicidad_select}</select><b>Tipo pago</b><select name='tipo_pago'>{opt_tipo_pago_select}</select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏻ Apagar cámara</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Duración contrato texto <span class='req-mark'>*</span></b><input name='meses_contrato' required placeholder='Ej. TRES MESES / 1 mes y 2 días'><b class='ind-lbl-obs'><i class='bi bi-chat-dots'></i>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button id='btn_guardar_ingreso' class='c-btn'>💾 Guardar trabajador</button></form></div></div><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
+</div><div class='tipo-ingreso-alert full'><div><b>TIPO DE INGRESO</b><small>El DNI detecta automáticamente si es NUEVO o REINGRESANTE</small></div><select name='tipo_ingreso' id='tipo_ingreso' onchange='alertaTipoIngreso()'><option>NUEVO</option><option>REINGRESANTE</option></select></div><b>DNI <span class='req-mark'>*</span></b><input name='dni' id='dni_ingreso' maxlength='8' required oninput='validarDniRequerimiento();detectarReingreso()' placeholder='8 dígitos'><b>Trabajador <span class='req-mark'>*</span></b><input name='trabajador' id='trabajador_ingreso' required placeholder='Apellidos y nombres'><b>Empresa <span class='req-mark'>*</span></b><select name='empresa' id='empresa_ingreso'>{opt_empresa_select}</select><b>Celular <span class='req-mark'>*</span></b><input name='celular' id='celular_ingreso' required><b>Correo <span class='req-mark'>*</span></b><input name='correo' id='correo_ingreso' type='email' required><b>Dirección <span class='req-mark'>*</span></b><input name='direccion' required placeholder='Dirección actual'><b>Distrito <span class='req-mark'>*</span></b><input name='distrito' required placeholder='Ej. Trujillo / Chao / Olmos'><b>Provincia <span class='req-mark'>*</span></b><input name='provincia' required placeholder='Ej. Trujillo / Virú / Lambayeque'><b>Departamento <span class='req-mark'>*</span></b><input name='departamento' required placeholder='Ej. La Libertad / Lambayeque'><b>Fecha nacimiento <span class='req-mark'>*</span></b><input type='date' name='fecha_nacimiento' required><b>Estado civil</b><select name='estado_civil' required><option>SOLTERO</option><option>CASADO</option><option>DIVORCIADO</option><option>VIUDO</option></select><b>Nacionalidad <span class='req-mark'>*</span></b><input name='nacionalidad' value='PERUANA' required><b>Sexo</b><select name='sexo'><option value=''>Seleccione</option><option>MASCULINO</option><option>FEMENINO</option></select><b>Puesto / Cargo <span class='req-mark'>*</span></b><input name='cargo' id='cargo_ingreso' list='lista_cargos_cfg' required placeholder='Buscar cargo configurado...'><input type='hidden' name='sede' value='GENERAL'><b>Área <span class='req-mark'>*</span></b><input name='area' id='area_ingreso' list='lista_areas_cfg' required placeholder='Buscar área configurada...'><b class='ind-lbl-act'>Actividad</b><input name='actividad' list='lista_actividades_cfg' placeholder='OB_PODA / COSECHA'><b>Modalidad</b><select name='modalidad'>{opt_modalidad_select}</select><b>Fecha ingreso / inicio contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_ingreso' value='{hoy_iso()}' required><b>Fecha fin contrato <span class='req-mark'>*</span></b><input type='date' name='fecha_fin_contrato' required><b>Tipo contrato <span class='req-mark'>*</span></b><select name='tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Régimen laboral <span class='req-mark'>*</span></b><select name='regimen_laboral' required>{opt_regimen_select}</select><b>Sistema pensionario</b><select name='sistema_pensionario' required><option>AFP</option><option>ONP</option><option>SIN RÉGIMEN</option><option>PENDIENTE</option></select><b>Última empresa donde trabajó</b><input name='ultima_empresa' placeholder='Empresa anterior'><b>Discapacidad</b><select name='discapacidad'><option>NO</option><option>SÍ</option><option>CONADIS</option></select><b>Cantidad de hijos</b><input name='cantidad_hijos' type='number' min='0' value='0'><b>Remuneración básica <span class='req-mark'>*</span></b><input name='remuneracion_basica' id='remuneracion_basica' required inputmode='decimal' oninput='actualizarRemuneracionLetras()' placeholder='Ej. 1130.00'><b>Remuneración en letras <span class='req-mark'>*</span></b><input name='remuneracion_letra' id='remuneracion_letra' required readonly class='fixed-field' placeholder='Se genera automáticamente'><b>Moneda</b><input name='nombre_moneda' value='{h(_moneda_nombre)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Símbolo moneda</b><input name='simbolo_moneda' value='{h(_moneda_simbolo)}' readonly class='fixed-field' title='Campo fijo del sistema'><b>Periodicidad pago</b><select name='periodicidad_pago'>{opt_periodicidad_select}</select><b>Tipo pago</b><select name='tipo_pago'>{opt_tipo_pago_select}</select><b>CUSPP</b><input name='cuspp'><b>Cuenta bancaria</b><input name='cuenta_bancaria'><b>Talla indumentaria</b><input name='talla_indumentaria' placeholder='Polo M / pantalón 32 / botas 40'><b>Contacto emergencia</b><input name='contacto_emergencia' placeholder='Nombre - parentesco - celular'><b>Foto cámara</b><div class='camera-box'><video id='camVideo' autoplay playsinline muted></video><canvas id='camCanvas' style='display:none'></canvas><img id='camPreview' style='display:none'><div class='cam-actions'><button type='button' class='c-btn gray' onclick='activarCamaraIngreso()'>📷 Activar cámara</button><button type='button' class='c-btn' onclick='capturarFotoIngreso()'>📸 Capturar foto</button><button type='button' class='c-btn gray' onclick='apagarCamaraIngreso()'>⏻ Apagar cámara</button></div><small>La foto queda lista para fotocheck. En celular usa HTTPS/Render.</small></div><b>Huella digital / biometría</b><div class='bio-box'><input type='file' name='huella' accept='.png,.jpg,.jpeg,.bmp,.wsq,.pdf'><div class='bio-actions'><button type='button' class='c-btn gray' onclick='simularHuellero()'>🔌 Conectar huellero ZK9500</button><button type='button' class='c-btn gray' onclick='alert("Preparado para integrar SDK/API biométrica local. En Render solo se guarda evidencia; la captura real requiere app local/servicio puente.")'>Probar captura</button></div><small id='bio_estado'>Preparado para lector ZK9500/API biométrica. Permite adjuntar evidencia o conectar servicio local.</small></div><b>Duración contrato texto <span class='req-mark'>*</span></b><input name='meses_contrato' required placeholder='Ej. TRES MESES / 1 mes y 2 días'><b class='ind-lbl-obs'>Observación</b><textarea name='observacion' rows='2' placeholder='Observaciones de ingreso.'></textarea><span></span><button id='btn_guardar_ingreso' class='c-btn'>💾 Guardar trabajador</button></form></div></div><datalist id='lista_areas_cfg'>{opt_area_datalist}</datalist><datalist id='lista_cargos_cfg'>{opt_cargo_datalist}</datalist><datalist id='lista_actividades_cfg'>{opt_actividad_datalist}</datalist><script>function simularHuellero(){{var e=document.getElementById('bio_estado'); if(e){{e.innerText='Huellero ZK9500 detectado en modo preparación. Para captura real se requiere SDK/servicio local conectado por USB.';}} alert('Conexión preparada: ZK9500 / USB / API local.');}}</script>
         <script>
         function toggleFixReqFields(chk){{['empresa','regimen_laboral','area','cargo','actividad','tipo_contrato','fecha_ingreso','fecha_fin_contrato'].forEach(function(n){{document.querySelectorAll('[name='+n+']').forEach(function(el){{el.dataset.fixed=chk.checked?'1':'0';}});}});}}
 
@@ -12306,511 +12306,40 @@ html,body{overflow-x:hidden!important;}
             for i,r in enumerate(trabajadores_indumentaria[:500],1)
         ]) or "<tr><td colspan='14' class='std-empty'>Seleccione un requerimiento para visualizar postulantes.</td></tr>"
 
-        trabajadores_js = json.dumps({normalizar_dni(row_get(r,'dni')):{'trabajador':clean(row_get(r,'trabajador')),'empresa':clean(row_get(r,'empresa')),'area':clean(row_get(r,'area')),'cargo':clean(row_get(r,'cargo')),'actividad':clean(row_get(r,'actividad')),'requerimiento':clean(row_get(r,'requerimiento')),'fecha_ingreso':fecha_sin_hora(row_get(r,'fecha_ingreso')),'foto_url':(f"/admin/contratacion/foto_postulante/{row_get(r,'id')}" if row_get(r,'foto_ruta') else '')} for r in trabajadores_indumentaria}, ensure_ascii=False)
+        trabajadores_js = json.dumps({normalizar_dni(row_get(r,'dni')):{'trabajador':clean(row_get(r,'trabajador')),'empresa':clean(row_get(r,'empresa')),'area':clean(row_get(r,'area')),'cargo':clean(row_get(r,'cargo')),'actividad':clean(row_get(r,'actividad')),'requerimiento':clean(row_get(r,'requerimiento')),'fecha_ingreso':fecha_sin_hora(row_get(r,'fecha_ingreso'))} for r in trabajadores_indumentaria}, ensure_ascii=False)
 
         content=wrap(f"""
         {estilos_tabla_estandar_postulantes()}
         <style>
         .ind-page{{display:flex;flex-direction:column;gap:18px;color:#071b34}}.ind-hero{{background:linear-gradient(135deg,#ffffff,#effff7);border:1px solid #b8f0d2;border-radius:26px;padding:24px 28px;display:grid;grid-template-columns:1.2fr .9fr;gap:22px;align-items:center;box-shadow:0 18px 44px rgba(4,120,87,.08)}}.ind-title{{display:flex;gap:18px;align-items:center}}.ind-icon{{width:66px;height:66px;border-radius:22px;background:#dcfce7;border:1px solid #86efac;display:grid;place-items:center;font-size:32px}}.ind-title h1{{margin:0;font-size:34px;line-height:1.05;font-weight:1000;color:#071b34}}.ind-title p{{margin:8px 0 0;color:#50627c;font-size:17px;font-weight:800;line-height:1.35}}.ind-requerimiento label,.ind-tools label{{display:block;color:#071b34;text-transform:uppercase;font-size:12px;font-weight:1000;margin-bottom:8px}}.ind-requerimiento select,.ind-tools input,.ind-tools select,.ind-form input,.ind-form select,.ind-form textarea{{width:100%;border:1px solid #cfe0ec;border-radius:14px;background:#fff;color:#071b34;font-weight:900;font-size:14px;padding:0 14px;min-height:42px}}.ind-form textarea{{padding-top:14px;min-height:86px}}.ind-tools{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px 22px;display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-actions{{display:flex;gap:10px;flex-wrap:wrap}}.ind-btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:15px;padding:0 22px;text-decoration:none;border:0;font-weight:1000;cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;box-shadow:0 12px 22px rgba(0,138,72,.20)}}.ind-btn.green{{background:linear-gradient(135deg,#00964f,#0bbf72)}}.ind-btn.light{{background:#fff;color:#071b34;border:1px solid #dbe7ef;box-shadow:none}}.ind-btn.danger{{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;box-shadow:none}}.ind-btn.mini{{min-height:38px;padding:0 12px;font-size:12px}}.ind-kpis{{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:16px}}.ind-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:20px;padding:18px;display:flex;align-items:center;gap:15px;min-height:105px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-kpi .ico{{width:54px;height:54px;border-radius:50%;background:#008a48;color:#fff;display:grid;place-items:center;font-size:24px}}.ind-kpi b{{font-size:32px;color:#071b34;line-height:1;font-weight:1000}}.ind-kpi h4{{margin:0 0 4px;font-size:14px;color:#071b34;font-weight:1000}}.ind-kpi small{{display:block;color:#53627a;font-weight:850}}.ind-control{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px;display:grid;grid-template-columns:220px repeat(5,1fr);gap:14px;box-shadow:0 16px 34px rgba(15,23,42,.06)}}.ind-radial h2{{margin:0;color:#071b34;font-size:28px;line-height:1.05;font-weight:1000}}.ind-radial p{{color:#53627a;font-weight:850;line-height:1.35}}.ind-ring{{width:132px;height:132px;border-radius:50%;background:conic-gradient(#008a48 {avance_indum_req}%,#e5e7eb 0);display:grid;place-items:center;margin:auto}}.ind-ring div{{width:98px;height:98px;background:#fff;border-radius:50%;display:grid;place-items:center;text-align:center;color:#071b34;font-weight:1000}}.ind-ring span{{display:block;font-size:13px;color:#53627a}}.ind-stage{{border:1px solid #dbe7ef;border-radius:16px;padding:14px 10px;text-align:center;background:linear-gradient(180deg,#fff,#fcfffd);border-bottom:3px solid #008a48;min-height:120px}}.ind-stage .sico{{width:44px;height:44px;border-radius:50%;background:#dcfce7;display:grid;place-items:center;margin:0 auto 8px;font-size:20px}}.ind-stage h4{{margin:0;color:#071b34;font-weight:1000;font-size:14px}}.ind-stage b{{font-size:26px;color:#071b34;display:block;line-height:1}}.ind-stage small{{color:#53627a;font-weight:850;font-size:12px}}.ind-table-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.06)}}.ind-table-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;flex-wrap:wrap}}.ind-table-head h2{{margin:0;color:#071b34;font-size:22px;font-weight:1000}}.ind-table-wrap{{overflow:auto}}.ind-table{{width:100%;min-width:1100px;border-collapse:separate;border-spacing:0}}.ind-table th{{background:#008a48;color:#fff;padding:14px;text-align:center;font-weight:1000;border-right:1px solid rgba(255,255,255,.22)}}.ind-table td{{padding:14px;border-bottom:1px solid #e1ebf3;border-right:1px solid #e1ebf3;text-align:center;vertical-align:middle;font-weight:850;color:#071b34}}.ind-table tr:hover td{{background:#f0fff7}}.avatar-mini{{display:inline-grid;place-items:center;width:52px;height:52px;border-radius:15px;background:#ecfdf5;border:1px solid #86efac;font-size:25px}}.name-cell{{font-weight:1000;text-align:left!important}}.ind-pill{{display:inline-flex;border-radius:999px;padding:8px 14px;font-weight:1000;font-size:12px;border:1px solid transparent}}.ind-pill.ok{{background:#dcfce7;color:#047857;border-color:#86efac}}.ind-pill.warn{{background:#fef3c7;color:#b45309;border-color:#fde68a}}.ind-pill.danger{{background:#fee2e2;color:#991b1b;border-color:#fecaca}}.ind-pill.muted{{background:#f1f5f9;color:#475569;border-color:#e2e8f0}}.ind-bar{{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px}}.ind-bar span{{display:block;height:100%;background:#008a48;border-radius:999px}}.empty-row{{padding:26px!important;text-align:center!important;color:#64748b!important;font-weight:900!important}}.ind-modal-check{{display:none}}.ind-modal{{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:28px 22px;overflow:auto}}.ind-modal-check:checked + .ind-modal{{display:flex}}.ind-modal-card{{width:min(980px,94vw);max-height:92vh;background:#fff;border-radius:22px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.35);overflow:auto}}.ind-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border-bottom:1px solid #e5eef6;background:#fbfffd}}.ind-modal-head h2{{margin:0;color:#071b34;font-weight:1000}}.ind-close{{cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;border-radius:12px;padding:10px 16px;font-weight:1000;box-shadow:0 10px 20px rgba(0,138,72,.18)}}.ind-alert{{margin:18px 24px 0;background:linear-gradient(135deg,#ecfdf5,#f8fffd);border:1px solid #a7f3d0;border-radius:18px;padding:16px 18px;color:#064e3b;font-weight:900;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}}.ind-form{{padding:18px 24px 24px;display:grid;grid-template-columns:150px 1fr 150px 1fr;gap:10px;align-items:center}}.ind-form b{{background:#eef6f3;border-radius:10px;padding:10px 12px;text-align:right;color:#071b34;font-weight:1000;font-size:13px}}.ind-form .section{{grid-column:1/-1;margin:8px 0 0;font-size:18px;font-weight:1000;color:#071b34}}.ind-form .field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.15)!important}}.ind-alert.danger{{background:#fef2f2;border-color:#fca5a5;color:#7f1d1d}}.ind-form input:disabled,.ind-form select:disabled{{background:#f1f5f9;color:#64748b;cursor:not-allowed}}.ind-form b.req{{background:#dcfce7;border:1px solid #86efac;color:#064e3b}}.ind-form b.req:after{{content:' *';color:#ef4444;font-weight:1000}}.ind-form select{{height:48px;border:1px solid #cfe0ec;border-radius:13px;padding:0 14px;font-weight:850;background:#fff}}.ind-form .full{{grid-column:1/-1}}.demo-video-link{{font-weight:1000;color:#007a3d;text-decoration:none;background:#e8fff2;border:1px solid #b8f0d2;border-radius:999px;padding:7px 12px;display:inline-block}}.demo-video-link:hover{{background:#00a862;color:#fff}}@media(max-width:1200px){{.ind-control{{grid-template-columns:1fr 1fr 1fr}}.ind-kpis{{grid-template-columns:repeat(3,1fr)}}.ind-hero,.ind-tools,.ind-form{{grid-template-columns:1fr 1fr}}}}@media(max-width:760px){{.ind-hero,.ind-tools,.ind-control,.ind-form{{grid-template-columns:1fr}}.ind-kpis{{grid-template-columns:1fr 1fr}}.ind-form b{{text-align:left}}}}
 
-/* === INDUMENTARIA / EPP - CORREGIDO PRESENTABLE === */
-.ind-modal{{padding:10px!important;align-items:flex-start!important;background:rgba(15,23,42,.58)!important;}}
-.ind-modal-card{{width:min(1540px,99vw)!important;max-height:96vh!important;border-radius:18px!important;border:1px solid #c9d7e3!important;background:#fff!important;box-shadow:0 28px 90px rgba(15,23,42,.38)!important;overflow:auto!important;}}
-.ind-modal-head{{min-height:92px!important;padding:14px 20px 14px 28px!important;border-bottom:3px solid #008a48!important;background:#fff!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:18px!important;position:sticky!important;top:0!important;z-index:2!important;}}
-.ind-modal-head h2{{display:flex!important;align-items:center!important;gap:18px!important;margin:0!important;color:#062b54!important;font-size:clamp(30px,3.2vw,44px)!important;line-height:1.02!important;font-weight:1000!important;letter-spacing:-1px!important;text-transform:uppercase!important;white-space:nowrap!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;}}
-.ind-head-icon{{width:74px!important;height:74px!important;min-width:74px!important;border-radius:16px!important;background:#f0fff7!important;display:inline-grid!important;place-items:center!important;color:#008a48!important;}}
-.ind-head-icon i{{display:none!important;}}.ind-head-icon:before{{content:'🦺';font-size:48px;line-height:1;}}
-.ind-close{{flex:0 0 auto!important;background:linear-gradient(135deg,#007f43,#12b76a)!important;color:#ffffff!important;border-radius:14px!important;min-height:58px!important;min-width:144px!important;padding:0 22px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:22px!important;font-weight:1000!important;box-shadow:0 14px 30px rgba(0,138,72,.22)!important;white-space:nowrap!important;}}
+/* === INDUMENTARIA / EPP - IGUAL A BOCETO IMAGEN 03 === */
+.ind-modal{{padding:8px 10px!important;align-items:flex-start!important;background:rgba(15,23,42,.55)!important;}}
+.ind-modal-card{{width:min(1530px,99vw)!important;max-height:96vh!important;border-radius:18px!important;border:1px solid #c9d7e3!important;background:#fff!important;box-shadow:0 28px 90px rgba(15,23,42,.38)!important;overflow:auto!important;}}
+.ind-modal-head{{min-height:88px!important;padding:12px 18px 12px 28px!important;border-bottom:3px solid #008a48!important;background:#fff!important;display:flex!important;align-items:center!important;}}
+.ind-modal-head h2{{display:flex!important;align-items:center!important;gap:18px!important;margin:0!important;color:#062b54!important;font-size:44px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-1px!important;text-transform:uppercase!important;white-space:nowrap!important;}}
+.ind-head-icon{{font-size:50px!important;line-height:1!important;display:inline-grid!important;place-items:center!important;color:#008a48!important;}}
+.ind-close{{background:linear-gradient(135deg,#008a48,#12b76a)!important;color:#062b54!important;border-radius:14px!important;min-height:58px!important;padding:0 25px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:22px!important;font-weight:1000!important;box-shadow:0 14px 30px rgba(0,138,72,.22)!important;}}
 .ind-alert{{display:none!important;}}
-.ind-form{{padding:18px 28px 26px!important;display:grid!important;grid-template-columns:280px minmax(280px,1fr) 280px minmax(380px,1.35fr)!important;gap:10px 16px!important;align-items:center!important;background:#fff!important;min-width:1320px!important;box-sizing:border-box!important;}}
-.ind-form *{{box-sizing:border-box!important;}}.ind-form input,.ind-form select,.ind-form textarea{{min-width:0!important;max-width:100%!important;}}
-.ind-form .section{{grid-column:1/-1!important;background:linear-gradient(135deg,#007f43,#19bd79)!important;color:#fff!important;height:42px!important;border-radius:12px 12px 0 0!important;display:flex!important;align-items:center!important;gap:18px!important;padding:0 28px!important;font-size:25px!important;font-weight:1000!important;text-transform:uppercase!important;letter-spacing:-.4px!important;box-shadow:0 12px 26px rgba(0,138,72,.18)!important;margin:12px 0 6px!important;}}
+.ind-form{{padding:18px 28px 26px!important;display:grid!important;grid-template-columns:270px 1fr 270px 1fr!important;gap:10px 16px!important;align-items:center!important;background:#fff!important;}}
+.ind-form .section{{grid-column:1/-1!important;background:linear-gradient(135deg,#008a48,#16b978)!important;color:#fff!important;height:42px!important;border-radius:12px 12px 0 0!important;display:flex!important;align-items:center!important;gap:18px!important;padding:0 28px!important;font-size:25px!important;font-weight:1000!important;text-transform:uppercase!important;letter-spacing:-.4px!important;box-shadow:0 12px 26px rgba(0,138,72,.18)!important;margin:12px 0 6px!important;}}
 .ind-form .section span{{width:34px!important;height:34px!important;border-radius:999px!important;background:#fff!important;color:#008a48!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:24px!important;font-weight:1000!important;}}
-.ind-form b{{min-width:0!important;min-height:56px!important;border-radius:9px!important;background:linear-gradient(135deg,#ddf8e8,#f3fff8)!important;border:1.5px solid #a8e7c1!important;color:#062b54!important;font-size:21px!important;font-weight:1000!important;text-align:left!important;display:flex!important;align-items:center!important;gap:13px!important;padding:0 17px!important;line-height:1.1!important;box-shadow:0 8px 18px rgba(0,138,72,.05)!important;white-space:normal!important;}}
+.ind-form b{{min-height:56px!important;border-radius:9px!important;background:linear-gradient(135deg,#e0f8ea,#f3fff8)!important;border:1.5px solid #a8e7c1!important;color:#062b54!important;font-size:21px!important;font-weight:1000!important;text-align:left!important;display:flex!important;align-items:center!important;gap:13px!important;padding:0 17px!important;line-height:1.1!important;}}
 .ind-form b.req{{background:linear-gradient(135deg,#d4f7df,#effff6)!important;border:1.8px solid #50e083!important;color:#062b54!important;}}
 .ind-form b.req:after{{content:'*'!important;color:#ef1111!important;margin-left:auto!important;font-size:24px!important;font-weight:1000!important;}}
-.ind-form input,.ind-form select,.ind-form textarea{{min-height:56px!important;height:56px!important;border:1.5px solid #c9d7e3!important;border-radius:10px!important;background:#fff!important;color:#061f3d!important;font-size:22px!important;font-weight:900!important;padding:0 18px!important;box-shadow:0 1px 2px rgba(15,23,42,.03) inset!important;}}
+.ind-form input,.ind-form select,.ind-form textarea{{min-height:56px!important;height:56px!important;border:1.5px solid #c9d7e3!important;border-radius:10px!important;background:#fff!important;color:#061f3d!important;font-size:22px!important;font-weight:900!important;padding:0 18px!important;box-shadow:none!important;}}
 .ind-form input::placeholder,.ind-form textarea::placeholder{{color:#73849f!important;font-weight:850!important;}}
 .ind-form select{{appearance:auto!important;}}
 .ind-form textarea{{height:72px!important;min-height:72px!important;padding:16px 18px!important;resize:vertical!important;}}
 .ind-form input[type=file]{{font-size:18px!important;padding:13px 16px!important;overflow:hidden!important;}}
 .ind-req-line{{grid-column:1/-1!important;min-height:52px!important;border-radius:10px!important;background:linear-gradient(135deg,#e2faea,#effff6)!important;border:1.5px solid #a8e7c1!important;color:#008a48!important;font-size:20px!important;font-weight:1000!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 20px!important;}}
 .ind-req-line strong{{color:#008a48!important;font-size:21px!important;font-weight:1000!important;font-style:normal!important;}}.ind-req-line em{{background:#008a48!important;color:#fff!important;border-radius:9px!important;padding:10px 18px!important;font-size:19px!important;font-weight:1000!important;font-style:normal!important;}}.ind-req-line span{{color:#008a48!important;font-size:20px!important;font-weight:1000!important;}}
-.ind-form b[class*="ind-lbl-"]::before{{font-size:29px!important;line-height:1!important;min-width:42px!important;text-align:center!important;display:inline-block!important;color:#008a48!important;font-family:Arial,'Segoe UI Emoji','Apple Color Emoji',sans-serif!important;font-weight:400!important;}}
-.ind-lbl-dni::before{{content:'🪪';}}.ind-lbl-trab::before{{content:'👤';}}.ind-lbl-emp::before{{content:'🏢';}}.ind-lbl-area::before{{content:'🏭';}}.ind-lbl-cargo::before{{content:'💼';}}.ind-lbl-act::before{{content:'📋';}}.ind-lbl-fecha::before{{content:'📅';}}.ind-lbl-polo::before{{content:'👕';}}.ind-lbl-pantalon::before{{content:'👖';}}.ind-lbl-botas::before{{content:'🥾';}}.ind-lbl-casaca::before{{content:'🧥';}}.ind-lbl-gorro::before{{content:'⛑️';}}.ind-lbl-lentes::before{{content:'👓';}}.ind-lbl-guantes::before{{content:'🧤';}}.ind-lbl-otros::before{{content:'🧰';}}.ind-lbl-estado::before{{content:'✅';}}.ind-lbl-resp::before{{content:'👤';}}.ind-lbl-firma::before{{content:'🖊️';}}.ind-lbl-obs::before{{content:'💬';}}
+.ind-form b[class*="ind-lbl-"]::before{{font-size:28px!important;line-height:1!important;min-width:32px!important;text-align:center!important;display:inline-block!important;color:#008a48!important;}}
+.ind-lbl-dni::before{{content:'🪪';}}.ind-lbl-trab::before{{content:'👤';}}.ind-lbl-emp::before{{content:'🏢';}}.ind-lbl-area::before{{content:'🔗';}}.ind-lbl-cargo::before{{content:'💼';}}.ind-lbl-act::before{{content:'📋';}}.ind-lbl-fecha::before{{content:'📅';}}.ind-lbl-polo::before{{content:'👕';}}.ind-lbl-pantalon::before{{content:'👖';}}.ind-lbl-botas::before{{content:'🥾';}}.ind-lbl-casaca::before{{content:'🧥';}}.ind-lbl-gorro::before{{content:'🧢';}}.ind-lbl-lentes::before{{content:'👓';}}.ind-lbl-guantes::before{{content:'🧤';}}.ind-lbl-otros::before{{content:'📦';}}.ind-lbl-estado::before{{content:'🛡️';}}.ind-lbl-resp::before{{content:'👷';}}.ind-lbl-firma::before{{content:'✍️';}}.ind-lbl-obs::before{{content:'💬';}}
 .ind-form .ind-btn.green{{width:100%!important;min-height:88px!important;border-radius:14px!important;background:linear-gradient(135deg,#008a48,#12b76a)!important;color:#fff!important;font-size:38px!important;font-weight:1000!important;box-shadow:0 20px 38px rgba(0,138,72,.25)!important;}}
 .ind-form span + div{{align-self:stretch!important;}}.ind-form span + div .ind-btn{{height:100%!important;}}
-@media(max-width:1050px){{.ind-modal-head h2{{font-size:30px!important;white-space:normal!important}}.ind-modal-head{{align-items:flex-start!important}}.ind-close{{min-width:128px!important;font-size:18px!important}}.ind-form{{min-width:1120px!important;grid-template-columns:240px minmax(230px,1fr) 240px minmax(300px,1.25fr)!important}}.ind-form b{{font-size:18px!important}}.ind-form input,.ind-form select,.ind-form textarea{{font-size:18px!important}}.ind-req-line{{flex-wrap:wrap;height:auto!important;padding:12px!important}}}}
-@media(max-width:720px){{.ind-modal-card{{width:99vw!important}}.ind-modal-head{{flex-wrap:wrap}}.ind-close{{width:100%}}.ind-form .section{{font-size:19px!important}}.ind-form .ind-btn.green{{font-size:26px!important;min-height:70px!important}}}}
-
-
-/* === INDUMENTARIA / EPP - VERSION FINAL IGUAL A BOCETO: COMPACTO, SIN SCROLL HORIZONTAL === */
-.ind-modal{{padding:6px!important;align-items:flex-start!important;justify-content:center!important;background:rgba(15,23,42,.58)!important;overflow-y:auto!important;overflow-x:hidden!important;}}
-.ind-modal-card{{width:min(1010px,96vw)!important;max-width:1010px!important;max-height:96vh!important;border-radius:9px!important;border:1px solid #cfdbe5!important;background:#fff!important;box-shadow:0 22px 70px rgba(15,23,42,.34)!important;overflow-y:auto!important;overflow-x:hidden!important;}}
-.ind-modal-card::-webkit-scrollbar{{width:10px!important;height:0!important}}.ind-modal-card::-webkit-scrollbar-thumb{{background:#8f989f!important;border-radius:999px!important}}.ind-modal-card::-webkit-scrollbar-track{{background:#eef2f5!important;border-radius:999px!important}}
-.ind-modal-head{{min-height:58px!important;height:58px!important;padding:7px 16px!important;border-bottom:3px solid #008a48!important;background:#fff!important;position:sticky!important;top:0!important;z-index:5!important;display:flex!important;align-items:center!important;gap:12px!important;}}
-.ind-modal-head h2{{flex:1 1 auto!important;min-width:0!important;display:flex!important;align-items:center!important;gap:10px!important;margin:0!important;color:#071b34!important;font-size:26px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-.7px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;text-transform:uppercase!important;}}
-.ind-head-icon{{width:44px!important;height:44px!important;min-width:44px!important;border-radius:10px!important;background:#ecfdf5!important;border:1px solid #a7f3d0!important;color:#008a48!important;display:inline-grid!important;place-items:center!important;}}
-.ind-head-icon i{{display:none!important}}.ind-head-icon:before{{content:'♜'!important;color:#008a48!important;font-size:32px!important;line-height:1!important;font-family:Arial,sans-serif!important;}}
-.ind-close{{flex:0 0 auto!important;min-width:82px!important;min-height:38px!important;height:38px!important;padding:0 12px!important;border-radius:7px!important;background:linear-gradient(135deg,#008a48,#12b76a)!important;color:#fff!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:15px!important;font-weight:1000!important;white-space:nowrap!important;box-shadow:0 10px 18px rgba(0,138,72,.20)!important;}}
-.ind-form{{padding:9px 14px 14px!important;display:grid!important;grid-template-columns:128px minmax(0,1fr) 150px minmax(0,1fr)!important;gap:6px!important;align-items:center!important;background:#fff!important;min-width:0!important;width:100%!important;box-sizing:border-box!important;}}
-.ind-form *{{box-sizing:border-box!important;min-width:0!important}}.ind-form input,.ind-form select,.ind-form textarea{{max-width:100%!important;width:100%!important;}}
-.ind-form .section{{grid-column:1/-1!important;height:27px!important;margin:3px 0 4px!important;border-radius:8px 8px 0 0!important;background:linear-gradient(135deg,#007f43,#11b76a)!important;color:#fff!important;display:flex!important;align-items:center!important;gap:8px!important;padding:0 11px!important;font-size:14px!important;line-height:1!important;font-weight:1000!important;text-transform:uppercase!important;box-shadow:none!important;letter-spacing:0!important;}}
-.ind-form .section span{{width:20px!important;height:20px!important;border-radius:999px!important;background:#fff!important;color:#008a48!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:14px!important;font-weight:1000!important;}}
-.ind-form b{{min-height:36px!important;height:36px!important;border-radius:6px!important;background:linear-gradient(135deg,#e0faeb,#f6fff9)!important;border:1px solid #b2ebc9!important;color:#071b34!important;font-size:12.5px!important;font-weight:1000!important;text-align:left!important;display:flex!important;align-items:center!important;gap:8px!important;padding:0 10px!important;line-height:1.05!important;box-shadow:none!important;white-space:nowrap!important;overflow:hidden!important;}}
-.ind-form b.req{{background:linear-gradient(135deg,#dcfce7,#f5fff9)!important;border:1.5px solid #86efac!important;color:#071b34!important;}}
-.ind-form b.req:after{{content:'*'!important;color:#ef1111!important;margin-left:auto!important;font-size:14px!important;font-weight:1000!important;}}
-.ind-form input,.ind-form select,.ind-form textarea{{min-height:36px!important;height:36px!important;border:1px solid #cbdced!important;border-radius:7px!important;background:#fff!important;color:#071b34!important;font-size:12.5px!important;font-weight:800!important;padding:0 10px!important;box-shadow:0 1px 2px rgba(15,23,42,.03) inset!important;}}
-.ind-form input::placeholder,.ind-form textarea::placeholder{{color:#6f809a!important;font-weight:800!important}}.ind-form select{{appearance:auto!important;}}
-.ind-form textarea{{height:38px!important;min-height:38px!important;padding:9px 10px!important;resize:vertical!important;line-height:1.2!important;}}
-.ind-form input[type=file]{{font-size:12px!important;padding:7px 8px!important;overflow:hidden!important;white-space:nowrap!important;}}
-#ind_dni{{grid-column:2/5!important}}.ind-req-line{{grid-column:1/-1!important;min-height:36px!important;height:36px!important;border-radius:7px!important;background:linear-gradient(135deg,#e4faee,#f4fff8)!important;border:1px solid #a7f3d0!important;color:#008a48!important;font-size:12px!important;font-weight:900!important;display:flex!important;align-items:center!important;gap:8px!important;padding:0 12px!important;overflow:hidden!important;white-space:nowrap!important;}}
-.ind-req-line strong{{color:#071b34!important;font-size:11.5px!important;font-weight:1000!important;font-style:normal!important;}}.ind-req-line em{{background:#008a48!important;color:#fff!important;border-radius:5px!important;padding:6px 10px!important;font-size:11.5px!important;font-weight:1000!important;font-style:normal!important;}}.ind-req-line span{{color:#008a48!important;font-size:12px!important;font-weight:900!important;}}
-.ind-form b[class*="ind-lbl-"]::before{{font-size:18px!important;line-height:1!important;min-width:20px!important;text-align:center!important;display:inline-block!important;color:#008a48!important;font-family:Arial,sans-serif!important;font-weight:900!important;filter:none!important;}}
-.ind-lbl-dni::before{{content:'▣'!important}}.ind-lbl-trab::before{{content:'●'!important}}.ind-lbl-emp::before{{content:'▥'!important}}.ind-lbl-area::before{{content:'▦'!important}}.ind-lbl-cargo::before{{content:'▤'!important}}.ind-lbl-act::before{{content:'▧'!important}}.ind-lbl-fecha::before{{content:'▢'!important}}.ind-lbl-polo::before{{content:'◼'!important}}.ind-lbl-pantalon::before{{content:'▮'!important}}.ind-lbl-botas::before{{content:'▲'!important}}.ind-lbl-casaca::before{{content:'▱'!important}}.ind-lbl-gorro::before{{content:'⌂'!important}}.ind-lbl-lentes::before{{content:'∞'!important}}.ind-lbl-guantes::before{{content:'✋'!important}}.ind-lbl-otros::before{{content:'▣'!important}}.ind-lbl-estado::before{{content:'◆'!important}}.ind-lbl-resp::before{{content:'●'!important}}.ind-lbl-firma::before{{content:'✎'!important}}.ind-lbl-obs::before{{content:'☏'!important}}
-.ind-lbl-obs + textarea{{grid-column:2/4!important}}.ind-lbl-obs + textarea + span{{display:none!important}}.ind-lbl-obs + textarea + span + div{{grid-column:4/5!important;align-self:stretch!important;display:block!important}}.ind-lbl-obs + textarea + span + div .ind-btn.green{{height:100%!important;width:100%!important;}}
-.ind-form .ind-btn.green{{min-height:38px!important;height:38px!important;border-radius:7px!important;background:linear-gradient(135deg,#008a48,#11b76a)!important;color:#fff!important;font-size:18px!important;font-weight:1000!important;box-shadow:0 12px 22px rgba(0,138,72,.23)!important;padding:0 10px!important;}}
-@media(max-width:820px){{.ind-modal-card{{width:98vw!important}}.ind-modal-head h2{{font-size:20px!important}}.ind-form{{grid-template-columns:1fr!important}}.ind-form .section,#ind_dni,.ind-req-line,.ind-lbl-obs + textarea,.ind-lbl-obs + textarea + span + div{{grid-column:1/-1!important}}.ind-form b{{white-space:normal!important}}.ind-close{{min-width:78px!important;font-size:13px!important}}.ind-head-icon{{width:38px!important;height:38px!important;min-width:38px!important}}.ind-head-icon:before{{font-size:26px!important}}}}
-
-
-/* === FIX FINAL INDUMENTARIA: MISMA PROPORCIÓN QUE IMAGEN 1, GRANDE Y PROFESIONAL === */
-.ind-modal{{padding:8px!important;align-items:flex-start!important;justify-content:center!important;background:rgba(15,23,42,.58)!important;overflow-y:auto!important;overflow-x:hidden!important;}}
-.ind-modal-check:checked + .ind-modal{{display:flex!important;}}
-.ind-modal-card{{width:min(1320px,98vw)!important;max-width:1320px!important;max-height:96vh!important;border-radius:10px!important;border:1px solid #cfdbe5!important;background:#fff!important;box-shadow:0 26px 80px rgba(15,23,42,.36)!important;overflow-y:auto!important;overflow-x:hidden!important;}}
-.ind-modal-card::-webkit-scrollbar{{width:10px!important;height:0!important}}.ind-modal-card::-webkit-scrollbar-thumb{{background:#8f989f!important;border-radius:999px!important}}.ind-modal-card::-webkit-scrollbar-track{{background:#eef2f5!important;border-radius:999px!important}}
-.ind-modal-head{{height:78px!important;min-height:78px!important;padding:8px 18px 8px 16px!important;border-bottom:3px solid #008a48!important;background:#fff!important;position:sticky!important;top:0!important;z-index:10!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:16px!important;}}
-.ind-modal-head h2{{flex:1 1 auto!important;min-width:0!important;display:flex!important;align-items:center!important;gap:14px!important;margin:0!important;color:#071b34!important;font-size:34px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-1px!important;text-transform:uppercase!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}}
-.ind-head-icon{{width:58px!important;height:58px!important;min-width:58px!important;border-radius:12px!important;background:#ecfdf5!important;border:1.5px solid #a7f3d0!important;color:#008a48!important;display:inline-grid!important;place-items:center!important;}}
-.ind-head-icon i{{display:none!important}}.ind-head-icon:before{{content:'🦺'!important;font-size:38px!important;line-height:1!important;font-family:Arial,'Segoe UI Emoji','Apple Color Emoji',sans-serif!important;}}
-.ind-close{{flex:0 0 auto!important;min-width:114px!important;height:48px!important;min-height:48px!important;padding:0 16px!important;border-radius:8px!important;background:linear-gradient(135deg,#008a48,#12b76a)!important;color:#fff!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:18px!important;font-weight:1000!important;white-space:nowrap!important;box-shadow:0 10px 18px rgba(0,138,72,.22)!important;}}
-.ind-form{{padding:12px 16px 14px!important;display:grid!important;grid-template-columns:230px minmax(260px,1fr) 230px minmax(320px,1fr)!important;gap:8px 10px!important;align-items:center!important;background:#fff!important;min-width:0!important;width:100%!important;box-sizing:border-box!important;}}
-.ind-form *{{box-sizing:border-box!important;min-width:0!important;}}.ind-form input,.ind-form select,.ind-form textarea{{max-width:100%!important;width:100%!important;}}
-.ind-form .section{{grid-column:1/-1!important;height:34px!important;min-height:34px!important;margin:5px 0 5px!important;border-radius:8px 8px 0 0!important;background:linear-gradient(135deg,#007f43,#11b76a)!important;color:#fff!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 16px!important;font-size:18px!important;line-height:1!important;font-weight:1000!important;text-transform:uppercase!important;box-shadow:0 8px 16px rgba(0,138,72,.16)!important;letter-spacing:-.2px!important;}}
-.ind-form .section span{{width:24px!important;height:24px!important;border-radius:999px!important;background:#fff!important;color:#008a48!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:17px!important;font-weight:1000!important;}}
-.ind-form b{{min-height:46px!important;height:46px!important;border-radius:7px!important;background:linear-gradient(135deg,#e0faeb,#f6fff9)!important;border:1px solid #b2ebc9!important;color:#071b34!important;font-size:15px!important;font-weight:1000!important;text-align:left!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 12px!important;line-height:1.05!important;box-shadow:none!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}}
-.ind-form b.req{{background:linear-gradient(135deg,#dcfce7,#f5fff9)!important;border:1.5px solid #86efac!important;color:#071b34!important;}}
-.ind-form b.req:after{{content:'*'!important;color:#ef1111!important;margin-left:auto!important;font-size:17px!important;font-weight:1000!important;}}
-.ind-form input,.ind-form select,.ind-form textarea{{min-height:46px!important;height:46px!important;border:1px solid #cbdced!important;border-radius:7px!important;background:#fff!important;color:#071b34!important;font-size:15px!important;font-weight:850!important;padding:0 12px!important;box-shadow:0 1px 2px rgba(15,23,42,.03) inset!important;}}
-.ind-form input::placeholder,.ind-form textarea::placeholder{{color:#6f809a!important;font-weight:850!important;}}
-.ind-form select{{appearance:auto!important;}}
-.ind-form textarea{{height:50px!important;min-height:50px!important;padding:13px 12px!important;resize:vertical!important;line-height:1.2!important;}}
-.ind-form input[type=file]{{font-size:13px!important;padding:10px 10px!important;overflow:hidden!important;white-space:nowrap!important;}}
-#ind_dni{{grid-column:2/5!important;}}
-.ind-req-line{{grid-column:1/-1!important;min-height:42px!important;height:42px!important;border-radius:7px!important;background:linear-gradient(135deg,#e4faee,#f4fff8)!important;border:1px solid #a7f3d0!important;color:#008a48!important;font-size:14px!important;font-weight:900!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 16px!important;overflow:hidden!important;white-space:nowrap!important;}}
-.ind-req-line strong{{color:#071b34!important;font-size:13px!important;font-weight:1000!important;font-style:normal!important;}}
-.ind-req-line em{{background:#008a48!important;color:#fff!important;border-radius:5px!important;padding:7px 12px!important;font-size:13px!important;font-weight:1000!important;font-style:normal!important;}}
-.ind-req-line span{{color:#008a48!important;font-size:14px!important;font-weight:900!important;}}
-.ind-form b[class*="ind-lbl-"]::before{{font-size:22px!important;line-height:1!important;min-width:28px!important;text-align:center!important;display:inline-block!important;color:#008a48!important;font-family:Arial,'Segoe UI Emoji','Apple Color Emoji',sans-serif!important;font-weight:400!important;filter:none!important;}}
-.ind-lbl-dni::before{{content:'🪪'!important}}.ind-lbl-trab::before{{content:'👤'!important}}.ind-lbl-emp::before{{content:'🏢'!important}}.ind-lbl-area::before{{content:'🏭'!important}}.ind-lbl-cargo::before{{content:'💼'!important}}.ind-lbl-act::before{{content:'📋'!important}}.ind-lbl-fecha::before{{content:'📅'!important}}.ind-lbl-polo::before{{content:'👕'!important}}.ind-lbl-pantalon::before{{content:'👖'!important}}.ind-lbl-botas::before{{content:'🥾'!important}}.ind-lbl-casaca::before{{content:'🧥'!important}}.ind-lbl-gorro::before{{content:'⛑️'!important}}.ind-lbl-lentes::before{{content:'👓'!important}}.ind-lbl-guantes::before{{content:'🧤'!important}}.ind-lbl-otros::before{{content:'🧰'!important}}.ind-lbl-estado::before{{content:'✅'!important}}.ind-lbl-resp::before{{content:'👤'!important}}.ind-lbl-firma::before{{content:'🖊️'!important}}.ind-lbl-obs::before{{content:'💬'!important}}
-.ind-lbl-obs + textarea{{grid-column:2/4!important;}}
-.ind-lbl-obs + textarea + span{{display:none!important;}}
-.ind-lbl-obs + textarea + span + div{{grid-column:4/5!important;align-self:stretch!important;display:block!important;}}
-.ind-lbl-obs + textarea + span + div .ind-btn.green{{height:100%!important;width:100%!important;}}
-.ind-form .ind-btn.green{{min-height:50px!important;height:50px!important;border-radius:7px!important;background:linear-gradient(135deg,#008a48,#11b76a)!important;color:#fff!important;font-size:24px!important;font-weight:1000!important;box-shadow:0 12px 22px rgba(0,138,72,.23)!important;padding:0 10px!important;}}
-@media(max-width:900px){{.ind-modal-card{{width:99vw!important;max-width:99vw!important;}}.ind-modal-head h2{{font-size:24px!important;}}.ind-form{{grid-template-columns:170px minmax(230px,1fr) 170px minmax(260px,1fr)!important;}}.ind-form b{{font-size:13px!important;}}.ind-form input,.ind-form select,.ind-form textarea{{font-size:13px!important;}}}}
-@media(max-width:720px){{.ind-modal-card{{width:99vw!important;}}.ind-modal-head{{height:auto!important;min-height:64px!important;flex-wrap:wrap!important;}}.ind-close{{width:100%!important;}}.ind-form{{grid-template-columns:1fr!important;}}.ind-form .section,#ind_dni,.ind-req-line,.ind-lbl-obs + textarea,.ind-lbl-obs + textarea + span + div{{grid-column:1/-1!important;}}.ind-form b{{white-space:normal!important;}}}}
-
-/* === OVERRIDE DEFINITIVO INDUMENTARIA / EPP - IGUAL A IMAGEN REFERENCIA === */
-.ind-modal{{padding:0!important;align-items:flex-start!important;justify-content:center!important;background:rgba(15,23,42,.55)!important;overflow-x:hidden!important;overflow-y:auto!important;}}
-.ind-modal-check:checked + .ind-modal{{display:flex!important;}}
-.ind-modal-card{{width:min(1288px,99vw)!important;max-width:1288px!important;max-height:97vh!important;margin:0 auto!important;border-radius:0 0 12px 12px!important;border:1px solid #cfdbe5!important;background:#fff!important;box-shadow:0 22px 70px rgba(15,23,42,.34)!important;overflow-y:auto!important;overflow-x:hidden!important;}}
-.ind-modal-card::-webkit-scrollbar{{width:10px!important;height:0!important}}.ind-modal-card::-webkit-scrollbar-thumb{{background:#8b8f93!important;border-radius:999px!important}}.ind-modal-card::-webkit-scrollbar-track{{background:#eef2f5!important;border-radius:999px!important}}
-.ind-modal-head{{height:63px!important;min-height:63px!important;padding:0 18px 0 18px!important;border-bottom:3px solid #008a48!important;background:#fff!important;position:sticky!important;top:0!important;z-index:20!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:14px!important;}}
-.ind-modal-head h2{{flex:1 1 auto!important;min-width:0!important;display:flex!important;align-items:center!important;gap:12px!important;margin:0!important;color:#071b34!important;font-size:30px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-.8px!important;text-transform:uppercase!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}}
-.ind-head-icon{{width:42px!important;height:42px!important;min-width:42px!important;border-radius:7px!important;background:transparent!important;border:0!important;color:#008a48!important;display:inline-grid!important;place-items:center!important;}}
-.ind-head-icon i{{display:inline-block!important;font-size:38px!important;color:#008a48!important;line-height:1!important}}.ind-head-icon:before{{content:''!important;display:none!important;}}
-.ind-close{{flex:0 0 auto!important;min-width:102px!important;width:102px!important;height:50px!important;min-height:50px!important;padding:0 12px!important;border-radius:7px!important;background:linear-gradient(135deg,#008a48,#10b565)!important;color:#fff!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:17px!important;font-weight:1000!important;white-space:nowrap!important;box-shadow:0 12px 20px rgba(0,138,72,.22)!important;}}
-.ind-form{{padding:12px 14px 16px!important;display:grid!important;grid-template-columns:220px minmax(260px,1fr) 235px minmax(320px,1fr)!important;gap:8px 10px!important;align-items:center!important;background:#fff!important;min-width:0!important;width:100%!important;box-sizing:border-box!important;overflow-x:hidden!important;}}
-.ind-form *{{box-sizing:border-box!important;min-width:0!important}}.ind-form input,.ind-form select,.ind-form textarea{{max-width:100%!important;width:100%!important;}}
-.ind-form .section{{grid-column:1/-1!important;height:35px!important;min-height:35px!important;margin:2px 0 5px!important;border-radius:8px 8px 0 0!important;background:linear-gradient(135deg,#007f43,#11b76a)!important;color:#fff!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 16px!important;font-size:18px!important;line-height:1!important;font-weight:1000!important;text-transform:uppercase!important;letter-spacing:-.2px!important;box-shadow:0 8px 16px rgba(0,138,72,.16)!important;}}
-.ind-form .section span{{width:24px!important;height:24px!important;border-radius:999px!important;background:#fff!important;color:#008a48!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:17px!important;font-weight:1000!important;}}
-.ind-form b{{min-height:48px!important;height:48px!important;border-radius:7px!important;background:linear-gradient(135deg,#dcf8e8,#f6fff9)!important;border:1.4px solid #afeac6!important;color:#071b34!important;font-size:15px!important;font-weight:1000!important;text-align:left!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 13px!important;line-height:1.08!important;box-shadow:none!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}}
-.ind-form b.req{{background:linear-gradient(135deg,#d5f7df,#f4fff8)!important;border:1.7px solid #58df89!important;color:#071b34!important;}}
-.ind-form b.req:after{{content:'*'!important;color:#ef1111!important;margin-left:auto!important;font-size:17px!important;font-weight:1000!important;}}
-.ind-form b[class*="ind-lbl-"]::before{{content:''!important;display:none!important;}}
-.ind-form b i{{font-size:22px!important;line-height:1!important;min-width:27px!important;text-align:center!important;color:#008a48!important;display:inline-block!important;font-weight:900!important;}}
-.ind-form input,.ind-form select,.ind-form textarea{{min-height:48px!important;height:48px!important;border:1px solid #cbdced!important;border-radius:7px!important;background:#fff!important;color:#071b34!important;font-size:15px!important;font-weight:850!important;padding:0 12px!important;box-shadow:0 1px 2px rgba(15,23,42,.03) inset!important;}}
-.ind-form input::placeholder,.ind-form textarea::placeholder{{color:#6f809a!important;font-weight:850!important}}.ind-form select{{appearance:auto!important;}}
-.ind-form textarea{{height:52px!important;min-height:52px!important;padding:14px 12px!important;resize:vertical!important;line-height:1.2!important;}}
-.ind-form input[type=file]{{font-size:13px!important;padding:11px 10px!important;overflow:hidden!important;white-space:nowrap!important;}}
-.ind-req-line{{grid-column:1/-1!important;min-height:43px!important;height:43px!important;border-radius:7px!important;background:linear-gradient(135deg,#e1f9e9,#f0fff6)!important;border:1px solid #a8e7c1!important;color:#008a48!important;font-size:15px!important;font-weight:1000!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 14px!important;overflow:hidden!important;}}
-.ind-req-line strong{{color:#071b34!important;font-size:14px!important;font-weight:1000!important;white-space:nowrap!important}}.ind-req-line em{{background:#008a48!important;color:#fff!important;border-radius:6px!important;padding:7px 12px!important;font-size:14px!important;font-weight:1000!important;font-style:normal!important;white-space:nowrap!important}}.ind-req-line span{{color:#008a48!important;font-size:15px!important;font-weight:1000!important;white-space:nowrap!important;}}
-.ind-lbl-obs + textarea{{grid-column:2/4!important;}}.ind-lbl-obs + textarea + span{{display:none!important;}}.ind-lbl-obs + textarea + span + div{{grid-column:4/5!important;align-self:stretch!important;display:block!important;}}.ind-lbl-obs + textarea + span + div .ind-btn.green{{height:100%!important;width:100%!important;}}
-.ind-form .ind-btn.green{{min-height:52px!important;height:52px!important;border-radius:7px!important;border:0!important;background:linear-gradient(135deg,#008a48,#11b76a)!important;color:#fff!important;font-size:25px!important;font-weight:1000!important;box-shadow:0 12px 22px rgba(0,138,72,.23)!important;padding:0 10px!important;}}
-@media(max-width:980px){{.ind-modal-card{{width:99vw!important;max-width:99vw!important;}}.ind-modal-head h2{{font-size:24px!important;}}.ind-form{{grid-template-columns:190px minmax(230px,1fr) 190px minmax(260px,1fr)!important;}}.ind-form b{{font-size:13px!important}}.ind-form input,.ind-form select,.ind-form textarea{{font-size:13px!important}}.ind-req-line{{height:auto!important;min-height:43px!important;flex-wrap:wrap!important;padding:8px 12px!important;}}}}
-@media(max-width:720px){{.ind-modal-card{{width:99vw!important}}.ind-modal-head{{height:auto!important;min-height:64px!important;flex-wrap:wrap!important}}.ind-close{{width:100%!important}}.ind-form{{grid-template-columns:1fr!important}}.ind-form .section,#ind_dni,.ind-req-line,.ind-lbl-obs + textarea,.ind-lbl-obs + textarea + span + div{{grid-column:1/-1!important}}.ind-form b{{white-space:normal!important;}}}}
-.ind-modal-card.ind-modal-epp-v2{{width:min(1500px,98vw)!important;max-height:96vh!important;background:#fff!important;border-radius:8px!important;overflow:auto!important;border:1px solid #d8e2ec!important;box-shadow:0 28px 80px rgba(15,23,42,.26)!important}}.ind-modal-epp-v2 .ind-modal-head{{height:88px!important;padding:0 38px 0 28px!important;background:#fff!important;border-bottom:0!important;display:flex!important;align-items:center!important;justify-content:space-between!important;position:sticky!important;top:0!important;z-index:5!important}}.ind-modal-epp-v2 .ind-modal-head h2{{font-size:38px!important;color:#082744!important;font-weight:1000!important;letter-spacing:-1.2px!important;text-transform:none!important;margin:0!important;display:flex!important;align-items:center!important;gap:16px!important}}.ind-modal-epp-v2 .ind-head-icon{{width:40px!important;height:40px!important;border-radius:10px!important;background:#ddfae7!important;border:1.5px solid #8ce5ad!important;color:#008a48!important}}.ind-modal-epp-v2 .ind-head-icon i{{font-size:25px!important}}.ind-modal-epp-v2 .ind-close{{width:120px!important;min-width:120px!important;height:54px!important;border-radius:12px!important;font-size:17px!important}}.ind-modal-body-epp{{display:grid!important;grid-template-columns:278px minmax(0,1fr)!important;gap:22px!important;padding:8px 28px 16px!important}}.ind-photo-card{{border:1.4px solid #d8e2ec!important;border-radius:13px!important;min-height:338px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:28px!important;background:#fff!important}}.ind-photo-box{{width:158px!important;height:165px!important;border:1.2px solid #d4dde9!important;border-radius:13px!important;background:linear-gradient(145deg,#f8fafc,#eef3f8)!important;display:grid!important;place-items:center!important;overflow:hidden!important}}.ind-photo-box i{{font-size:72px!important;color:#202020!important}}.ind-photo-box img{{width:100%!important;height:100%!important;object-fit:cover!important}}.ind-photo-card b{{font-size:17px!important;color:#45556f!important;text-align:center!important;line-height:1.28!important;font-weight:1000!important;max-width:190px!important}}.ind-form.ind-form-epp-v2{{padding:0!important;display:grid!important;grid-template-columns:218px minmax(240px,1fr) 218px minmax(240px,1fr)!important;gap:10px 12px!important;align-items:center!important;overflow:visible!important}}.ind-form-epp-v2 .section{{height:38px!important;min-height:38px!important;border-radius:10px 10px 0 0!important;margin:0!important;padding:0 20px!important;font-size:22px!important;letter-spacing:-.3px!important}}.ind-form-epp-v2 .section span{{background:transparent!important;color:#fff!important;width:auto!important;height:auto!important;font-size:22px!important;margin-right:0!important}}.ind-form-epp-v2 b{{height:46px!important;min-height:46px!important;border-radius:8px!important;font-size:14px!important;padding:0 16px!important;background:linear-gradient(135deg,#eafff1,#f7fffa)!important;border:1.5px solid #c4efd4!important}}.ind-form-epp-v2 b.req:after{{content:'*'!important;color:#ef1111!important;margin-left:6px!important}}.ind-form-epp-v2 b i{{font-size:22px!important;color:#008a48!important;margin-right:10px!important}}.ind-form-epp-v2 input,.ind-form-epp-v2 select,.ind-form-epp-v2 textarea{{height:46px!important;min-height:46px!important;border-radius:8px!important;border:1.2px solid #d5e1ec!important;font-size:15px!important;font-weight:850!important}}.dni-search-wrap{{display:grid!important;grid-template-columns:1fr 58px!important;gap:0!important}}.dni-search-wrap input{{border-radius:8px 0 0 8px!important}}.dni-search-btn{{height:56px!important;min-height:56px!important;border:0!important;border-radius:0 12px 12px 0!important;background:#008a48!important;color:#fff!important;font-size:30px!important;display:grid!important;place-items:center!important;cursor:pointer!important}}.ind-delivery-state{{height:84px!important;border-radius:12px!important;border:1.3px solid #b8efd0!important;background:linear-gradient(135deg,#f7fffa,#ebfff3)!important;padding:13px 20px!important;display:flex!important;flex-direction:column!important;gap:8px!important;justify-content:center!important}}.ind-delivery-state strong{{font-size:17px!important;color:#071b34!important;font-weight:1000!important}}.ind-delivery-state span{{display:inline-flex!important;align-items:center!important;gap:8px!important;width:max-content!important;border-radius:999px!important;background:#fff4db!important;border:1px solid #ffd28a!important;color:#f97316!important;padding:9px 20px!important;font-weight:1000!important}}.ind-req-line{{height:42px!important;min-height:42px!important;border-radius:8px!important;margin:8px 0!important}}.ind-submit-cell{{grid-column:4/5!important}}.ind-submit-cell .ind-btn.green{{width:100%!important;height:64px!important;border-radius:9px!important;font-size:26px!important}}.ind-form-epp-v2 .ind-lbl-obs + textarea{{grid-column:2/4!important;height:64px!important;min-height:64px!important}}.ind-alert{{margin:0 28px 24px!important;border-radius:8px!important;min-height:38px!important;display:flex!important;align-items:center!important;padding:8px 16px!important}}.field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.12)!important}}@media(max-width:980px){{.ind-modal-body-epp{{grid-template-columns:1fr!important}}.ind-photo-card{{min-height:auto!important;padding:18px!important}}.ind-form.ind-form-epp-v2{{grid-template-columns:1fr!important}}.dni-search-wrap,.ind-delivery-state,.ind-form-epp-v2 .ind-lbl-obs + textarea,.ind-submit-cell{{grid-column:1/-1!important}}.ind-modal-epp-v2 .ind-modal-head h2{{font-size:26px!important}}.ind-modal-epp-v2 .ind-close{{width:100%!important}}}}
-
-
-
-
-
-/* === OVERRIDE FINAL 2026: INDUMENTARIA IGUAL A MOCKUP APROBADO === */
-.ind-modal{{
-  padding:4px!important;
-  align-items:flex-start!important;
-  justify-content:center!important;
-  background:rgba(15,23,42,.55)!important;
-  overflow-x:hidden!important;
-  overflow-y:auto!important;
-}}
-.ind-modal-card.ind-modal-epp-v2{{
-  width:min(1510px,99vw)!important;
-  max-width:1510px!important;
-  max-height:98vh!important;
-  margin:0 auto!important;
-  border-radius:10px!important;
-  background:#fff!important;
-  border:1px solid #cfdbe5!important;
-  box-shadow:0 28px 80px rgba(15,23,42,.30)!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-}}
-.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar{{width:10px!important;height:0!important}}
-.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar-thumb{{background:#8b8f93!important;border-radius:999px!important}}
-.ind-modal-card.ind-modal-epp-v2::-webkit-scrollbar-track{{background:#eef2f5!important;border-radius:999px!important}}
-.ind-modal-epp-v2 .ind-modal-head{{
-  height:86px!important;
-  min-height:86px!important;
-  padding:0 36px 0 30px!important;
-  background:#fff!important;
-  border-bottom:3px solid #008a48!important;
-  position:sticky!important;
-  top:0!important;
-  z-index:30!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:space-between!important;
-  gap:18px!important;
-}}
-.ind-modal-epp-v2 .ind-modal-head h2{{
-  margin:0!important;
-  color:#082744!important;
-  font-size:42px!important;
-  line-height:1!important;
-  font-weight:1000!important;
-  letter-spacing:-1.4px!important;
-  text-transform:none!important;
-  display:flex!important;
-  align-items:center!important;
-  gap:20px!important;
-  white-space:nowrap!important;
-  overflow:hidden!important;
-  text-overflow:ellipsis!important;
-}}
-.ind-modal-epp-v2 .ind-head-icon{{
-  width:56px!important;
-  height:56px!important;
-  min-width:56px!important;
-  border-radius:12px!important;
-  background:#eafff2!important;
-  border:1.5px solid #93e7b3!important;
-  color:#008a48!important;
-  display:grid!important;
-  place-items:center!important;
-}}
-.ind-modal-epp-v2 .ind-head-icon i{{
-  display:inline-block!important;
-  font-size:34px!important;
-  color:#008a48!important;
-}}
-.ind-modal-epp-v2 .ind-head-icon:before{{display:none!important;content:''!important}}
-.ind-modal-epp-v2 .ind-close{{
-  width:124px!important;
-  min-width:124px!important;
-  height:56px!important;
-  min-height:56px!important;
-  padding:0 18px!important;
-  border-radius:12px!important;
-  background:linear-gradient(135deg,#008a48,#10b565)!important;
-  color:#fff!important;
-  display:inline-flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  font-size:18px!important;
-  font-weight:1000!important;
-  box-shadow:0 16px 28px rgba(0,138,72,.24)!important;
-  white-space:nowrap!important;
-}}
-.ind-modal-body-epp{{
-  display:grid!important;
-  grid-template-columns:280px minmax(0,1fr)!important;
-  gap:22px!important;
-  padding:18px 30px 14px!important;
-}}
-.ind-photo-card{{
-  border:1.4px solid #d8e2ec!important;
-  border-radius:14px!important;
-  min-height:340px!important;
-  padding:20px!important;
-  background:#fff!important;
-  display:flex!important;
-  flex-direction:column!important;
-  align-items:center!important;
-  justify-content:center!important;
-  gap:28px!important;
-}}
-.ind-photo-box{{
-  width:158px!important;
-  height:165px!important;
-  border:1.2px solid #d4dde9!important;
-  border-radius:13px!important;
-  background:linear-gradient(145deg,#f8fafc,#eef3f8)!important;
-  display:grid!important;
-  place-items:center!important;
-  overflow:hidden!important;
-}}
-.ind-photo-box i{{font-size:74px!important;color:#202020!important}}
-.ind-photo-box img{{width:100%!important;height:100%!important;object-fit:cover!important}}
-.ind-photo-card b{{
-  color:#45556f!important;
-  font-size:17px!important;
-  line-height:1.28!important;
-  font-weight:1000!important;
-  text-align:center!important;
-  max-width:190px!important;
-}}
-.ind-form.ind-form-epp-v2{{
-  padding:0!important;
-  display:grid!important;
-  grid-template-columns:220px minmax(280px,1fr) 220px minmax(280px,1fr)!important;
-  gap:10px 12px!important;
-  align-items:center!important;
-  background:#fff!important;
-  width:100%!important;
-  min-width:0!important;
-  overflow-x:hidden!important;
-}}
-.ind-form-epp-v2 *{{box-sizing:border-box!important;min-width:0!important}}
-.ind-form-epp-v2 input,
-.ind-form-epp-v2 select,
-.ind-form-epp-v2 textarea{{
-  width:100%!important;
-  max-width:100%!important;
-  height:46px!important;
-  min-height:46px!important;
-  border:1.3px solid #d4e0eb!important;
-  border-radius:8px!important;
-  background:#fff!important;
-  color:#071b34!important;
-  font-size:15px!important;
-  font-weight:850!important;
-  padding:0 14px!important;
-  box-shadow:0 1px 2px rgba(15,23,42,.03) inset!important;
-}}
-.ind-form-epp-v2 input::placeholder,
-.ind-form-epp-v2 textarea::placeholder{{color:#71819a!important;font-weight:850!important}}
-.ind-form-epp-v2 select{{appearance:auto!important}}
-.ind-form-epp-v2 textarea{{
-  height:64px!important;
-  min-height:64px!important;
-  padding:14px!important;
-  resize:vertical!important;
-  line-height:1.2!important;
-}}
-.ind-form-epp-v2 input[type=file]{{
-  font-size:13px!important;
-  padding:10px!important;
-  white-space:nowrap!important;
-  overflow:hidden!important;
-}}
-.ind-form-epp-v2 .section{{
-  grid-column:1/-1!important;
-  height:40px!important;
-  min-height:40px!important;
-  margin:0!important;
-  border-radius:10px 10px 0 0!important;
-  padding:0 20px!important;
-  background:linear-gradient(135deg,#007f43,#10b565)!important;
-  color:#fff!important;
-  display:flex!important;
-  align-items:center!important;
-  gap:12px!important;
-  font-size:21px!important;
-  font-weight:1000!important;
-  text-transform:uppercase!important;
-  letter-spacing:-.3px!important;
-  box-shadow:0 8px 18px rgba(0,138,72,.16)!important;
-}}
-.ind-form-epp-v2 .section span{{
-  width:26px!important;
-  height:26px!important;
-  border-radius:999px!important;
-  background:#fff!important;
-  color:#008a48!important;
-  display:inline-flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  font-size:18px!important;
-  font-weight:1000!important;
-  margin:0!important;
-}}
-.ind-form-epp-v2 b{{
-  height:46px!important;
-  min-height:46px!important;
-  border-radius:8px!important;
-  background:linear-gradient(135deg,#e3faed,#f6fff9)!important;
-  border:1.4px solid #b6ebcb!important;
-  color:#071b34!important;
-  font-size:14px!important;
-  font-weight:1000!important;
-  display:flex!important;
-  align-items:center!important;
-  gap:11px!important;
-  text-align:left!important;
-  padding:0 14px!important;
-  line-height:1.08!important;
-  white-space:nowrap!important;
-  overflow:hidden!important;
-  text-overflow:ellipsis!important;
-  box-shadow:0 6px 14px rgba(0,138,72,.04)!important;
-}}
-.ind-form-epp-v2 b.req{{
-  background:linear-gradient(135deg,#d9f8e4,#f5fff9)!important;
-  border:1.7px solid #69e392!important;
-}}
-.ind-form-epp-v2 b.req:after{{
-  content:'*'!important;
-  color:#ef1111!important;
-  margin-left:auto!important;
-  font-size:16px!important;
-  font-weight:1000!important;
-}}
-.ind-form-epp-v2 b[class*="ind-lbl-"]::before{{display:none!important;content:''!important}}
-.ind-form-epp-v2 b i{{
-  display:inline-block!important;
-  min-width:28px!important;
-  color:#008a48!important;
-  font-size:22px!important;
-  line-height:1!important;
-  text-align:center!important;
-  font-weight:900!important;
-}}
-.dni-search-wrap{{
-  display:grid!important;
-  grid-template-columns:1fr 62px!important;
-  gap:0!important;
-}}
-.dni-search-wrap input{{border-radius:8px 0 0 8px!important}}
-.dni-search-btn{{
-  height:52px!important;
-  min-height:52px!important;
-  border:0!important;
-  border-radius:0 12px 12px 0!important;
-  background:#008a48!important;
-  color:#fff!important;
-  font-size:30px!important;
-  display:grid!important;
-  place-items:center!important;
-  cursor:pointer!important;
-  box-shadow:0 8px 18px rgba(0,138,72,.20)!important;
-}}
-.ind-delivery-state{{
-  height:84px!important;
-  min-height:84px!important;
-  border-radius:12px!important;
-  border:1.3px solid #b8efd0!important;
-  background:linear-gradient(135deg,#f7fffa,#ebfff3)!important;
-  padding:13px 20px!important;
-  display:flex!important;
-  flex-direction:column!important;
-  gap:8px!important;
-  justify-content:center!important;
-}}
-.ind-delivery-state strong{{
-  color:#071b34!important;
-  font-size:17px!important;
-  font-weight:1000!important;
-}}
-.ind-delivery-state span{{
-  display:inline-flex!important;
-  align-items:center!important;
-  gap:8px!important;
-  width:max-content!important;
-  border-radius:999px!important;
-  background:#fff4db!important;
-  border:1px solid #ffd28a!important;
-  color:#f97316!important;
-  padding:9px 20px!important;
-  font-size:16px!important;
-  font-weight:1000!important;
-}}
-.ind-req-line{{
-  grid-column:1/-1!important;
-  height:42px!important;
-  min-height:42px!important;
-  border-radius:8px!important;
-  margin:0!important;
-  background:linear-gradient(135deg,#e2faea,#f2fff7)!important;
-  border:1.3px solid #a8e7c1!important;
-  color:#008a48!important;
-  font-size:14px!important;
-  font-weight:1000!important;
-  display:flex!important;
-  align-items:center!important;
-  gap:10px!important;
-  padding:0 18px!important;
-  white-space:nowrap!important;
-  overflow:hidden!important;
-}}
-.ind-req-line strong{{color:#071b34!important;font-size:13px!important;font-weight:1000!important}}
-.ind-req-line em{{
-  background:#008a48!important;
-  color:#fff!important;
-  border-radius:6px!important;
-  padding:7px 12px!important;
-  font-size:13px!important;
-  font-style:normal!important;
-  font-weight:1000!important;
-}}
-.ind-req-line span{{color:#008a48!important;font-size:14px!important;font-weight:1000!important}}
-.ind-lbl-obs + textarea{{grid-column:2/4!important}}
-.ind-lbl-obs + textarea + span{{display:none!important}}
-.ind-lbl-obs + textarea + span + .ind-submit-cell,
-.ind-submit-cell{{
-  grid-column:4/5!important;
-  align-self:stretch!important;
-  display:block!important;
-}}
-.ind-submit-cell .ind-btn.green{{
-  width:100%!important;
-  height:64px!important;
-  min-height:64px!important;
-  border-radius:9px!important;
-  border:0!important;
-  background:linear-gradient(135deg,#008a48,#11b76a)!important;
-  color:#fff!important;
-  font-size:28px!important;
-  font-weight:1000!important;
-  box-shadow:0 16px 30px rgba(0,138,72,.24)!important;
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  gap:10px!important;
-  padding:0 14px!important;
-}}
-.ind-alert{{display:none!important}}
-.field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.14)!important}}
-@media(max-width:1050px){{
-  .ind-modal-card.ind-modal-epp-v2{{width:99vw!important;max-width:99vw!important}}
-  .ind-modal-epp-v2 .ind-modal-head h2{{font-size:30px!important}}
-  .ind-modal-body-epp{{grid-template-columns:240px minmax(0,1fr)!important;padding:14px!important}}
-  .ind-form.ind-form-epp-v2{{grid-template-columns:180px minmax(180px,1fr) 180px minmax(220px,1fr)!important}}
-}}
-@media(max-width:760px){{
-  .ind-modal-body-epp{{grid-template-columns:1fr!important}}
-  .ind-photo-card{{min-height:auto!important;padding:18px!important}}
-  .ind-form.ind-form-epp-v2{{grid-template-columns:1fr!important}}
-  .ind-form-epp-v2 .section,
-  .dni-search-wrap,
-  .ind-delivery-state,
-  .ind-req-line,
-  .ind-lbl-obs + textarea,
-  .ind-submit-cell{{grid-column:1/-1!important}}
-  .ind-modal-epp-v2 .ind-modal-head{{height:auto!important;min-height:74px!important;flex-wrap:wrap!important;padding:12px!important}}
-  .ind-modal-epp-v2 .ind-modal-head h2{{font-size:24px!important;white-space:normal!important}}
-  .ind-modal-epp-v2 .ind-close{{width:100%!important}}
-}}
+@media(max-width:1050px){{.ind-modal-head h2{{font-size:32px!important;white-space:normal!important}}.ind-form{{grid-template-columns:1fr 1fr!important}}.ind-form b{{font-size:18px!important}}.ind-form input,.ind-form select,.ind-form textarea{{font-size:18px!important}}.ind-req-line{{flex-wrap:wrap;height:auto!important;padding:12px!important}}}}
+@media(max-width:720px){{.ind-form{{grid-template-columns:1fr!important}}.ind-form .section{{font-size:19px!important}}.ind-modal-head{{flex-wrap:wrap}}.ind-close{{width:100%}}.ind-form .ind-btn.green{{font-size:26px!important;min-height:70px!important}}}}
 
         </style>
         <section class='ind-page'>
@@ -12819,60 +12348,8 @@ html,body{overflow-x:hidden!important;}
           <form id='form_masivo_indumentaria' method='post' class='ind-tools'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='indumentaria'><input type='hidden' name='campo_estado' value='estado_indumentaria'><div><label>Buscar por DNI</label><input type='text' oninput="filtrarTabla(this,'tabla_indumentaria_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='ind-state-filter' onchange="filtrarTabla(this,'tabla_indumentaria_360')"><option value=''>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select><select class='legacy-mass-select' name='nuevo_estado'><option>PENDIENTE</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='ind-btn mass-apply-btn' type='submit'>Aplicar estado</button></div><div><span class="registrar-title" style="display:none"></span><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn'>Registrar</label></div></div></form>
           <div class='ind-table-card'><div class='ind-table-head'><h2>LISTA DE POSTULANTES</h2></div><div class='std-table-wrap'><table id='tabla_indumentaria_360' class='std-table'>{tabla_estandar_postulantes_header('tabla_indumentaria_360')}{indumentaria_control_rows}</table></div></div><script>document.addEventListener('DOMContentLoaded',function(){{function b(t,f){{var form=document.getElementById(f);if(!form)return;document.querySelectorAll('#'+t+' input[name="ingreso_ids"]').forEach(function(x){{x.setAttribute('form',f);}});}}b('tabla_induccion_360','form_masivo_induccion');b('tabla_indumentaria_360','form_masivo_indumentaria');}});</script>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Cargos de entrega registrados</h2><small>{len(indumentarias_filtradas)} registro(s)</small></div><div class='ind-table-wrap'><table class='ind-table'><tr><th>Fecha registro</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Estado</th><th>Responsable</th><th>Fecha entrega</th><th>Acción</th></tr>{ind_rows}</table></div></div>
-          
-<style id='indumentaria-epp-clon-imagen-final'>
-/* ===== INDUMENTARIA / EPP - MOCKUP FINAL IGUAL A REFERENCIA ===== */
-.eppx-check{{display:none!important}}
-.eppx-modal{{position:fixed!important;inset:0!important;background:rgba(15,23,42,.38)!important;z-index:2147483647!important;display:none!important;align-items:center!important;justify-content:center!important;overflow:auto!important;padding:10px!important}}
-.eppx-check:checked + .eppx-modal{{display:flex!important}}
-.eppx-card{{width:min(1450px,99vw)!important;max-height:96vh!important;background:#fff!important;border:1px solid #dbe7ef!important;border-radius:10px!important;box-shadow:0 28px 90px rgba(15,23,42,.28)!important;overflow:auto!important;color:#071b34!important;font-family:Inter,system-ui,-apple-system,"Segoe UI",Arial,sans-serif!important}}
-.eppx-card::-webkit-scrollbar{{width:8px!important}}.eppx-card::-webkit-scrollbar-thumb{{background:#70757d!important;border-radius:99px!important}}
-.eppx-head{{height:74px!important;min-height:74px!important;background:#fff!important;padding:10px 28px 10px 14px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;border-bottom:0!important;position:relative!important;z-index:5!important}}
-.eppx-title{{margin:0!important;display:flex!important;align-items:center!important;gap:18px!important;color:#071b34!important;font-size:36px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-1.2px!important;white-space:nowrap!important}}
-.eppx-title-icon{{width:43px!important;height:43px!important;border-radius:11px!important;background:#e7fff0!important;border:2px solid #b6efca!important;color:#008e4d!important;display:grid!important;place-items:center!important;flex:0 0 43px!important}}
-.eppx-title-icon i{{font-size:29px!important;color:#008e4d!important}}
-.eppx-close{{height:51px!important;min-width:120px!important;border-radius:10px!important;background:#00964f!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:16px!important;font-weight:1000!important;box-shadow:0 10px 20px rgba(0,150,79,.18)!important;cursor:pointer!important}}
-.eppx-body{{display:grid!important;grid-template-columns:275px minmax(0,1fr)!important;gap:20px!important;padding:0 27px 10px 27px!important;background:#fff!important;align-items:start!important}}
-.eppx-photo{{min-height:335px!important;border:1px solid #d9e7ee!important;border-radius:18px!important;background:#fff!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:30px!important;padding:18px!important}}
-.eppx-photo-box{{width:155px!important;height:165px!important;border-radius:16px!important;border:1px solid #dbe7ee!important;background:#f4f7f9!important;box-shadow:inset 0 3px 15px rgba(15,23,42,.04)!important;display:grid!important;place-items:center!important;overflow:hidden!important}}
-.eppx-photo-box i{{font-size:86px!important;color:#333!important}}
-.eppx-photo-box img{{width:100%!important;height:100%!important;object-fit:cover!important;border-radius:15px!important}}
-.eppx-photo b{{font-size:16px!important;line-height:1.25!important;font-weight:1000!important;text-align:center!important;color:#26364d!important;max-width:170px!important}}
-.eppx-form{{display:grid!important;grid-template-columns:220px minmax(260px,1fr) 220px minmax(260px,1fr)!important;gap:9px 13px!important;align-items:center!important;min-width:0!important;padding:0!important;overflow:visible!important}}
-.eppx-section{{grid-column:1/-1!important;height:38px!important;min-height:38px!important;background:linear-gradient(180deg,#009a50,#007d3f)!important;color:#fff!important;border-radius:9px 9px 0 0!important;display:flex!important;align-items:center!important;padding:0 18px!important;font-size:20px!important;font-weight:1000!important;letter-spacing:.1px!important;text-transform:uppercase!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)!important;margin:0!important}}
-.eppx-section b{{all:unset!important;color:#fff!important;font-weight:1000!important;font-size:21px!important;margin-right:8px!important}}
-.eppx-section-wide{{margin-left:-295px!important;width:calc(100% + 295px)!important}}
-.eppx-label{{height:45px!important;min-height:45px!important;border-radius:8px!important;border:1.3px solid #bdebd0!important;background:linear-gradient(135deg,#e4faed,#f8fffb)!important;color:#071b34!important;font-size:14px!important;font-weight:1000!important;display:flex!important;align-items:center!important;gap:12px!important;padding:0 14px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}}
-.eppx-label.req{{border-color:#99eeb8!important;background:linear-gradient(135deg,#def9e8,#f8fffb)!important}}
-.eppx-label.req::after{{content:'*'!important;color:#ef1111!important;margin-left:auto!important;font-size:15px!important}}
-.eppx-label i{{min-width:28px!important;text-align:center!important;color:#008e4d!important;font-size:23px!important}}
-.eppx-form input,.eppx-form select,.eppx-form textarea{{width:100%!important;height:45px!important;min-height:45px!important;border-radius:8px!important;border:1.3px solid #d9e5ed!important;background:#fff!important;color:#071b34!important;font-size:14px!important;font-weight:850!important;padding:0 14px!important;outline:none!important;box-shadow:0 5px 14px rgba(15,23,42,.03)!important}}
-.eppx-form input::placeholder,.eppx-form textarea::placeholder{{color:#73839a!important;font-weight:850!important}}
-.eppx-form select{{appearance:auto!important;cursor:pointer!important}}
-.eppx-form input:focus,.eppx-form select:focus,.eppx-form textarea:focus{{border-color:#00964f!important;box-shadow:0 0 0 4px rgba(0,150,79,.12)!important}}
-.eppx-dni-wrap{{display:grid!important;grid-template-columns:1fr 58px!important;gap:0!important}}
-.eppx-dni-wrap input{{height:52px!important;min-height:52px!important;border-radius:10px 0 0 10px!important;font-size:18px!important;font-weight:850!important}}
-.eppx-search{{height:52px!important;min-height:52px!important;border:0!important;border-radius:0 12px 12px 0!important;background:#00964f!important;color:#fff!important;display:grid!important;place-items:center!important;font-size:29px!important;box-shadow:0 10px 18px rgba(0,137,70,.20)!important;cursor:pointer!important}}
-.eppx-search i{{color:#fff!important;font-size:29px!important}}
-.eppx-state{{grid-column:3/5!important;height:84px!important;min-height:84px!important;border-radius:13px!important;border:1.3px solid #bdebd0!important;background:linear-gradient(135deg,#f7fffa,#edfff5)!important;padding:12px 20px!important;display:flex!important;flex-direction:column!important;justify-content:center!important;gap:8px!important}}
-.eppx-state strong{{font-size:16px!important;font-weight:1000!important;color:#071b34!important}}
-.eppx-state span{{display:inline-flex!important;align-items:center!important;gap:8px!important;width:max-content!important;border-radius:999px!important;background:#fff2d8!important;border:1px solid #ffd18a!important;color:#f97316!important;padding:9px 19px!important;font-size:16px!important;font-weight:1000!important;line-height:1!important}}
-.eppx-req-line{{grid-column:1/-1!important;height:42px!important;min-height:42px!important;border-radius:8px!important;border:1.3px solid #a6e8c2!important;background:linear-gradient(135deg,#e3faec,#f4fff8)!important;display:flex!important;align-items:center!important;gap:10px!important;color:#00964f!important;white-space:nowrap!important;overflow:hidden!important;padding:0 18px!important;font-size:14px!important;font-weight:1000!important;margin:0 0 3px!important}}
-.eppx-req-line strong{{display:flex!important;align-items:center!important;gap:8px!important;color:#071b34!important;font-size:14px!important;font-weight:1000!important}}
-.eppx-req-line i{{color:#008e4d!important;font-size:18px!important}}
-.eppx-req-line em{{background:#00964f!important;color:#fff!important;border-radius:6px!important;padding:7px 12px!important;font-style:normal!important;font-size:14px!important;font-weight:1000!important}}
-.eppx-req-line span{{color:#00964f!important;font-size:14px!important;font-weight:900!important}}
-.eppx-form textarea{{height:64px!important;min-height:64px!important;padding:12px 14px!important;resize:vertical!important;line-height:1.2!important}}
-.eppx-obs-text{{grid-column:2/4!important}}
-.eppx-submit-cell{{grid-column:4/5!important;align-self:stretch!important}}
-.eppx-submit{{width:100%!important;height:64px!important;min-height:64px!important;border:0!important;border-radius:9px!important;background:linear-gradient(180deg,#10aa61,#008b49)!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:12px!important;font-size:28px!important;font-weight:1000!important;letter-spacing:-.2px!important;box-shadow:0 15px 28px rgba(0,139,73,.24)!important;cursor:pointer!important;white-space:nowrap!important}}
-.eppx-submit i{{font-size:31px!important;color:#fff!important}}
-.eppx-form input[type=file]{{font-size:13px!important;padding:8px!important;overflow:hidden!important}}
-.eppx-alert{{display:none!important}}
-.field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.14)!important}}
-@media(max-width:1050px){{.eppx-body{{grid-template-columns:1fr!important}}.eppx-photo{{display:none!important}}.eppx-form{{grid-template-columns:1fr!important}}.eppx-section-wide{{margin-left:0!important;width:auto!important}}.eppx-section,.eppx-dni-wrap,.eppx-state,.eppx-req-line,.eppx-obs-text,.eppx-submit-cell{{grid-column:1/-1!important}}.eppx-head{{height:auto!important;min-height:70px!important;flex-wrap:wrap!important;padding:12px!important}}.eppx-title{{font-size:25px!important;white-space:normal!important}}.eppx-close{{width:100%!important}}}}
-</style>
-<input type='checkbox' id='modal_ind_entrega' class='eppx-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='eppx-modal'><div class='eppx-card'><div class='eppx-head'><h2 class='eppx-title'><span class='eppx-title-icon'><i class='bi bi-bag-check-fill'></i></span>Registro de entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='eppx-close'>Cerrar&nbsp; ×</label></div><div class='eppx-body'><aside class='eppx-photo'><div id='ind_photo_box' class='eppx-photo-box'><i class='bi bi-person-fill'></i></div><b id='ind_photo_text'>Sin fotografía registrada</b></aside><form method='post' enctype='multipart/form-data' class='eppx-form ind-form-epp-v2' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><input type='hidden' name='requerimiento' id='ind_requerimiento' value='{h(req_filtro_indumentaria)}'><div class='eppx-section'><b>1.</b> SELECCIONAR POSTULANTE</div><label class='eppx-label req'>DNI del postulante</label><div class='eppx-dni-wrap'><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI del requerimiento' required><button type='button' onclick='buscarIndumentariaDNI()' class='eppx-search'><i class='bi bi-search'></i></button></div><div class='eppx-state'><strong>Estado de entrega</strong><span id='ind_estado_badge'><i class='bi bi-clock'></i> PENDIENTE</span></div><div class='eppx-req-line'><strong><i class='bi bi-info-circle'></i> Requerimiento seleccionado:</strong> <em>{h(req_filtro_indumentaria) or 'Seleccione requerimiento antes de registrar'}</em> <span>· Al digitar 8 números, los datos se cargan automáticamente.</span></div><div class='eppx-section'><b>2.</b> DATOS DEL TRABAJADOR</div><label class='eppx-label req'><i class='bi bi-person-circle'></i>Trabajador</label><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><label class='eppx-label'><i class='bi bi-building'></i>Empresa</label><input id='ind_empresa' name='empresa' placeholder='Empresa'><label class='eppx-label'><i class='bi bi-diagram-3-fill'></i>Área</label><input id='ind_area' name='area' placeholder='Área'><label class='eppx-label'><i class='bi bi-briefcase-fill'></i>Cargo</label><input id='ind_cargo' name='cargo' placeholder='Cargo'><label class='eppx-label'><i class='bi bi-clipboard2-check-fill'></i>Actividad</label><input id='ind_actividad' name='actividad' placeholder='Actividad'><label class='eppx-label'><i class='bi bi-calendar3'></i>Fecha ingreso</label><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='eppx-section eppx-section-wide'><b>3.</b> DETALLE DE PRENDAS / EPP</div><label class='eppx-label req'><i class='bi bi-shirt'></i>Polo</label><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><label class='eppx-label req'><i class='bi bi-pause-fill'></i>Pantalón</label><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><label class='eppx-label req'><i class='bi bi-bootstrap-reboot'></i>Botas</label><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><label class='eppx-label'><i class='bi bi-person-standing'></i>Casaca</label><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><label class='eppx-label'><i class='bi bi-cone'></i>Gorro</label><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><label class='eppx-label'><i class='bi bi-eyeglasses'></i>Lentes</label><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><label class='eppx-label'><i class='bi bi-hand-index-thumb'></i>Guantes</label><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><label class='eppx-label'><i class='bi bi-bag-check-fill'></i>Otros</label><input name='otros' placeholder='Chaleco, tapones, protector...'><label class='eppx-label'><i class='bi bi-shield-check'></i>Estado</label><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><label class='eppx-label req'><i class='bi bi-calendar3'></i>Fecha entrega</label><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><label class='eppx-label req'><i class='bi bi-person-fill'></i>Responsable entrega</label><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><label class='eppx-label'><i class='bi bi-pencil-square'></i>Cargo firmado</label><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><label class='eppx-label'><i class='bi bi-chat-dots'></i>Observación</label><textarea class='eppx-obs-text' name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><div class='eppx-submit-cell'><button class='eppx-submit' type='submit'><i class='bi bi-check-circle-fill'></i> Registrar entrega</button></div></form></div><div class='eppx-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span></div><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>        </section>
+          <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card'><div class='ind-modal-head'><h2><span class='ind-head-icon'>🦺</span>REGISTRAR ENTREGA DE INDUMENTARIA / EPP</h2><label for='modal_ind_entrega' class='ind-close'>✕ Cerrar</label></div><div class='ind-alert' style='display:none'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span></div><form method='post' enctype='multipart/form-data' class='ind-form' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><input type='hidden' name='requerimiento' id='ind_requerimiento' value='{h(req_filtro_indumentaria)}'><div class='section'><span>1</span> POSTULANTE</div><b class='req ind-lbl-dni'>DNI</b><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI del requerimiento seleccionado' required><div class='full ind-req-line'><strong>ⓘ &nbsp; Requerimiento seleccionado:</strong> <em>{h(req_filtro_indumentaria) or 'Seleccione requerimiento antes de registrar'}</em> <span>· Al digitar 8 números, los datos se cargan automáticamente.</span></div><div class='section'><span>2</span> DATOS DEL TRABAJADOR</div><b class='req ind-lbl-trab'>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b class='ind-lbl-emp'>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b class='ind-lbl-area'>Área</b><input id='ind_area' name='area' placeholder='Área'><b class='ind-lbl-cargo'>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b class='ind-lbl-act'>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b class='ind-lbl-fecha'>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'><span>3</span> DETALLE DE PRENDAS / EPP</div><b class='req ind-lbl-polo'>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req ind-lbl-pantalon'>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req ind-lbl-botas'>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b class='ind-lbl-casaca'>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='ind-lbl-gorro'>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b class='ind-lbl-lentes'>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b class='ind-lbl-guantes'>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b class='ind-lbl-otros'>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b class='ind-lbl-estado'>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req ind-lbl-fecha'>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><b class='req ind-lbl-resp'>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b class='ind-lbl-firma'>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'><b class='ind-lbl-obs'>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><span></span><div style='display:flex;gap:10px;flex-wrap:wrap'><button class='ind-btn green' type='submit'>✅ Registrar entrega</button></div></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div>
+        </section>
         <script>
         const trabajadoresIndumentaria = {trabajadores_js};
         function setAlertaIndumentaria(txt, peligro=false){{
@@ -12919,13 +12396,6 @@ html,body{overflow-x:hidden!important;}
           }}
           const map={{ind_trabajador:(t.nombre||t.trabajador||''), ind_empresa:(t.empresa||''), ind_area:(t.area||''), ind_cargo:(t.cargo||''), ind_actividad:(t.actividad||''), ind_fecha_ingreso:(t.fecha_ingreso||'')}};
           Object.keys(map).forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=map[id]||''; }});
-          const photoBox=document.getElementById('ind_photo_box');
-          const photoText=document.getElementById('ind_photo_text');
-          if(photoBox){{
-            if(t.foto_url) photoBox.innerHTML='<img src="'+t.foto_url+'" alt="Foto postulante">';
-            else photoBox.innerHTML='<i class="bi bi-person-fill"></i>';
-          }}
-          if(photoText) photoText.innerText = t.foto_url ? 'Fotografía del postulante' : 'Sin fotografía registrada';
           setAlertaIndumentaria('Datos cargados correctamente. Complete prendas obligatorias y responsable.', false);
         }}
         function actualizarEstadoIndumentaria(){{
