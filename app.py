@@ -10787,7 +10787,7 @@ html,body{overflow-x:hidden!important;}
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Requerimiento de contratación</h1><p class='muted2'>Primero crea el requerimiento por empresa, área y actividad. Luego escanea DNI o código de barras en este mismo módulo para armar la base del requerimiento.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Completar ficha trabajador</a></div>
         <div class='req-pro-grid'>
           <form method='post' class='pro-card nice-form req-cascade-form' id='form_req_laboral'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Requerimiento / Requerimiento</b><input name='requerimiento' required placeholder='Ej. REQ-2026-0001'><b>Régimen laboral</b><select name='regimen_laboral' id='req_regimen_laboral' required>{opt_regimen_select}</select><b class='ind-lbl-emp'><i class='bi bi-buildings-fill'></i>Empresa</b><select name='empresa' id='req_empresa' required>{opt_empresa_select}</select><b class='ind-lbl-area'><i class='bi bi-diagram-3-fill'></i>Área</b><select name='area' id='req_area' required>{opt_area_select}</select><b class='ind-lbl-cargo'><i class='bi bi-briefcase-fill'></i>Cargo</b><select name='cargo' id='req_cargo' required>{opt_cargo_select}</select><b class='ind-lbl-act'><i class='bi bi-clipboard2-check-fill'></i>Actividad</b><select name='actividad' id='req_actividad' required>{opt_actividad_select}</select><b>Tipo contrato</b><select name='tipo_contrato' id='req_tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha inicio contrato</b><input type='date' name='fecha_inicio_contrato' id='req_fecha_inicio_contrato' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato' id='req_fecha_fin_contrato' required><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b class='ind-lbl-estado'><i class='bi bi-shield-check'></i>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear requerimiento</button><span class='muted2'>Los datos del requerimiento pasarán automáticamente a Postulantes.</span></div></form>
-          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Lectura de DNI del requerimiento</h3><b>Requerimiento activo</b><select name='requerimiento_req' id='requerimiento_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Lectura temporal: pendiente completar en Postulantes'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>Al escanear/digitar 8 dígitos queda como lectura pendiente. Solo avanzará al completar la ficha en Postulantes. Si fue error, use Eliminar.</p></div></form>
+          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req' onsubmit='event.preventDefault(); agregarDniLocalReq(); return false;'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Lectura de DNI del requerimiento</h3><b>Requerimiento activo</b><select name='requerimiento_req' id='requerimiento_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='64' inputmode='numeric' autocomplete='off' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Lectura temporal: pendiente completar en Postulantes'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>Al escanear/digitar 8 dígitos queda como lectura pendiente. Solo avanzará al completar la ficha en Postulantes. Si fue error, use Eliminar.</p></div></form>
         </div>
         <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar requerimiento, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Requerimiento</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle / eliminar postulantes</th><th>Anular</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
@@ -10862,19 +10862,42 @@ html,body{overflow-x:hidden!important;}
           document.getElementById('req_actividad')?.addEventListener('change',syncReqActividad);
           syncReqCascade();
         }});
-        function limpiarDniReq(v){{return (v||'').replace(/\D/g,'').slice(-8);}}
+        function limpiarDniReq(v){{
+          const txt=(v||'').toString();
+          const m=txt.match(/\d{{8}}/);
+          if(m) return m[0];
+          const dig=txt.replace(/\D/g,'');
+          return dig.length>=8 ? dig.slice(-8) : dig;
+        }}
         function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const freqs=(tipo==='error'?[620,420,620]:[tipo==='reingreso'?[880,1040]:[520,760]][0]); let t=ctx.currentTime; (Array.isArray(freqs)?freqs:[freqs]).forEach(f=>{{const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type=tipo==='error'?'square':'sine'; osc.frequency.value=f; gain.gain.value=tipo==='error'?0.10:0.07; osc.connect(gain); gain.connect(ctx.destination); osc.start(t); osc.stop(t+0.20); t+=0.23;}}); setTimeout(()=>ctx.close(),1000);}}catch(e){{}}}}
         function mostrarAlarmaReq(msg){{beepReq('error'); try{{if(navigator.vibrate) navigator.vibrate([180,80,180]);}}catch(e){{}} const old=document.querySelector('.req-cap-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-cap-alert'; a.innerHTML='🚨 '+(msg||'No se pudo registrar.')+'<small>Revise cupo, requerimiento activo o DNI duplicado.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},7000);}}
         function mostrarRegistradoReq(msg){{try{{if(navigator.vibrate) navigator.vibrate([80]);}}catch(e){{}} const old=document.querySelector('.req-ok-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-ok-alert'; a.innerHTML='✅ '+(msg||'DNI LEÍDO')+'<small>Pendiente completar ficha en Postulantes.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},4500);}}
         function actualizarContadorTablaReq(requerimiento, registrados, cantidad){{try{{document.querySelectorAll('#tabla_req tr').forEach(tr=>{{const c=tr.children&&tr.children[0]; if(!c) return; if((c.innerText||'').trim()===String(requerimiento).trim()){{const pill=tr.querySelector('.req-count-pill'); if(pill){{pill.textContent=String(registrados)+' / '+String(cantidad); pill.classList.remove('warn','full'); if(Number(registrados)>=Number(cantidad)&&Number(cantidad)>0) pill.classList.add('full'); else if(Number(registrados)>0) pill.classList.add('warn');}}}}}});}}catch(e){{}}}}
         function iniciarAutoDetectorReq(){{
           const i=document.getElementById('dni_scan_req'); if(!i) return;
-          const handler=function(e){{ if(e && e.key==='Enter'){{e.preventDefault(); agregarDniLocalReq(); return;}} const dni=limpiarDniReq(i.value); if(document.getElementById('scan_masivo_req')?.checked && dni.length===8){{setTimeout(()=>agregarDniLocalReq(),120);}} }};
-          ['input','keyup','change','paste'].forEach(ev=>i.addEventListener(ev, handler));
+          const sel=document.getElementById('requerimiento_req_auto');
+          if(sel && !sel.value){{
+            const first=[...sel.options].find(o=>o.value && !o.disabled);
+            if(first) sel.value=first.value;
+          }}
+          const disparar=function(delay){{
+            clearTimeout(window.__scanReqTimer);
+            window.__scanReqTimer=setTimeout(()=>{{
+              const dni=limpiarDniReq(i.value);
+              if(document.getElementById('scan_masivo_req')?.checked && dni.length===8) agregarDniLocalReq();
+            }}, delay||120);
+          }};
+          const handler=function(e){{
+            if(e && e.key==='Enter'){{e.preventDefault(); e.stopPropagation(); agregarDniLocalReq(); return false;}}
+            disparar(e && e.type==='paste' ? 220 : 120);
+          }};
+          ['keydown','input','keyup','change','paste'].forEach(ev=>i.addEventListener(ev, handler, true));
+          const form=document.getElementById('form_scan_req');
+          if(form) form.addEventListener('submit', function(e){{e.preventDefault(); agregarDniLocalReq(); return false;}}, true);
           if(scanReqPoll) clearInterval(scanReqPoll);
-          scanReqPoll=setInterval(()=>{{const dni=limpiarDniReq(i.value); if(document.activeElement===i && document.getElementById('scan_masivo_req')?.checked && dni.length===8){{agregarDniLocalReq();}}}},350);
+          scanReqPoll=setInterval(()=>{{const dni=limpiarDniReq(i.value); if(document.activeElement===i && document.getElementById('scan_masivo_req')?.checked && dni.length===8){{agregarDniLocalReq();}}}},300);
         }}
-        document.addEventListener('DOMContentLoaded',()=>{{iniciarAutoDetectorReq(); const i=document.getElementById('dni_scan_req'); if(i) i.focus();}});
+        document.addEventListener('DOMContentLoaded',()=>{{iniciarAutoDetectorReq(); const i=document.getElementById('dni_scan_req'); if(i){{ i.focus(); i.select(); }}}});
         async function agregarDniLocalReq(){{
           if(scanReqSaving) return;
           const i=document.getElementById('dni_scan_req'); const requerimiento=document.getElementById('requerimiento_req_auto')?.value||''; const dni=limpiarDniReq(i.value);
@@ -14602,11 +14625,11 @@ def contratacion_doc_log(doc_id):
 def api_contratacion_registrar_dni_requerimiento():
     if request.is_json:
         payload = request.get_json(silent=True) or {}
-        requerimiento = payload.get('requerimiento_req')
-        dni = payload.get('dni_scan')
+        requerimiento = payload.get('requerimiento_req') or payload.get('requerimiento')
+        dni = payload.get('dni_scan') or payload.get('dni')
     else:
-        requerimiento = request.form.get('requerimiento_req')
-        dni = request.form.get('dni_scan')
+        requerimiento = request.form.get('requerimiento_req') or request.form.get('requerimiento')
+        dni = request.form.get('dni_scan') or request.form.get('dni')
     data = registrar_dni_en_requerimiento_backend(requerimiento, dni, session.get('admin_user','admin'))
     return jsonify(data)
 
@@ -14617,11 +14640,11 @@ def api_contratacion_registrar_dni_requerimiento():
 def api_contratacion_eliminar_dni_requerimiento():
     if request.is_json:
         payload = request.get_json(silent=True) or {}
-        requerimiento = payload.get('requerimiento_req')
-        dni = payload.get('dni_scan')
+        requerimiento = payload.get('requerimiento_req') or payload.get('requerimiento')
+        dni = payload.get('dni_scan') or payload.get('dni')
     else:
-        requerimiento = request.form.get('requerimiento_req')
-        dni = request.form.get('dni_scan')
+        requerimiento = request.form.get('requerimiento_req') or request.form.get('requerimiento')
+        dni = request.form.get('dni_scan') or request.form.get('dni')
     data = eliminar_dni_leido_requerimiento_backend(requerimiento, dni, session.get('admin_user','admin'))
     return jsonify(data)
 
