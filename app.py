@@ -2339,6 +2339,21 @@ def init_db():
             tipo_ingreso TEXT DEFAULT 'NUEVO', estado TEXT DEFAULT 'PENDIENTE', fecha_ingreso TEXT,
             cargo TEXT, area TEXT, correo TEXT, celular TEXT, observacion TEXT, fecha_registro TEXT, registrado_por TEXT
         )''')
+        # Cola temporal de DNI leídos desde Requerimiento. No son postulantes todavía.
+        con.execute('''
+        CREATE TABLE IF NOT EXISTS contratacion_requerimiento_lecturas(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requerimiento TEXT,
+            dni TEXT,
+            tipo TEXT DEFAULT 'NUEVO',
+            trabajador TEXT,
+            estado TEXT DEFAULT 'LEIDO',
+            fecha_registro TEXT,
+            registrado_por TEXT,
+            observacion TEXT
+        )''')
+        try: con.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_req_lecturas_req_dni ON contratacion_requerimiento_lecturas(TRIM(requerimiento), dni)')
+        except Exception: pass
         con.execute('''
         CREATE TABLE IF NOT EXISTS contratacion_nisira_lotes(
             id INTEGER PRIMARY KEY AUTOINCREMENT, lote_codigo TEXT, empresa TEXT, sede TEXT, requerimiento TEXT, actividad TEXT,
@@ -2833,7 +2848,7 @@ def validar_dni_en_requerimiento(con, dni, requerimiento):
         return False, 'Digite un DNI válido de 8 dígitos.', None
     row = con.execute("""SELECT * FROM contratacion_ingresos
                          WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                           AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                           AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                          ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
     if not row:
         return False, f'El DNI {dni} no pertenece al requerimiento {requerimiento}. Primero regístrelo en Postulantes/Requerimiento.', None
@@ -3205,7 +3220,7 @@ def contar_postulantes_requerimiento(con, requerimiento):
     return int(con.execute("""SELECT COUNT(*)
                               FROM contratacion_ingresos
                               WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')""", (requerimiento,)).fetchone()[0] or 0)
+                                AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')""", (requerimiento,)).fetchone()[0] or 0)
 
 
 def sincronizar_estado_requerimiento_por_cupo(con, requerimiento):
@@ -3219,7 +3234,7 @@ def sincronizar_estado_requerimiento_por_cupo(con, requerimiento):
     completos = int(con.execute("""SELECT COUNT(*)
                                    FROM contratacion_ingresos
                                    WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                     AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                     AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                                      AND UPPER(COALESCE(estado,'')) IN ('REGISTRADO','LISTO PARA DOCUMENTOS')""", (requerimiento,)).fetchone()[0] or 0)
     # Guarda los contadores en la tabla para que el dashboard y reportes siempre muestren lo mismo.
     try:
@@ -3235,8 +3250,8 @@ def sincronizar_estado_requerimiento_por_cupo(con, requerimiento):
 
 
 def registrar_dni_en_requerimiento_backend(requerimiento, dni, usuario='admin'):
-    """Registro único y real de DNI al requerimiento.
-    Usado por digitación manual, lector USB/código de barras y cámara.
+    """Registra DNI leído en Requerimiento como LECTURA TEMPORAL.
+    No crea postulante en contratacion_ingresos.
     """
     requerimiento = clean(requerimiento)
     dni = normalizar_dni(dni)
@@ -3244,6 +3259,22 @@ def registrar_dni_en_requerimiento_backend(requerimiento, dni, usuario='admin'):
         return {'ok': False, 'msg': 'Seleccione requerimiento y registre un DNI válido de 8 dígitos.', 'sound': 'error'}
 
     with db() as con:
+        con.execute('''CREATE TABLE IF NOT EXISTS contratacion_requerimiento_lecturas(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requerimiento TEXT,
+            dni TEXT,
+            tipo TEXT DEFAULT 'NUEVO',
+            trabajador TEXT,
+            estado TEXT DEFAULT 'LEIDO',
+            fecha_registro TEXT,
+            registrado_por TEXT,
+            observacion TEXT
+        )''')
+        try:
+            con.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_req_lecturas_req_dni ON contratacion_requerimiento_lecturas(TRIM(requerimiento), dni)')
+        except Exception:
+            pass
+
         req = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(requerimiento)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
         if not req:
             return {'ok': False, 'msg': f'No se encontró el requerimiento {requerimiento}. Vuelva a seleccionarlo.', 'sound': 'error'}
@@ -3252,93 +3283,99 @@ def registrar_dni_en_requerimiento_backend(requerimiento, dni, usuario='admin'):
         if cantidad_req <= 0:
             return {'ok': False, 'msg': f'El requerimiento {requerimiento} no tiene cantidad solicitada válida. Edite el requerimiento e ingrese la cantidad real.', 'sound': 'error'}
 
-        # BLOQUEO PRO: un DNI activo solo puede estar en UN requerimiento.
-        # Si fue digitado por error, primero debe anularse desde Requerimiento > Ver/Eliminar postulantes.
-        existe = con.execute("""SELECT id FROM contratacion_ingresos
+        existe_post = con.execute("""SELECT id FROM contratacion_ingresos
                               WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                               ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
-        if existe:
-            registrados_req = contar_postulantes_requerimiento(con, requerimiento)
-            return {'ok': False, 'msg': f'ALERTA: el DNI {dni} ya está registrado activo en el requerimiento {requerimiento}. No se permite duplicar postulante.',
-                    'sound': 'error', 'registrados': registrados_req, 'cantidad': cantidad_req}
+        if existe_post:
+            return {'ok': False, 'msg': f'ALERTA: el DNI {dni} ya está registrado como postulante en el requerimiento {requerimiento}.',
+                    'sound': 'error', 'registrados': contar_postulantes_requerimiento(con, requerimiento), 'cantidad': cantidad_req}
 
         existe_otro = con.execute("""SELECT id, requerimiento, estado FROM contratacion_ingresos
                                     WHERE dni=?
                                       AND TRIM(COALESCE(requerimiento,''))<>TRIM(?)
-                                      AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                      AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                                     ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
         if existe_otro:
             req_otro = clean(row_get(existe_otro, 'requerimiento'))
             return {'ok': False,
-                    'msg': f'BLOQUEADO: el DNI {dni} ya está activo en el requerimiento {req_otro}. Para moverlo a {requerimiento}, primero anúlelo/elímínelo desde Ver/Eliminar postulantes del requerimiento anterior.',
-                    'sound': 'error',
-                    'duplicado_otro_requerimiento': True,
-                    'requerimiento_actual': req_otro,
-                    'requerimiento': requerimiento,
-                    'registrados': contar_postulantes_requerimiento(con, requerimiento),
-                    'cantidad': cantidad_req}
+                    'msg': f'BLOQUEADO: el DNI {dni} ya está activo como postulante en el requerimiento {req_otro}. Primero anúlelo/elímínelo si fue un error.',
+                    'sound': 'error', 'duplicado_otro_requerimiento': True,
+                    'requerimiento_actual': req_otro, 'requerimiento': requerimiento,
+                    'registrados': contar_postulantes_requerimiento(con, requerimiento), 'cantidad': cantidad_req}
 
         registrados_req = contar_postulantes_requerimiento(con, requerimiento)
-        if registrados_req >= cantidad_req:
-            con.execute("UPDATE contratacion_requerimientos SET estado='CUPO CERRADO', cupos_registrados=? WHERE TRIM(requerimiento)=TRIM(?)", (registrados_req, requerimiento))
-            con.commit()
-            return {'ok': False, 'msg': f'CUPO COMPLETO: el requerimiento {requerimiento} solicitó {cantidad_req} postulante(s) y ya tiene {registrados_req}. No se puede registrar más personal.',
-                    'sound': 'error', 'cupo': True, 'registrados': registrados_req, 'cantidad': cantidad_req}
+        lecturas_req = int(con.execute("""SELECT COUNT(*) FROM contratacion_requerimiento_lecturas
+                                      WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                        AND UPPER(COALESCE(estado,'')) NOT IN ('ELIMINADO','ANULADO')""", (requerimiento,)).fetchone()[0] or 0)
+        if registrados_req + lecturas_req >= cantidad_req:
+            return {'ok': False, 'msg': f'CUPO PREVENTIVO COMPLETO: {requerimiento} tiene {registrados_req} postulante(s) y {lecturas_req} DNI leído(s) pendiente(s). Elimine un DNI errado o aumente el cupo.',
+                    'sound': 'error', 'cupo': True, 'registrados': registrados_req, 'lecturas': lecturas_req, 'cantidad': cantidad_req}
 
         trab = con.execute('SELECT * FROM trabajadores WHERE dni=?', (dni,)).fetchone()
-        if trab and clean(trab['nombre']):
-            nombre = trab['nombre'] or ''
+        if trab and clean(row_get(trab, 'nombre')):
+            nombre = clean(row_get(trab, 'nombre'))
             tipo = 'REINGRESANTE'
-            empresa = trab['empresa'] or req['empresa'] or 'AQUANQA'
-            cargo = trab['cargo'] or req['cargo'] or ''
-            area = trab['area'] or req['area'] or ''
-            correo = trab['correo'] or ''
-            celular = trab['celular'] or ''
         else:
             nombre = ''
             tipo = 'NUEVO'
-            empresa = req['empresa'] or 'AQUANQA'
-            cargo = req['cargo'] or ''
-            area = req['area'] or ''
-            correo = ''
-            celular = ''
-            con.execute("""INSERT OR IGNORE INTO trabajadores
-                           (dni,nombre,empresa,activo,fecha_registro,usuario_portal,clave_portal)
-                           VALUES(?,?,?,1,?,?,?)""", (dni, '', empresa, now_txt(), dni, dni))
 
-        fecha_inicio_req = row_get(req, 'fecha_inicio_contrato') or row_get(req, 'fecha_ingreso') or fecha_sin_hora(hoy_iso())
-        fecha_fin_req = row_get(req, 'fecha_fin_contrato') or ''
-        tipo_contrato_req = row_get(req, 'tipo_contrato') or ''
-        regimen_req = row_get(req, 'regimen_laboral') or ''
-        vals = (
-            dni, nombre, empresa, req['sede'] or '', requerimiento, req['actividad'] or '', tipo,
-            'PRE REGISTRADO', fecha_inicio_req,
-            cargo, area, correo, celular,
-            'Registrado automáticamente desde digitación/lector/cámara en requerimiento',
-            now_txt(), usuario or 'admin', fecha_inicio_req, fecha_fin_req, tipo_contrato_req, regimen_req
-        )
-        con.execute("""INSERT INTO contratacion_ingresos
-            (dni,trabajador,empresa,sede,requerimiento,actividad,tipo_ingreso,estado,fecha_ingreso,cargo,area,correo,celular,observacion,fecha_registro,registrado_por,fecha_inicio_contrato,fecha_fin_contrato,tipo_contrato,regimen_laboral)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", vals)
-        sincronizar_estado_requerimiento_por_cupo(con, requerimiento)
-        # Recalcula estado por cupo inmediatamente para que aparezca CUPO CERRADO al llegar al total solicitado.
-        registrados_final = contar_postulantes_requerimiento(con, requerimiento)
-        sincronizar_estado_requerimiento_por_cupo(con, requerimiento)
+        existente_lectura = con.execute("""SELECT id FROM contratacion_requerimiento_lecturas
+                                           WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                             AND UPPER(COALESCE(estado,'')) NOT IN ('ELIMINADO','ANULADO')
+                                           ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
+        if existente_lectura:
+            return {'ok': False, 'msg': f'El DNI {dni} ya fue leído para este requerimiento. Si fue error, elimínelo desde la lista de lecturas.',
+                    'sound': 'error', 'registrados': registrados_req, 'lecturas': lecturas_req, 'cantidad': cantidad_req}
+
+        con.execute("""INSERT INTO contratacion_requerimiento_lecturas
+            (requerimiento,dni,tipo,trabajador,estado,fecha_registro,registrado_por,observacion)
+            VALUES(?,?,?,?,?,?,?,?)""", (
+            requerimiento, dni, tipo, nombre, 'LEIDO', now_txt(), usuario or 'admin',
+            'DNI leído desde Requerimiento. Pendiente completar ficha en Postulantes.'
+        ))
         con.commit()
+        lecturas_final = lecturas_req + 1
 
     return {
         'ok': True,
-        'msg': f'POSTULANTE REGISTRADO: DNI {dni} vinculado al requerimiento {requerimiento}.',
-        'sound': 'ok',
-        'dni': dni,
-        'tipo': tipo,
-        'nombre': nombre or '',
-        'requerimiento': requerimiento,
-        'registrados': registrados_final,
-        'cantidad': cantidad_req
+        'msg': f'DNI LEÍDO: {dni}. Pendiente completar ficha en Postulantes. No avanzará a Evaluación Médica hasta registrarse como postulante.',
+        'sound': 'ok', 'dni': dni, 'tipo': tipo, 'nombre': nombre or '',
+        'requerimiento': requerimiento, 'registrados': registrados_req,
+        'lecturas': lecturas_final, 'cantidad': cantidad_req,
+        'pendiente_postulantes': True
     }
 
+
+def eliminar_dni_leido_requerimiento_backend(requerimiento, dni, usuario='admin'):
+    """Elimina una lectura temporal antes de completar Postulantes."""
+    requerimiento = clean(requerimiento)
+    dni = normalizar_dni(dni)
+    if not requerimiento or not dni:
+        return {'ok': False, 'msg': 'Seleccione requerimiento y DNI válido.'}
+    with db() as con:
+        con.execute('''CREATE TABLE IF NOT EXISTS contratacion_requerimiento_lecturas(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            requerimiento TEXT,
+            dni TEXT,
+            tipo TEXT DEFAULT 'NUEVO',
+            trabajador TEXT,
+            estado TEXT DEFAULT 'LEIDO',
+            fecha_registro TEXT,
+            registrado_por TEXT,
+            observacion TEXT
+        )''')
+        row = con.execute("""SELECT id FROM contratacion_requerimiento_lecturas
+                             WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                               AND UPPER(COALESCE(estado,'')) NOT IN ('ELIMINADO','ANULADO')
+                             ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
+        if not row:
+            return {'ok': False, 'msg': 'No se encontró una lectura pendiente para eliminar.'}
+        con.execute("""UPDATE contratacion_requerimiento_lecturas
+                       SET estado='ELIMINADO', observacion=TRIM(COALESCE(observacion,'') || ' | ELIMINADO por ' || ? || ' en ' || ?)
+                       WHERE id=?""", (usuario or 'admin', now_txt(), row['id']))
+        con.commit()
+    return {'ok': True, 'msg': f'DNI {dni} eliminado de lecturas pendientes.'}
 
 def semaforo_clase_estado(valor):
     v = estado_norm(valor)
@@ -4949,7 +4986,7 @@ nav{position:relative!important;z-index:1!important;padding-top:4px!important;}
 .scan-tools .c-btn{width:100%!important;min-height:46px!important;padding:8px 10px!important;white-space:normal!important;line-height:1.15!important;text-align:center!important;}
 .scan-counter{grid-column:2!important;display:grid!important;grid-template-columns:1fr!important;gap:8px!important;}
 #listaScanReq{grid-column:1/-1!important;max-height:150px!important;overflow:auto!important;background:#fff!important;border:1px solid #dbe7f1!important;border-radius:14px!important;padding:8px!important;}
-#listaScanReq>div{display:grid!important;grid-template-columns:90px 1fr auto!important;gap:8px!important;padding:8px!important;border-bottom:1px solid #edf2f7!important;}
+#listaScanReq>div{display:grid!important;grid-template-columns:90px 1fr auto auto!important;gap:8px!important;padding:8px!important;border-bottom:1px solid #edf2f7!important;}#listaScanReq .scan-del{border:0;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:900;padding:6px 10px;cursor:pointer;}
 .ingreso-form .camera-box,.ingreso-form .bio-box{display:grid!important;grid-template-columns:minmax(220px,.9fr) minmax(180px,.65fr)!important;gap:16px!important;align-items:start!important;padding:18px!important;background:#f8fafc!important;border:1px dashed #c9d8e8!important;border-radius:18px!important;overflow:visible!important;}
 .ingreso-form .camera-box video,.ingreso-form .camera-box img{width:100%!important;height:300px!important;min-height:300px!important;max-height:300px!important;border-radius:16px!important;object-fit:cover!important;background:#111!important;}
 .ingreso-form .camera-box small,.ingreso-form .bio-box small{grid-column:1/-1!important;color:#52637a!important;font-weight:700!important;}
@@ -8306,7 +8343,7 @@ def admin_contratacion():
                 flash('Primero seleccione/valide un postulante del requerimiento.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica'))
             with db() as con_val:
-                pertenece = con_val.execute('SELECT * FROM contratacion_ingresos WHERE dni=? AND TRIM(requerimiento)=TRIM(?) LIMIT 1', (dni, req_medica)).fetchone()
+                pertenece = con_val.execute("""SELECT * FROM contratacion_ingresos WHERE dni=? AND TRIM(requerimiento)=TRIM(?) AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO') LIMIT 1""", (dni, req_medica)).fetchone()
             if not pertenece:
                 flash('El DNI no pertenece al requerimiento seleccionado. No se guardó la evaluación médica.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
@@ -8558,10 +8595,6 @@ def admin_contratacion():
                 except Exception:
                     pass
             nuevo_estado = clean(request.form.get('nuevo_estado')) or 'LISTO PARA IMPRIMIR'
-            if nuevo_estado.upper() == 'IMPRIMIR':
-                nuevo_estado = 'IMPRESO'
-            elif nuevo_estado.upper() in ('GENERAR CARGO', 'GENERAR CARGO FIRMADO'):
-                nuevo_estado = 'CARGO GENERADO'
             req_return = clean(request.form.get('req_return'))
             with db() as con_cfg:
                 cfg_zebra_actual = con_cfg.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
@@ -8755,7 +8788,7 @@ def admin_contratacion():
                 # Primero debe existir como postulante pre-registrado/importado en el requerimiento.
                 dni_en_requerimiento = con.execute("""SELECT * FROM contratacion_ingresos
                                                        WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                                         AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                                         AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                                                        ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
                 if not requerimiento:
                     flash('Primero seleccione un requerimiento antes de completar la ficha del postulante.', 'error')
@@ -8763,7 +8796,7 @@ def admin_contratacion():
                 if not dni_en_requerimiento:
                     activo_otro = con.execute("""SELECT requerimiento FROM contratacion_ingresos
                                                  WHERE dni=? AND TRIM(COALESCE(requerimiento,''))<>TRIM(?)
-                                                   AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                                   AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                                                  ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
                     if activo_otro:
                         flash(f'El DNI {dni} ya está activo en el requerimiento {clean(row_get(activo_otro, "requerimiento"))}. Primero anule ese registro si fue un error.', 'error')
@@ -8783,7 +8816,7 @@ def admin_contratacion():
                     req_cap = con.execute('SELECT * FROM contratacion_requerimientos WHERE TRIM(requerimiento)=TRIM(?) ORDER BY id DESC LIMIT 1', (requerimiento,)).fetchone()
                     ing_ya_existe_cap = con.execute("""SELECT id FROM contratacion_ingresos
                                                         WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                                          AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                                          AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                                                         ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
                     if req_cap:
                         # HERENCIA PRO: los datos del requerimiento mandan sobre Postulantes.
@@ -8859,7 +8892,7 @@ def admin_contratacion():
                             activo_otro = con.execute("""SELECT requerimiento FROM contratacion_ingresos
                                                           WHERE dni=?
                                                             AND TRIM(COALESCE(requerimiento,''))<>TRIM(?)
-                                                            AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                                            AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                                                           ORDER BY id DESC LIMIT 1""", (dni, req)).fetchone()
                         if activo_otro:
                             continue
@@ -8867,7 +8900,7 @@ def admin_contratacion():
                         if req:
                             activo_mismo = con.execute("""SELECT id FROM contratacion_ingresos
                                                            WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                                             AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                                             AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                                                            ORDER BY id DESC LIMIT 1""", (dni, req)).fetchone()
                         if activo_mismo:
                             continue
@@ -10715,7 +10748,7 @@ html,body{overflow-x:hidden!important;}
                 con_req_count.commit()
                 for rr in con_req_count.execute("""SELECT TRIM(requerimiento) requerimiento, COUNT(*) total
                                                    FROM contratacion_ingresos
-                                                   WHERE UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO')
+                                                   WHERE UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO')
                                                    GROUP BY TRIM(requerimiento)""").fetchall():
                     req_reg_map[clean(rr['requerimiento'])] = int_safe(rr['total'], 0)
                 for rq in con_req_count.execute("SELECT * FROM contratacion_requerimientos").fetchall():
@@ -10746,7 +10779,7 @@ html,body{overflow-x:hidden!important;}
         <div class='dash-hero' style='margin-bottom:18px'><div><h1>Requerimiento de contratación</h1><p class='muted2'>Primero crea el requerimiento por empresa, área y actividad. Luego escanea DNI o código de barras en este mismo módulo para armar la base del requerimiento.</p></div><a class='c-btn' href='/admin/contratacion?sec=nuevos'>Completar ficha trabajador</a></div>
         <div class='req-pro-grid'>
           <form method='post' class='pro-card nice-form req-cascade-form' id='form_req_laboral'><input type='hidden' name='accion' value='guardar_requerimiento'><input type='hidden' name='sede' value='GENERAL'><h3 class='pro-section-title'>1) Datos obligatorios del requerimiento</h3><b>Requerimiento / Requerimiento</b><input name='requerimiento' required placeholder='Ej. REQ-2026-0001'><b>Régimen laboral</b><select name='regimen_laboral' id='req_regimen_laboral' required>{opt_regimen_select}</select><b class='ind-lbl-emp'><i class='bi bi-buildings-fill'></i>Empresa</b><select name='empresa' id='req_empresa' required>{opt_empresa_select}</select><b class='ind-lbl-area'><i class='bi bi-diagram-3-fill'></i>Área</b><select name='area' id='req_area' required><option value=''>Seleccione área</option></select><b class='ind-lbl-cargo'><i class='bi bi-briefcase-fill'></i>Cargo</b><select name='cargo' id='req_cargo' required><option value=''>Seleccione cargo</option></select><b class='ind-lbl-act'><i class='bi bi-clipboard2-check-fill'></i>Actividad</b><select name='actividad' id='req_actividad' required><option value=''>Seleccione actividad</option></select><b>Tipo contrato</b><select name='tipo_contrato' id='req_tipo_contrato' required>{opt_tipo_contrato_select}</select><b>Cantidad solicitada</b><input type='number' name='cantidad' min='1' required placeholder='Cupos solicitados'><b>Fecha inicio contrato</b><input type='date' name='fecha_inicio_contrato' id='req_fecha_inicio_contrato' value='{hoy_iso()}' required><b>Fecha fin contrato</b><input type='date' name='fecha_fin_contrato' id='req_fecha_fin_contrato' required><b>Prioridad</b><select name='prioridad'><option>ALTA</option><option selected>MEDIA</option><option>BAJA</option></select><b class='ind-lbl-estado'><i class='bi bi-shield-check'></i>Estado</b><select name='estado'><option>SOLICITADO</option><option>APROBADO</option><option>EN CONVOCATORIA</option><option>EN REGISTRO</option><option>EN PROCESO</option><option>CERRADO</option></select><b>Responsable</b><input name='responsable' placeholder='Responsable RRHH'><b>Detalle</b><textarea name='observacion' placeholder='Observación, perfil requerido, turno, condiciones o comentario.'></textarea><div class='actions'><button class='c-btn'>💾 Crear requerimiento</button><span class='muted2'>Los datos del requerimiento pasarán automáticamente a Postulantes.</span></div></form>
-          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Registro masivo de postulantes al requerimiento</h3><b>Requerimiento activo</b><select name='requerimiento_req' id='requerimiento_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Automático: reingresante jala nombre / nuevo registra DNI'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>No necesita botón Guardar: al escanear/digitar 8 dígitos se guarda automáticamente y queda amarrado al módulo Postulantes.</p></div></form>
+          <form method='post' class='pro-card nice-form req-scan-auto' id='form_scan_req'><input type='hidden' name='accion' value='registrar_dni_requerimiento'><h3 class='pro-section-title'>2) Lectura de DNI del requerimiento</h3><b>Requerimiento activo</b><select name='requerimiento_req' id='requerimiento_req_auto' required><option value=''>Seleccione requerimiento</option>{req_options}</select><b>DNI / código</b><input id='dni_scan_req' name='dni_scan' required maxlength='12' autofocus placeholder='Escanee código de barras o digite DNI y presione ENTER'><b>Resultado</b><input id='scan_result_req' readonly value='Lectura temporal: pendiente completar en Postulantes'><b>Masivo</b><label class='check-masivo'><input type='checkbox' id='scan_masivo_req' checked> Escaneo masivo automático con sonido</label><div class='full scan-box'><div class='scan-camera'><video id='videoScanReq' autoplay playsinline muted style='display:none'></video><span id='scanCamMsg'>Cámara habilitada para Requerimientos. También puede usar lector USB o digitación manual con ENTER.</span></div><div class='scan-tools scan-tools-req'><button type='button' class='c-btn gray' onclick='activarCamaraReq()'>📷 Activar cámara</button><button type='button' class='c-btn gray' onclick='apagarCamaraReq()'>⏻ Apagar cámara</button></div><div class='scan-counter'><span id='cntLeidos'>Leídos: 0</span><span id='cntNuevos'>Nuevos: 0</span><span id='cntReingresos'>Reingresos: 0</span></div><div id='listaScanReq' class='mini-list'></div><p class='muted2'>Al escanear/digitar 8 dígitos queda como lectura pendiente. Solo avanzará al completar la ficha en Postulantes. Si fue error, use Eliminar.</p></div></form>
         </div>
         <div class='c-filter'><b>Filtros</b><input oninput="filtrarTabla(this,'tabla_req')" placeholder='Buscar requerimiento, sede, área, estado...'><span></span><span></span></div><div class='c-card table-wrap'><table id='tabla_req' class='c-table clean-table'><tr><th>Requerimiento</th><th>Empresa</th><th>Área</th><th>Actividad</th><th>Ingreso</th><th>Estado</th><th>Registrados / Solicitados</th><th>Detalle / eliminar postulantes</th><th>Anular</th><th>Responsable</th></tr>{req_rows}</table></div>
         <script>
@@ -10773,7 +10806,7 @@ html,body{overflow-x:hidden!important;}
         function limpiarDniReq(v){{return (v||'').replace(/\D/g,'').slice(-8);}}
         function beepReq(tipo){{try{{const AC=window.AudioContext||window.webkitAudioContext; const ctx=new AC(); const freqs=(tipo==='error'?[620,420,620]:[tipo==='reingreso'?[880,1040]:[520,760]][0]); let t=ctx.currentTime; (Array.isArray(freqs)?freqs:[freqs]).forEach(f=>{{const osc=ctx.createOscillator(); const gain=ctx.createGain(); osc.type=tipo==='error'?'square':'sine'; osc.frequency.value=f; gain.gain.value=tipo==='error'?0.10:0.07; osc.connect(gain); gain.connect(ctx.destination); osc.start(t); osc.stop(t+0.20); t+=0.23;}}); setTimeout(()=>ctx.close(),1000);}}catch(e){{}}}}
         function mostrarAlarmaReq(msg){{beepReq('error'); try{{if(navigator.vibrate) navigator.vibrate([180,80,180]);}}catch(e){{}} const old=document.querySelector('.req-cap-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-cap-alert'; a.innerHTML='🚨 '+(msg||'No se pudo registrar.')+'<small>Revise cupo, requerimiento activo o DNI duplicado.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},7000);}}
-        function mostrarRegistradoReq(msg){{try{{if(navigator.vibrate) navigator.vibrate([80]);}}catch(e){{}} const old=document.querySelector('.req-ok-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-ok-alert'; a.innerHTML='✅ '+(msg||'POSTULANTE REGISTRADO')+'<small>Guardado automáticamente y vinculado al requerimiento.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},4500);}}
+        function mostrarRegistradoReq(msg){{try{{if(navigator.vibrate) navigator.vibrate([80]);}}catch(e){{}} const old=document.querySelector('.req-ok-alert'); if(old)old.remove(); const a=document.createElement('div'); a.className='req-ok-alert'; a.innerHTML='✅ '+(msg||'DNI LEÍDO')+'<small>Pendiente completar ficha en Postulantes.</small>'; document.body.appendChild(a); setTimeout(()=>{{a.remove();}},4500);}}
         function actualizarContadorTablaReq(requerimiento, registrados, cantidad){{try{{document.querySelectorAll('#tabla_req tr').forEach(tr=>{{const c=tr.children&&tr.children[0]; if(!c) return; if((c.innerText||'').trim()===String(requerimiento).trim()){{const pill=tr.querySelector('.req-count-pill'); if(pill){{pill.textContent=String(registrados)+' / '+String(cantidad); pill.classList.remove('warn','full'); if(Number(registrados)>=Number(cantidad)&&Number(cantidad)>0) pill.classList.add('full'); else if(Number(registrados)>0) pill.classList.add('warn');}}}}}});}}catch(e){{}}}}
         function iniciarAutoDetectorReq(){{
           const i=document.getElementById('dni_scan_req'); if(!i) return;
@@ -10800,14 +10833,26 @@ html,body{overflow-x:hidden!important;}
             document.getElementById('cntLeidos').innerText='Leídos: '+scanReqCount;
             document.getElementById('cntNuevos').innerText='Nuevos: '+scanReqNuevos;
             document.getElementById('cntReingresos').innerText='Reingresos: '+scanReqReingresos;
-            document.getElementById('scan_result_req').value = esRe ? ('REINGRESANTE REGISTRADO: '+(nombre||dni)) : ('NUEVO REGISTRADO: '+dni);
+            document.getElementById('scan_result_req').value = esRe ? ('REINGRESANTE LEÍDO: '+(nombre||dni)) : ('NUEVO LEÍDO: '+dni);
             if(data.registrados!==undefined && data.cantidad!==undefined) actualizarContadorTablaReq(requerimiento, data.registrados, data.cantidad);
-            mostrarRegistradoReq((esRe?'REINGRESANTE':'NUEVO')+' '+dni+' registrado ('+(data.registrados||'?')+' / '+(data.cantidad||'?')+')');
+            mostrarRegistradoReq((esRe?'REINGRESANTE':'NUEVO')+' '+dni+' leído. Pendiente Postulantes ('+(data.lecturas||'?')+' lectura(s))');
             beepReq(esRe?'reingreso':'nuevo');
-            const box=document.getElementById('listaScanReq'); if(box){{const row=document.createElement('div'); row.innerHTML='<b>'+dni+'</b><span>'+(esRe?('Reingresante: '+(nombre||'sin nombre')):'Nuevo: DNI guardado')+'</span><small>'+new Date().toLocaleTimeString()+'</small>'; box.prepend(row);}}
+            const box=document.getElementById('listaScanReq'); if(box){{const row=document.createElement('div'); row.innerHTML='<b>'+dni+'</b><span>'+(esRe?('Reingresante leído: '+(nombre||'sin nombre')):'Nuevo: DNI leído')+'</span><small>'+new Date().toLocaleTimeString()+'</small><button type="button" class="scan-del" onclick="eliminarDniLeidoReq(this,\''+dni+'\')">Eliminar</button>'; box.prepend(row);}}
             i.value=''; i.focus();
           }}catch(e){{mostrarAlarmaReq('No se pudo guardar automático. Revise conexión o sesión.');}}
           scanReqSaving=false;
+        }}
+        async function eliminarDniLeidoReq(btn,dni){{
+          const requerimiento=document.getElementById('requerimiento_req_auto')?.value||'';
+          if(!requerimiento || !dni) return;
+          if(!confirm('¿Eliminar DNI '+dni+' de lecturas pendientes?')) return;
+          try{{
+            const fd=new FormData(); fd.append('requerimiento_req',requerimiento); fd.append('dni_scan',dni);
+            const resp=await fetch('/api/contratacion/eliminar_dni_requerimiento',{{method:'POST',body:fd,credentials:'same-origin',headers:{{'X-Requested-With':'XMLHttpRequest','Accept':'application/json'}}}});
+            const data=await resp.json();
+            if(data.ok){{ btn.closest('div')?.remove(); document.getElementById('scan_result_req').value=data.msg||'DNI eliminado'; }}
+            else {{ mostrarAlarmaReq(data.msg||'No se pudo eliminar.'); }}
+          }}catch(e){{ mostrarAlarmaReq('No se pudo eliminar DNI pendiente.'); }}
         }}
         async function activarCamaraReq(){{
           try{{
@@ -12772,7 +12817,7 @@ html,body{overflow-x:hidden!important;}
               <div class='fc-toolbar-premium'>
                 <label class='fc-field fc-dni'><span>Buscar por DNI</span><input oninput="filtrarTabla(this,'tabla_fotocheck')" placeholder='Buscar por DNI'></label>
                 <label class='fc-field fc-estado'><span>Estado</span><select onchange="filtrarTabla(this,'tabla_fotocheck')"><option>Todos los estados</option><option>PENDIENTE</option><option>FOTO APROBADA</option><option>LISTO PARA IMPRIMIR</option><option>IMPRESO</option><option>ENTREGADO</option><option>OBSERVADO</option></select></label>
-                <label class='fc-field fc-cambio'><span>Cambio estado</span><select name='nuevo_estado'><option value='IMPRIMIR'>IMPRIMIR</option><option value='GENERAR CARGO'>GENERAR CARGO</option></select></label>
+                <label class='fc-field fc-cambio'><span>Cambio estado</span><select name='nuevo_estado'><option>PENDIENTE</option><option>FOTO APROBADA</option><option>LISTO PARA IMPRIMIR</option><option>ENVIADO A ZEBRA ZC300</option><option>IMPRESO</option><option>CARGO GENERADO</option><option>ENTREGADO</option><option>OBSERVADO</option></select></label>
                 <button class='fc-btn-apply' name='accion' value='fotocheck_accion_masiva'>Aplicar estado</button>
                 <a class='fc-btn-register' href='/admin/contratacion?sec=nuevos&req={h(req_actual)}'>Registrar</a>
               </div>
@@ -14507,6 +14552,21 @@ def api_contratacion_registrar_dni_requerimiento():
     return jsonify(data)
 
 
+
+@app.route('/api/contratacion/eliminar_dni_requerimiento', methods=['POST'])
+@admin_required
+def api_contratacion_eliminar_dni_requerimiento():
+    if request.is_json:
+        payload = request.get_json(silent=True) or {}
+        requerimiento = payload.get('requerimiento_req')
+        dni = payload.get('dni_scan')
+    else:
+        requerimiento = request.form.get('requerimiento_req')
+        dni = request.form.get('dni_scan')
+    data = eliminar_dni_leido_requerimiento_backend(requerimiento, dni, session.get('admin_user','admin'))
+    return jsonify(data)
+
+
 @app.route('/api/contratacion/trabajador/<dni>')
 @admin_required
 def api_contratacion_trabajador(dni):
@@ -14563,20 +14623,13 @@ def api_contratacion_medica_postulante():
                     ORDER BY id DESC LIMIT 1
                 """, (dni, req))
 
-            # 3) Respaldo final por DNI: evita que la pantalla se quede en blanco.
-            #    Si existe el postulante, se autocompleta igual y se registra con el requerimiento seleccionado.
-            if not r:
-                r = first_row(con, """
-                    SELECT * FROM contratacion_ingresos
-                    WHERE dni=? AND COALESCE(estado,'')<>'ANULADO'
-                    ORDER BY id DESC LIMIT 1
-                """, (dni,))
+            # No se permite respaldo por Trabajadores/Fotocheck ni por otro requerimiento.
+            # El postulante debe existir realmente en Postulantes para ESTE requerimiento.
+            if not r or clean(rg(r, 'estado')).upper() in ('ANULADO','CANCELADO','PRE REGISTRADO','PRE-REGISTRADO','LEIDO','LEÍDO'):
+                return jsonify({'ok': False, 'mensaje': 'El trabajador debe registrarse primero en Postulantes para este requerimiento. La lectura de Requerimiento no habilita Evaluación Médica.'})
 
             t = first_row(con, "SELECT * FROM trabajadores WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
-            fc = first_row(con, "SELECT * FROM contratacion_fotocheck WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
-
-            if not r and not t and not fc:
-                return jsonify({'ok': False, 'mensaje': 'DNI no encontrado en Postulantes/Trabajadores. Registre primero el postulante.'})
+            fc = None
 
             med = first_row(con, """
                 SELECT * FROM contratacion_medica
@@ -15311,41 +15364,6 @@ ONE_LINE_PREMIUM_FIX = """
 """
 BASE = BASE.replace('</style>', ONE_LINE_PREMIUM_FIX + '\n</style>')
 
-
-
-# =============================
-# AJUSTE 2026-06-12: ocultar cambio masivo fuera de Inducción y Fotocheck
-# =============================
-try:
-    OCULTAR_MASIVO_NO_PERMITIDO = """
-    <style>
-      /* Se mantiene cambio masivo SOLO en Inducción (.mod360) y Fotocheck (.fc-*).
-         Se oculta en Postulantes, Evaluación Médica e Indumentaria. */
-      .main .pp-filter-card .pp-mass-select,
-      .main .pp-filter-card .pp-mass-btn,
-      .main .std-filter-card .legacy-mass-select,
-      .main .std-filter-card .mass-apply-btn,
-      .main form.ind-tools .legacy-mass-select,
-      .main form.ind-tools .mass-apply-btn{
-        display:none!important;
-        visibility:hidden!important;
-      }
-      .main .pp-filter-card,
-      .main .std-filter-card,
-      .main form.ind-tools{
-        grid-template-columns:minmax(280px,1fr) minmax(220px,.55fr) auto!important;
-      }
-      .main .mod360-filter-card .legacy-mass-select,
-      .main .mod360-filter-card .mass-apply-btn{
-        display:inline-flex!important;
-        visibility:visible!important;
-      }
-      .fc-field.fc-cambio select option{font-weight:900!important;}
-    </style>
-    """
-    BASE = BASE.replace('</body>', OCULTAR_MASIVO_NO_PERMITIDO + '\n</body>')
-except Exception:
-    pass
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
