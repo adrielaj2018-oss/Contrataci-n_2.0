@@ -12311,200 +12311,75 @@ html,body{overflow-x:hidden!important;}
         content=wrap(f"""
         {estilos_tabla_estandar_postulantes()}
         <style>
-        .ind-page{{display:flex;flex-direction:column;gap:18px;color:#071b34}}.ind-hero{{background:linear-gradient(135deg,#ffffff,#effff7);border:1px solid #b8f0d2;border-radius:26px;padding:24px 28px;display:grid;grid-template-columns:1.2fr .9fr;gap:22px;align-items:center;box-shadow:0 18px 44px rgba(4,120,87,.08)}}.ind-title{{display:flex;gap:18px;align-items:center}}.ind-icon{{width:66px;height:66px;border-radius:22px;background:#dcfce7;border:1px solid #86efac;display:grid;place-items:center;font-size:32px}}.ind-title h1{{margin:0;font-size:34px;line-height:1.05;font-weight:1000;color:#071b34}}.ind-title p{{margin:8px 0 0;color:#50627c;font-size:17px;font-weight:800;line-height:1.35}}.ind-requerimiento label,.ind-tools label{{display:block;color:#071b34;text-transform:uppercase;font-size:12px;font-weight:1000;margin-bottom:8px}}.ind-requerimiento select,.ind-tools input,.ind-tools select,.ind-form input,.ind-form select,.ind-form textarea{{width:100%;border:1px solid #cfe0ec;border-radius:14px;background:#fff;color:#071b34;font-weight:900;font-size:14px;padding:0 14px;min-height:42px}}.ind-form textarea{{padding-top:14px;min-height:86px}}.ind-tools{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px 22px;display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-actions{{display:flex;gap:10px;flex-wrap:wrap}}.ind-btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:15px;padding:0 22px;text-decoration:none;border:0;font-weight:1000;cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;box-shadow:0 12px 22px rgba(0,138,72,.20)}}.ind-btn.green{{background:linear-gradient(135deg,#00964f,#0bbf72)}}.ind-btn.light{{background:#fff;color:#071b34;border:1px solid #dbe7ef;box-shadow:none}}.ind-btn.danger{{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;box-shadow:none}}.ind-btn.mini{{min-height:38px;padding:0 12px;font-size:12px}}.ind-kpis{{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:16px}}.ind-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:20px;padding:18px;display:flex;align-items:center;gap:15px;min-height:105px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}.ind-kpi .ico{{width:54px;height:54px;border-radius:50%;background:#008a48;color:#fff;display:grid;place-items:center;font-size:24px}}.ind-kpi b{{font-size:32px;color:#071b34;line-height:1;font-weight:1000}}.ind-kpi h4{{margin:0 0 4px;font-size:14px;color:#071b34;font-weight:1000}}.ind-kpi small{{display:block;color:#53627a;font-weight:850}}.ind-control{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px;display:grid;grid-template-columns:220px repeat(5,1fr);gap:14px;box-shadow:0 16px 34px rgba(15,23,42,.06)}}.ind-radial h2{{margin:0;color:#071b34;font-size:28px;line-height:1.05;font-weight:1000}}.ind-radial p{{color:#53627a;font-weight:850;line-height:1.35}}.ind-ring{{width:132px;height:132px;border-radius:50%;background:conic-gradient(#008a48 {avance_indum_req}%,#e5e7eb 0);display:grid;place-items:center;margin:auto}}.ind-ring div{{width:98px;height:98px;background:#fff;border-radius:50%;display:grid;place-items:center;text-align:center;color:#071b34;font-weight:1000}}.ind-ring span{{display:block;font-size:13px;color:#53627a}}.ind-stage{{border:1px solid #dbe7ef;border-radius:16px;padding:14px 10px;text-align:center;background:linear-gradient(180deg,#fff,#fcfffd);border-bottom:3px solid #008a48;min-height:120px}}.ind-stage .sico{{width:44px;height:44px;border-radius:50%;background:#dcfce7;display:grid;place-items:center;margin:0 auto 8px;font-size:20px}}.ind-stage h4{{margin:0;color:#071b34;font-weight:1000;font-size:14px}}.ind-stage b{{font-size:26px;color:#071b34;display:block;line-height:1}}.ind-stage small{{color:#53627a;font-weight:850;font-size:12px}}.ind-table-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.06)}}.ind-table-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;flex-wrap:wrap}}.ind-table-head h2{{margin:0;color:#071b34;font-size:22px;font-weight:1000}}.ind-table-wrap{{overflow:auto}}.ind-table{{width:100%;min-width:1100px;border-collapse:separate;border-spacing:0}}.ind-table th{{background:#008a48;color:#fff;padding:14px;text-align:center;font-weight:1000;border-right:1px solid rgba(255,255,255,.22)}}.ind-table td{{padding:14px;border-bottom:1px solid #e1ebf3;border-right:1px solid #e1ebf3;text-align:center;vertical-align:middle;font-weight:850;color:#071b34}}.ind-table tr:hover td{{background:#f0fff7}}.avatar-mini{{display:inline-grid;place-items:center;width:52px;height:52px;border-radius:15px;background:#ecfdf5;border:1px solid #86efac;font-size:25px}}.name-cell{{font-weight:1000;text-align:left!important}}.ind-pill{{display:inline-flex;border-radius:999px;padding:8px 14px;font-weight:1000;font-size:12px;border:1px solid transparent}}.ind-pill.ok{{background:#dcfce7;color:#047857;border-color:#86efac}}.ind-pill.warn{{background:#fef3c7;color:#b45309;border-color:#fde68a}}.ind-pill.danger{{background:#fee2e2;color:#991b1b;border-color:#fecaca}}.ind-pill.muted{{background:#f1f5f9;color:#475569;border-color:#e2e8f0}}.ind-bar{{height:9px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px}}.ind-bar span{{display:block;height:100%;background:#008a48;border-radius:999px}}.empty-row{{padding:26px!important;text-align:center!important;color:#64748b!important;font-weight:900!important}}.ind-modal-check{{display:none}}.ind-modal{{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:none;align-items:center;justify-content:center;padding:28px 22px;overflow:auto}}.ind-modal-check:checked + .ind-modal{{display:flex}}.ind-modal-card{{width:min(980px,94vw);max-height:92vh;background:#fff;border-radius:22px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.35);overflow:auto}}.ind-modal-head{{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;border-bottom:1px solid #e5eef6;background:#fbfffd}}.ind-modal-head h2{{margin:0;color:#071b34;font-weight:1000}}.ind-close{{cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;border-radius:12px;padding:10px 16px;font-weight:1000;box-shadow:0 10px 20px rgba(0,138,72,.18)}}.ind-alert{{margin:18px 24px 0;background:linear-gradient(135deg,#ecfdf5,#f8fffd);border:1px solid #a7f3d0;border-radius:18px;padding:16px 18px;color:#064e3b;font-weight:900;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}}.ind-form{{padding:18px 24px 24px;display:grid;grid-template-columns:150px 1fr 150px 1fr;gap:10px;align-items:center}}.ind-form b{{background:#eef6f3;border-radius:10px;padding:10px 12px;text-align:right;color:#071b34;font-weight:1000;font-size:13px}}.ind-form .section{{grid-column:1/-1;margin:8px 0 0;font-size:18px;font-weight:1000;color:#071b34}}.ind-form .field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.15)!important}}.ind-alert.danger{{background:#fef2f2;border-color:#fca5a5;color:#7f1d1d}}.ind-form input:disabled,.ind-form select:disabled{{background:#f1f5f9;color:#64748b;cursor:not-allowed}}.ind-form b.req{{background:#dcfce7;border:1px solid #86efac;color:#064e3b}}.ind-form b.req:after{{content:' *';color:#ef4444;font-weight:1000}}.ind-form select{{height:48px;border:1px solid #cfe0ec;border-radius:13px;padding:0 14px;font-weight:850;background:#fff}}.ind-form .full{{grid-column:1/-1}}.demo-video-link{{font-weight:1000;color:#007a3d;text-decoration:none;background:#e8fff2;border:1px solid #b8f0d2;border-radius:999px;padding:7px 12px;display:inline-block}}.demo-video-link:hover{{background:#00a862;color:#fff}}@media(max-width:1200px){{.ind-control{{grid-template-columns:1fr 1fr 1fr}}.ind-kpis{{grid-template-columns:repeat(3,1fr)}}.ind-hero,.ind-tools,.ind-form{{grid-template-columns:1fr 1fr}}}}@media(max-width:760px){{.ind-hero,.ind-tools,.ind-control,.ind-form{{grid-template-columns:1fr}}.ind-kpis{{grid-template-columns:1fr 1fr}}.ind-form b{{text-align:left}}}}
+        .ind-page{{display:flex;flex-direction:column;gap:18px;color:#071b34}}
+        .ind-kpis{{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:16px}}
+        .ind-kpi{{background:#fff;border:1px solid #dbe7ef;border-radius:20px;padding:18px;display:flex;align-items:center;gap:15px;min-height:105px;box-shadow:0 12px 28px rgba(15,23,42,.06)}}
+        .ind-kpi .ico{{width:54px;height:54px;border-radius:50%;background:#008a48;color:#fff;display:grid;place-items:center;font-size:24px}}
+        .ind-kpi b{{font-size:32px;color:#071b34;line-height:1;font-weight:1000}}
+        .ind-kpi h4{{margin:0 0 4px;font-size:14px;color:#071b34;font-weight:1000}}
+        .ind-kpi small{{display:block;color:#53627a;font-weight:850}}
+        .ind-tools{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;padding:18px 22px;display:grid;grid-template-columns:1fr 1fr auto;gap:18px;align-items:end;box-shadow:0 12px 28px rgba(15,23,42,.06)}}
+        .ind-tools label{{display:block;color:#071b34;text-transform:uppercase;font-size:12px;font-weight:1000;margin-bottom:8px}}
+        .ind-tools input,.ind-tools select{{width:100%;border:1px solid #cfe0ec;border-radius:14px;background:#fff;color:#071b34;font-weight:900;font-size:14px;padding:0 14px;min-height:42px}}
+        .ind-actions{{display:flex;gap:10px;flex-wrap:wrap}}
+        .ind-btn{{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:15px;padding:0 22px;text-decoration:none;border:0;font-weight:1000;cursor:pointer;background:linear-gradient(135deg,#00964f,#0bbf72);color:#fff;box-shadow:0 12px 22px rgba(0,138,72,.20)}}
+        .ind-btn.danger{{background:#fee2e2;color:#991b1b;border:1px solid #fecaca;box-shadow:none}}
+        .ind-btn.mini{{min-height:38px;padding:0 12px;font-size:12px}}
+        .ind-table-card{{background:#fff;border:1px solid #dbe7ef;border-radius:22px;overflow:hidden;box-shadow:0 14px 30px rgba(15,23,42,.06)}}
+        .ind-table-head{{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;flex-wrap:wrap}}
+        .ind-table-head h2{{margin:0;color:#071b34;font-size:22px;font-weight:1000}}
+        .ind-table-wrap{{overflow:auto}}
+        .ind-table{{width:100%;min-width:1100px;border-collapse:separate;border-spacing:0}}
+        .ind-table th{{background:#008a48;color:#fff;padding:14px;text-align:center;font-weight:1000;border-right:1px solid rgba(255,255,255,.22)}}
+        .ind-table td{{padding:14px;border-bottom:1px solid #e1ebf3;border-right:1px solid #e1ebf3;text-align:center;vertical-align:middle;font-weight:850;color:#071b34}}
+        .ind-pill{{display:inline-flex;border-radius:999px;padding:8px 14px;font-weight:1000;font-size:12px;border:1px solid transparent}}
+        .ind-pill.ok{{background:#dcfce7;color:#047857;border-color:#86efac}}.ind-pill.warn{{background:#fef3c7;color:#b45309;border-color:#fde68a}}.ind-pill.danger{{background:#fee2e2;color:#991b1b;border-color:#fecaca}}.ind-pill.muted{{background:#f1f5f9;color:#475569;border-color:#e2e8f0}}
 
-/* === INDUMENTARIA / EPP - IGUAL A BOCETO IMAGEN 03 === */
-.ind-modal{{padding:8px 10px!important;align-items:flex-start!important;background:rgba(15,23,42,.55)!important;}}
-.ind-modal-card{{width:min(1530px,99vw)!important;max-height:96vh!important;border-radius:18px!important;border:1px solid #c9d7e3!important;background:#fff!important;box-shadow:0 28px 90px rgba(15,23,42,.38)!important;overflow:auto!important;}}
-.ind-modal-head{{min-height:88px!important;padding:12px 18px 12px 28px!important;border-bottom:3px solid #008a48!important;background:#fff!important;display:flex!important;align-items:center!important;}}
-.ind-modal-head h2{{display:flex!important;align-items:center!important;gap:18px!important;margin:0!important;color:#062b54!important;font-size:44px!important;line-height:1!important;font-weight:1000!important;letter-spacing:-1px!important;text-transform:uppercase!important;white-space:nowrap!important;}}
-.ind-head-icon{{font-size:50px!important;line-height:1!important;display:inline-grid!important;place-items:center!important;color:#008a48!important;}}
-.ind-close{{background:linear-gradient(135deg,#008a48,#12b76a)!important;color:#062b54!important;border-radius:14px!important;min-height:58px!important;padding:0 25px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:22px!important;font-weight:1000!important;box-shadow:0 14px 30px rgba(0,138,72,.22)!important;}}
-.ind-alert{{display:none!important;}}
-.ind-form{{padding:18px 28px 26px!important;display:grid!important;grid-template-columns:270px 1fr 270px 1fr!important;gap:10px 16px!important;align-items:center!important;background:#fff!important;}}
-.ind-form .section{{grid-column:1/-1!important;background:linear-gradient(135deg,#008a48,#16b978)!important;color:#fff!important;height:42px!important;border-radius:12px 12px 0 0!important;display:flex!important;align-items:center!important;gap:18px!important;padding:0 28px!important;font-size:25px!important;font-weight:1000!important;text-transform:uppercase!important;letter-spacing:-.4px!important;box-shadow:0 12px 26px rgba(0,138,72,.18)!important;margin:12px 0 6px!important;}}
-.ind-form .section span{{width:34px!important;height:34px!important;border-radius:999px!important;background:#fff!important;color:#008a48!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;font-size:24px!important;font-weight:1000!important;}}
-.ind-form b{{min-height:56px!important;border-radius:9px!important;background:linear-gradient(135deg,#e0f8ea,#f3fff8)!important;border:1.5px solid #a8e7c1!important;color:#062b54!important;font-size:21px!important;font-weight:1000!important;text-align:left!important;display:flex!important;align-items:center!important;gap:13px!important;padding:0 17px!important;line-height:1.1!important;}}
-.ind-form b.req{{background:linear-gradient(135deg,#d4f7df,#effff6)!important;border:1.8px solid #50e083!important;color:#062b54!important;}}
-.ind-form b.req:after{{content:'*'!important;color:#ef1111!important;margin-left:auto!important;font-size:24px!important;font-weight:1000!important;}}
-.ind-form input,.ind-form select,.ind-form textarea{{min-height:56px!important;height:56px!important;border:1.5px solid #c9d7e3!important;border-radius:10px!important;background:#fff!important;color:#061f3d!important;font-size:22px!important;font-weight:900!important;padding:0 18px!important;box-shadow:none!important;}}
-.ind-form input::placeholder,.ind-form textarea::placeholder{{color:#73849f!important;font-weight:850!important;}}
-.ind-form select{{appearance:auto!important;}}
-.ind-form textarea{{height:72px!important;min-height:72px!important;padding:16px 18px!important;resize:vertical!important;}}
-.ind-form input[type=file]{{font-size:18px!important;padding:13px 16px!important;overflow:hidden!important;}}
-.ind-req-line{{grid-column:1/-1!important;min-height:52px!important;border-radius:10px!important;background:linear-gradient(135deg,#e2faea,#effff6)!important;border:1.5px solid #a8e7c1!important;color:#008a48!important;font-size:20px!important;font-weight:1000!important;display:flex!important;align-items:center!important;gap:10px!important;padding:0 20px!important;}}
-.ind-req-line strong{{color:#008a48!important;font-size:21px!important;font-weight:1000!important;font-style:normal!important;}}.ind-req-line em{{background:#008a48!important;color:#fff!important;border-radius:9px!important;padding:10px 18px!important;font-size:19px!important;font-weight:1000!important;font-style:normal!important;}}.ind-req-line span{{color:#008a48!important;font-size:20px!important;font-weight:1000!important;}}
-.ind-form b[class*="ind-lbl-"]::before{{font-size:28px!important;line-height:1!important;min-width:32px!important;text-align:center!important;display:inline-block!important;color:#008a48!important;}}
-.ind-lbl-dni::before{{content:'🪪';}}.ind-lbl-trab::before{{content:'👤';}}.ind-lbl-emp::before{{content:'🏢';}}.ind-lbl-area::before{{content:'🔗';}}.ind-lbl-cargo::before{{content:'💼';}}.ind-lbl-act::before{{content:'📋';}}.ind-lbl-fecha::before{{content:'📅';}}.ind-lbl-polo::before{{content:'👕';}}.ind-lbl-pantalon::before{{content:'👖';}}.ind-lbl-botas::before{{content:'🥾';}}.ind-lbl-casaca::before{{content:'🧥';}}.ind-lbl-gorro::before{{content:'🧢';}}.ind-lbl-lentes::before{{content:'👓';}}.ind-lbl-guantes::before{{content:'🧤';}}.ind-lbl-otros::before{{content:'📦';}}.ind-lbl-estado::before{{content:'🛡️';}}.ind-lbl-resp::before{{content:'👷';}}.ind-lbl-firma::before{{content:'✍️';}}.ind-lbl-obs::before{{content:'💬';}}
-.ind-form .ind-btn.green{{width:100%!important;min-height:88px!important;border-radius:14px!important;background:linear-gradient(135deg,#008a48,#12b76a)!important;color:#fff!important;font-size:38px!important;font-weight:1000!important;box-shadow:0 20px 38px rgba(0,138,72,.25)!important;}}
-.ind-form span + div{{align-self:stretch!important;}}.ind-form span + div .ind-btn{{height:100%!important;}}
-@media(max-width:1050px){{.ind-modal-head h2{{font-size:32px!important;white-space:normal!important}}.ind-form{{grid-template-columns:1fr 1fr!important}}.ind-form b{{font-size:18px!important}}.ind-form input,.ind-form select,.ind-form textarea{{font-size:18px!important}}.ind-req-line{{flex-wrap:wrap;height:auto!important;padding:12px!important}}}}
-@media(max-width:720px){{.ind-form{{grid-template-columns:1fr!important}}.ind-form .section{{font-size:19px!important}}.ind-modal-head{{flex-wrap:wrap}}.ind-close{{width:100%}}.ind-form .ind-btn.green{{font-size:26px!important;min-height:70px!important}}}}
-
-/* === INDUMENTARIA FINAL 2026 - VISTA IGUAL AL MOCKUP ADJUNTO === */
-.ind-modal{{padding:4px!important;align-items:flex-start!important;background:rgba(15,23,42,.50)!important;}}
-.ind-modal-card.ind-epp-card{{width:min(1520px,99.4vw)!important;max-height:98vh!important;border-radius:10px!important;background:#fff!important;border:1.5px solid #d7e1ea!important;box-shadow:0 28px 90px rgba(15,23,42,.35)!important;overflow:auto!important;}}
-.ind-modal-head.ind-epp-head{{height:92px!important;padding:16px 38px 16px 28px!important;border-bottom:0!important;background:#fff!important;}}
-.ind-modal-head.ind-epp-head h2{{font-size:40px!important;letter-spacing:-1.2px!important;color:#062546!important;text-transform:none!important;gap:18px!important;}}
-.ind-epp-logo{{width:48px!important;height:48px!important;border-radius:14px!important;background:#d9fbe7!important;border:1.5px solid #8ee7b3!important;color:#008a48!important;display:grid!important;place-items:center!important;font-size:26px!important;box-shadow:0 6px 16px rgba(0,138,72,.10)!important;}}
-.ind-close.ind-epp-close{{min-height:54px!important;border-radius:13px!important;padding:0 22px!important;background:linear-gradient(135deg,#008a48,#10b868)!important;color:#fff!important;font-size:16px!important;gap:10px!important;}}
-.ind-epp-shell{{display:grid!important;grid-template-columns:278px 1fr!important;gap:20px!important;padding:0 28px 24px!important;}}
-.ind-epp-photo-card{{border:1.5px solid #dbe5ee!important;border-radius:16px!important;background:#fff!important;min-height:342px!important;margin-top:8px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:28px!important;}}
-.ind-epp-photo-box{{width:160px!important;height:170px!important;border:1.5px solid #d6e1eb!important;border-radius:15px!important;background:linear-gradient(135deg,#fff,#f7fafc)!important;display:grid!important;place-items:center!important;overflow:hidden!important;}}
-.ind-epp-photo-box img{{width:100%!important;height:100%!important;object-fit:cover!important;}}
-.ind-epp-photo-box .blank{{width:82px!important;height:82px!important;border-radius:46% 46% 38% 38%!important;background:#202326!important;position:relative!important;}}
-.ind-epp-photo-box .blank:before{{content:''!important;position:absolute!important;width:42px!important;height:42px!important;border-radius:50%!important;background:#202326!important;left:20px!important;top:-32px!important;}}
-.ind-epp-photo-card small{{display:block!important;color:#59667a!important;font-size:18px!important;font-weight:1000!important;line-height:1.25!important;text-align:center!important;}}
-.ind-form.ind-epp-form{{padding:0!important;display:grid!important;grid-template-columns:220px 1fr 220px 1fr!important;gap:11px 14px!important;align-items:center!important;}}
-.ind-epp-form .section{{height:38px!important;margin:0!important;border-radius:10px 10px 0 0!important;padding:0 20px!important;font-size:21px!important;letter-spacing:-.3px!important;box-shadow:none!important;background:linear-gradient(135deg,#008a48,#049e56)!important;}}
-.ind-epp-form .section span{{display:none!important;}}
-.ind-epp-form b{{min-height:48px!important;border-radius:8px!important;font-size:14px!important;padding:0 16px!important;background:linear-gradient(135deg,#e8fbf0,#f5fff9)!important;border:1.3px solid #b7edcc!important;color:#071b34!important;gap:12px!important;}}
-.ind-epp-form b.req:after{{font-size:18px!important;}}
-.ind-epp-form b[class*="ind-lbl-"]::before{{font-size:22px!important;min-width:26px!important;color:#008a48!important;filter:hue-rotate(70deg) saturate(1.4)!important;}}
-.ind-epp-form input,.ind-epp-form select,.ind-epp-form textarea{{min-height:48px!important;height:48px!important;border-radius:8px!important;font-size:16px!important;padding:0 16px!important;border:1.5px solid #d4e0ea!important;color:#071b34!important;background:#fff!important;}}
-.ind-epp-form textarea{{height:68px!important;min-height:68px!important;padding:14px 16px!important;}}
-.ind-epp-form input[type=file]{{font-size:14px!important;padding:10px 12px!important;}}
-.ind-epp-form .ind-req-line{{grid-column:1/-1!important;height:39px!important;min-height:39px!important;border-radius:8px!important;font-size:14px!important;padding:0 18px!important;background:#edfff5!important;border:1.4px solid #a9efc5!important;color:#008a48!important;}}
-.ind-epp-form .ind-req-line strong{{font-size:13px!important;color:#071b34!important;}}
-.ind-epp-form .ind-req-line em{{font-size:13px!important;padding:8px 13px!important;border-radius:7px!important;background:#008a48!important;color:#fff!important;}}
-.ind-epp-form .ind-req-line span{{font-size:14px!important;color:#008a48!important;}}
-.ind-epp-dni-wrap{{display:grid!important;grid-template-columns:1fr 60px!important;gap:0!important;}}
-.ind-epp-dni-wrap input{{border-radius:8px 0 0 8px!important;}}
-.ind-epp-search{{height:54px!important;min-height:54px!important;border:0!important;border-radius:0 12px 12px 0!important;background:linear-gradient(135deg,#008a48,#11b66b)!important;color:#fff!important;font-size:29px!important;font-weight:1000!important;display:grid!important;place-items:center!important;cursor:pointer!important;box-shadow:0 10px 18px rgba(0,138,72,.22)!important;}}
-.ind-epp-status{{border:1.4px solid #bdf2d2!important;border-radius:12px!important;background:linear-gradient(135deg,#f6fff9,#eafff3)!important;min-height:84px!important;padding:12px 20px!important;display:flex!important;flex-direction:column!important;justify-content:center!important;align-self:stretch!important;}}
-.ind-epp-status b{{background:none!important;border:0!important;min-height:0!important;padding:0!important;font-size:16px!important;}}
-.ind-epp-status span{{display:inline-flex!important;align-items:center!important;gap:8px!important;margin-top:8px!important;padding:9px 20px!important;border-radius:999px!important;background:#fff3dc!important;border:1.3px solid #ffc978!important;color:#f97316!important;font-weight:1000!important;width:max-content!important;}}
-.ind-epp-status span:before{{content:'◷';font-size:18px;}}
-.ind-epp-state-row{{grid-column:1/-1!important;display:grid!important;grid-template-columns:220px 1fr 220px 1fr!important;gap:11px 14px!important;}}
-.ind-epp-bottom{{grid-column:1/-1!important;display:grid!important;grid-template-columns:240px 1fr 180px 1.9fr!important;gap:11px 18px!important;align-items:center!important;border-top:1.5px solid #e2ebf2!important;margin-top:12px!important;padding-top:12px!important;}}
-.ind-epp-bottom2{{grid-column:1/-1!important;display:grid!important;grid-template-columns:240px 1fr 1fr!important;gap:11px 18px!important;align-items:stretch!important;}}
-.ind-epp-form .submit-wrap{{display:flex!important;align-items:stretch!important;}}
-.ind-epp-form .ind-btn.green{{width:100%!important;min-height:64px!important;border-radius:9px!important;font-size:27px!important;}}
-@media(max-width:1100px){{.ind-epp-shell{{grid-template-columns:1fr!important}}.ind-epp-photo-card{{min-height:210px!important}}.ind-form.ind-epp-form,.ind-epp-state-row,.ind-epp-bottom,.ind-epp-bottom2{{grid-template-columns:1fr 1fr!important}}.ind-modal-head.ind-epp-head h2{{font-size:30px!important;white-space:normal!important}}}}
-
-
-/* === INDUMENTARIA CORREGIDA: MISMO ESTILO QUE EVALUACIÓN MÉDICA === */
-.ind-modal{{padding:10px 22px!important;align-items:flex-start!important;background:rgba(15,23,42,.55)!important;}}
-.ind-modal-card.ind-epp-card{{width:min(1485px,96.8vw)!important;max-height:96vh!important;border-radius:22px!important;background:#fff!important;border:1px solid #d7e2ec!important;box-shadow:0 26px 80px rgba(15,23,42,.35)!important;overflow:auto!important;}}
-.ind-modal-head.ind-epp-head{{height:110px!important;padding:24px 38px 18px!important;border-bottom:1px solid #dbe5ee!important;background:#fff!important;display:flex!important;align-items:center!important;justify-content:space-between!important;}}
-.ind-modal-head.ind-epp-head h2{{font-size:41px!important;line-height:1.08!important;letter-spacing:-1.3px!important;color:#062546!important;text-transform:none!important;white-space:normal!important;margin:0!important;}}
-.ind-epp-logo{{width:54px!important;height:54px!important;border-radius:16px!important;background:#dffbea!important;border:1.5px solid #76e5a9!important;color:#008a48!important;font-size:27px!important;flex:0 0 54px!important;}}
-.ind-close.ind-epp-close{{min-height:64px!important;border-radius:16px!important;padding:0 28px!important;background:#079b55!important;color:#fff!important;font-size:18px!important;font-weight:1000!important;box-shadow:0 16px 35px rgba(7,155,85,.18)!important;}}
-.ind-epp-shell{{display:grid!important;grid-template-columns:312px 1fr!important;gap:30px!important;padding:28px 38px 34px!important;}}
-.ind-epp-photo-card{{border:1.5px solid #dbe5ee!important;border-radius:20px!important;background:#fff!important;min-height:345px!important;margin:0!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:34px!important;}}
-.ind-epp-photo-box{{width:178px!important;height:178px!important;border:1.5px solid #d6e1eb!important;border-radius:17px!important;background:linear-gradient(135deg,#fff,#f8fafc)!important;}}
-.ind-epp-photo-card small{{color:#536078!important;font-size:20px!important;font-weight:1000!important;line-height:1.25!important;}}
-.ind-form.ind-epp-form{{padding:0!important;display:grid!important;grid-template-columns:280px minmax(190px,1fr) 280px minmax(190px,1fr)!important;gap:12px 18px!important;align-items:center!important;background:#fff!important;}}
-.ind-form.ind-epp-form>.section{{grid-column:1/-1!important;height:58px!important;min-height:58px!important;margin:0!important;border-radius:18px 18px 0 0!important;background:linear-gradient(180deg,#0a9d56 0%,#05783e 100%)!important;color:#fff!important;border:0!important;box-shadow:none!important;display:flex!important;align-items:center!important;padding:0 24px!important;font-size:25px!important;font-weight:1000!important;letter-spacing:-.4px!important;text-transform:uppercase!important;}}
-.ind-epp-form b{{min-height:58px!important;border-radius:12px!important;font-size:16px!important;font-weight:1000!important;padding:0 18px!important;background:#eafff2!important;border:1.4px solid #b9efcd!important;color:#062546!important;display:flex!important;align-items:center!important;gap:14px!important;}}
-.ind-epp-form b i{{font-size:24px!important;color:#078c4d!important;min-width:28px!important;text-align:center!important;line-height:1!important;}}
-.ind-epp-form b[class*="ind-lbl-"]::before{{content:none!important;display:none!important;}}
-.ind-epp-form b.req{{border-color:#4be381!important;background:#eafff2!important;}}
-.ind-epp-form b.req:after{{content:'*'!important;color:#f00505!important;margin-left:auto!important;font-size:20px!important;}}
-.ind-epp-form input,.ind-epp-form select,.ind-epp-form textarea{{min-height:58px!important;height:58px!important;border-radius:12px!important;font-size:18px!important;font-weight:900!important;padding:0 18px!important;border:1.5px solid #d3dfe9!important;color:#062546!important;background:#fff!important;box-shadow:none!important;}}
-.ind-epp-form input::placeholder,.ind-epp-form textarea::placeholder{{color:#8190a8!important;font-weight:850!important;}}
-.ind-epp-dni-wrap{{display:grid!important;grid-template-columns:1fr 72px!important;gap:0!important;}}
-.ind-epp-dni-wrap input{{border-radius:12px 0 0 12px!important;border-right:0!important;}}
-.ind-epp-search{{height:64px!important;min-height:64px!important;border-radius:0 16px 16px 0!important;background:#079b55!important;color:#fff!important;font-size:31px!important;box-shadow:0 14px 28px rgba(7,155,85,.22)!important;}}
-.ind-epp-status{{border:1.4px solid #bdf2d2!important;border-radius:16px!important;background:#eafff2!important;min-height:110px!important;padding:18px 24px!important;grid-column:3/5!important;grid-row:auto!important;display:flex!important;flex-direction:column!important;justify-content:center!important;}}
-.ind-epp-status b{{background:none!important;border:0!important;min-height:0!important;padding:0!important;font-size:18px!important;color:#062546!important;}}
-.ind-epp-status span{{margin-top:12px!important;padding:10px 24px!important;border-radius:999px!important;background:#fff4de!important;border:1.4px solid #ffc775!important;color:#f97316!important;font-size:17px!important;font-weight:1000!important;width:max-content!important;}}
-.ind-epp-form .ind-req-line{{grid-column:1/-1!important;min-height:50px!important;height:50px!important;border-radius:12px!important;background:#ecfff4!important;border:1.4px solid #a9efc5!important;color:#008a48!important;font-size:16px!important;padding:0 22px!important;display:flex!important;align-items:center!important;gap:12px!important;}}
-.ind-epp-form .ind-req-line strong{{font-size:14px!important;color:#062546!important;font-weight:1000!important;}}
-.ind-epp-form .ind-req-line em{{font-size:14px!important;background:#079b55!important;color:#fff!important;padding:10px 16px!important;border-radius:8px!important;font-style:normal!important;font-weight:1000!important;}}
-.ind-epp-form .ind-req-line span{{font-size:16px!important;color:#008a48!important;font-weight:900!important;}}
-.ind-epp-bottom{{grid-column:1/-1!important;display:grid!important;grid-template-columns:240px 1fr 180px 1.9fr!important;gap:12px 18px!important;align-items:center!important;border-top:1.5px solid #e4ecf3!important;margin-top:12px!important;padding-top:12px!important;}}
-.ind-epp-bottom2{{grid-column:1/-1!important;display:grid!important;grid-template-columns:240px 1.6fr 1fr!important;gap:12px 18px!important;align-items:stretch!important;}}
-.ind-epp-form textarea{{height:70px!important;min-height:70px!important;padding:16px 18px!important;}}
-.ind-epp-form input[type=file]{{font-size:15px!important;padding:13px 14px!important;}}
-.ind-epp-form .ind-btn.green{{width:100%!important;min-height:70px!important;border-radius:12px!important;background:#079b55!important;color:#fff!important;font-size:28px!important;font-weight:1000!important;box-shadow:0 18px 32px rgba(7,155,85,.25)!important;}}
-@media(max-width:1150px){{.ind-epp-shell{{grid-template-columns:1fr!important}}.ind-epp-photo-card{{min-height:230px!important}}.ind-form.ind-epp-form,.ind-epp-bottom,.ind-epp-bottom2{{grid-template-columns:1fr 1fr!important}}.ind-epp-status{{grid-column:auto!important}}.ind-modal-head.ind-epp-head h2{{font-size:31px!important}}}}
-@media(max-width:720px){{.ind-modal{{padding:6px!important}}.ind-modal-head.ind-epp-head{{height:auto!important;gap:12px!important;flex-wrap:wrap!important}}.ind-form.ind-epp-form,.ind-epp-bottom,.ind-epp-bottom2{{grid-template-columns:1fr!important}}.ind-epp-shell{{padding:18px 14px!important}}.ind-close.ind-epp-close{{width:100%!important}}.ind-epp-form .ind-req-line{{height:auto!important;flex-wrap:wrap!important;padding:12px!important}}}}
-
-/* === AJUSTE FINAL: FOTO ARRIBA IZQUIERDA COMO MOCKUP 4 === */
-.ind-modal-card.ind-epp-card{{
-  width:min(1440px,96.5vw)!important;
-  max-height:96vh!important;
-  overflow-y:auto!important;
-  overflow-x:hidden!important;
-  border-radius:20px!important;
-}}
-.ind-modal-head.ind-epp-head{{
-  height:88px!important;
-  padding:14px 28px 12px 28px!important;
-  overflow:hidden!important;
-}}
-.ind-modal-head.ind-epp-head h2{{
-  font-size:37px!important;
-  line-height:1.04!important;
-  max-width:calc(100% - 190px)!important;
-  overflow:visible!important;
-  white-space:nowrap!important;
-}}
-.ind-close.ind-epp-close{{
-  min-height:54px!important;
-  border-radius:14px!important;
-  padding:0 24px!important;
-}}
-.ind-epp-shell{{
-  grid-template-columns:250px minmax(0,1fr)!important;
-  gap:22px!important;
-  padding:18px 20px 24px!important;
-  align-items:start!important;
-}}
-.ind-epp-photo-card{{
-  width:248px!important;
-  min-height:324px!important;
-  height:324px!important;
-  margin:0!important;
-  align-self:start!important;
-  justify-content:flex-start!important;
-  padding-top:38px!important;
-  gap:28px!important;
-  border-radius:16px!important;
-}}
-.ind-epp-photo-box{{
-  width:150px!important;
-  height:150px!important;
-  border-radius:15px!important;
-  flex:0 0 150px!important;
-}}
-.ind-epp-photo-box .blank{{width:72px!important;height:72px!important;}}
-.ind-epp-photo-box .blank:before{{width:38px!important;height:38px!important;left:17px!important;top:-28px!important;}}
-.ind-epp-photo-card small{{font-size:17px!important;line-height:1.22!important;}}
-.ind-form.ind-epp-form{{
-  grid-template-columns:210px minmax(170px,1fr) 210px minmax(170px,1fr)!important;
-  gap:10px 13px!important;
-  min-width:0!important;
-}}
-.ind-form.ind-epp-form>.section{{
-  height:42px!important;
-  min-height:42px!important;
-  border-radius:10px 10px 0 0!important;
-  font-size:21px!important;
-  padding:0 18px!important;
-}}
-.ind-epp-form b{{min-height:47px!important;font-size:14px!important;border-radius:8px!important;padding:0 14px!important;gap:10px!important;}}
-.ind-epp-form b i{{font-size:21px!important;min-width:24px!important;}}
-.ind-epp-form input,.ind-epp-form select,.ind-epp-form textarea{{min-height:47px!important;height:47px!important;font-size:15px!important;border-radius:8px!important;padding:0 14px!important;min-width:0!important;}}
-.ind-epp-dni-wrap{{grid-template-columns:1fr 58px!important;min-width:0!important;}}
-.ind-epp-search{{height:52px!important;min-height:52px!important;border-radius:0 12px 12px 0!important;font-size:27px!important;}}
-.ind-epp-status{{min-height:72px!important;padding:10px 18px!important;border-radius:12px!important;}}
-.ind-epp-status b{{font-size:15px!important;}}
-.ind-epp-status span{{font-size:14px!important;padding:8px 18px!important;margin-top:7px!important;}}
-.ind-epp-form .ind-req-line{{height:38px!important;min-height:38px!important;border-radius:8px!important;font-size:13px!important;padding:0 14px!important;overflow:hidden!important;white-space:nowrap!important;}}
-.ind-epp-form .ind-req-line strong,.ind-epp-form .ind-req-line em{{font-size:12px!important;}}
-.ind-epp-form .ind-req-line span{{font-size:13px!important;}}
-.ind-epp-bottom{{grid-template-columns:210px minmax(180px,1fr) 170px minmax(260px,1.8fr)!important;gap:10px 13px!important;margin-top:10px!important;padding-top:10px!important;}}
-.ind-epp-bottom2{{grid-template-columns:210px minmax(260px,1.55fr) minmax(300px,1fr)!important;gap:10px 13px!important;}}
-.ind-epp-form textarea{{height:58px!important;min-height:58px!important;padding:12px 14px!important;}}
-.ind-epp-form .ind-btn.green{{min-height:58px!important;font-size:24px!important;border-radius:8px!important;}}
-@media(max-width:1150px){{
-  .ind-epp-shell{{grid-template-columns:1fr!important;}}
-  .ind-epp-photo-card{{width:100%!important;height:260px!important;min-height:260px!important;padding-top:28px!important;}}
-  .ind-modal-head.ind-epp-head h2{{white-space:normal!important;font-size:30px!important;max-width:100%!important;}}
-}}
-
+        /* MODAL INDUMENTARIA / EPP - FORMATO FINAL COMO MOCKUP */
+        .ind-modal-check{{display:none}}
+        .ind-modal{{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:none;align-items:flex-start;justify-content:center;padding:2px 4px;overflow:auto}}
+        .ind-modal-check:checked + .ind-modal{{display:flex}}
+        .ind-modal-card.ind-epp-card{{width:min(1580px,99.5vw);max-height:98vh;background:#fff;border-radius:8px;border:1px solid #dbe7ef;box-shadow:0 30px 90px rgba(15,23,42,.35);overflow:auto;color:#071b34}}
+        .ind-epp-head{{height:82px;padding:12px 20px 10px 18px;border-bottom:1px solid #d7e3ec;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:18px}}
+        .ind-epp-head h2{{display:flex;align-items:center;gap:14px;margin:0;color:#062b54;font-size:38px;line-height:1;font-weight:1000;letter-spacing:-.9px;white-space:nowrap}}
+        .ind-epp-logo{{width:50px;height:50px;border-radius:12px;background:#dcfce7;border:1px solid #86efac;color:#008a48;display:grid;place-items:center;font-size:30px;flex:0 0 50px}}
+        .ind-epp-close{{cursor:pointer;background:#079b55;color:#fff;border-radius:12px;min-height:56px;padding:0 24px;display:inline-flex;align-items:center;justify-content:center;font-size:17px;font-weight:1000;box-shadow:0 14px 30px rgba(0,138,72,.18)}}
+        .ind-alert{{display:none!important}}
+        .ind-epp-body{{padding:14px 16px 20px}}
+        .ind-epp-top{{display:grid;grid-template-columns:240px minmax(0,1fr);gap:18px;align-items:stretch;margin-bottom:16px}}
+        .ind-epp-photo-card{{border:1px solid #d6e4ef;border-radius:12px;background:#fff;min-height:216px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}}
+        .ind-epp-photo-box{{width:130px;height:130px;border-radius:14px;border:1px solid #d6e4ef;background:#f8fafc;display:grid;place-items:center;overflow:hidden}}
+        .ind-epp-photo-box img{{width:100%;height:100%;object-fit:cover}}
+        .ind-epp-photo-box .blank{{width:64px;height:62px;border-radius:32px 32px 16px 16px;background:#20252a;position:relative}}
+        .ind-epp-photo-box .blank:before{{content:'';position:absolute;width:36px;height:36px;border-radius:50%;background:#20252a;left:14px;top:-25px}}
+        .ind-epp-photo-card small{{font-size:15px;line-height:1.22;text-align:center;color:#53627a;font-weight:1000}}
+        .ind-epp-form{{display:grid;grid-template-columns:235px minmax(220px,1fr) 235px minmax(220px,1fr);gap:9px 14px;align-items:center}}
+        .ind-epp-top .ind-epp-form{{height:100%}}
+        .ind-epp-main{{display:grid;grid-template-columns:235px minmax(220px,1fr) 235px minmax(220px,1fr);gap:9px 14px;align-items:center}}
+        .ind-epp-section{{grid-column:1/-1;height:38px;display:flex;align-items:center;padding:0 16px;border-radius:8px 8px 0 0;background:linear-gradient(90deg,#008a48,#079b55);color:#fff;font-size:18px;font-weight:1000;text-transform:uppercase;letter-spacing:.1px}}
+        .ind-epp-form b,.ind-epp-main b{{min-height:42px;height:42px;border-radius:7px;border:1px solid #b9efcd;background:#ecfff4;color:#062546;font-weight:1000;font-size:13px;display:flex;align-items:center;gap:10px;padding:0 14px;position:relative}}
+        .ind-epp-form b i,.ind-epp-main b i{{font-size:20px;color:#008a48;min-width:24px;text-align:center}}
+        .ind-epp-form b.req:after,.ind-epp-main b.req:after{{content:'*';color:#ef4444;font-size:17px;margin-left:auto}}
+        .ind-epp-form input,.ind-epp-form select,.ind-epp-form textarea,.ind-epp-main input,.ind-epp-main select,.ind-epp-main textarea{{width:100%;min-height:42px;height:42px;border-radius:7px;border:1px solid #d5e3ee;background:#fff;color:#071b34;font-size:14px;font-weight:850;padding:0 14px;outline:none;min-width:0}}
+        .ind-epp-form input::placeholder,.ind-epp-main input::placeholder,.ind-epp-main textarea::placeholder{{color:#74839c;font-weight:800}}
+        .ind-epp-form input:focus,.ind-epp-form select:focus,.ind-epp-main input:focus,.ind-epp-main select:focus,.ind-epp-main textarea:focus{{border-color:#0bbf72;box-shadow:0 0 0 3px rgba(11,191,114,.12)}}
+        .ind-dni-line{{display:grid;grid-template-columns:minmax(280px,1fr) 58px;gap:8px;align-items:center}}
+        .ind-epp-search{{height:52px;min-height:52px;border:0;border-radius:10px;background:#079b55;color:#fff;font-size:26px;display:grid;place-items:center;cursor:pointer;box-shadow:0 12px 22px rgba(0,138,72,.2)}}
+        .ind-epp-status{{min-height:86px;border-radius:11px;border:1px solid #a9efc5;background:#ecfff4;padding:16px 22px;display:flex;flex-direction:column;justify-content:center;align-self:center}}
+        .ind-epp-status b{{all:unset;font-size:15px;color:#062546;font-weight:1000}}
+        .ind-epp-status span{{margin-top:8px;width:max-content;border-radius:999px;background:#fff4de;border:1px solid #ffc775;color:#f97316;padding:8px 20px;font-size:14px;font-weight:1000}}
+        .ind-req-line{{grid-column:1/-1;min-height:40px;border-radius:8px;background:#ecfff4;border:1px solid #a9efc5;color:#008a48;padding:0 16px;display:flex;align-items:center;gap:12px;overflow:hidden;white-space:nowrap}}
+        .ind-req-line strong{{font-size:12px;color:#062546;font-weight:1000}}
+        .ind-req-line em{{font-size:12px;background:#079b55;color:#fff;padding:9px 15px;border-radius:6px;font-style:normal;font-weight:1000}}
+        .ind-req-line span{{font-size:14px;color:#008a48;font-weight:900}}
+        .ind-row-sep{{grid-column:1/-1;border-top:1px solid #e2edf5;margin:8px 0 4px}}
+        .ind-epp-bottom{{grid-column:1/-1;display:grid;grid-template-columns:235px minmax(220px,1fr) 190px minmax(330px,1.6fr);gap:9px 14px;align-items:center}}
+        .ind-epp-bottom2{{grid-column:1/-1;display:grid;grid-template-columns:235px minmax(330px,1.5fr) minmax(350px,1fr);gap:9px 14px;align-items:stretch}}
+        .ind-epp-bottom2 textarea{{height:58px;min-height:58px;padding:12px 14px;resize:vertical}}
+        .ind-epp-submit{{width:100%;height:58px;border:0;border-radius:8px;background:#079b55;color:#fff;font-size:24px;font-weight:1000;display:flex;align-items:center;justify-content:center;gap:14px;box-shadow:0 18px 32px rgba(7,155,85,.25);cursor:pointer}}
+        .field-error{{border-color:#ef4444!important;box-shadow:0 0 0 3px rgba(239,68,68,.14)!important}}
+        @media(max-width:1180px){{.ind-kpis{{grid-template-columns:repeat(2,1fr)}}.ind-tools{{grid-template-columns:1fr 1fr}}.ind-epp-top{{grid-template-columns:1fr}}.ind-epp-photo-card{{min-height:210px}}.ind-epp-form,.ind-epp-main,.ind-epp-bottom,.ind-epp-bottom2{{grid-template-columns:1fr 1fr}}.ind-epp-status{{grid-column:auto}}.ind-epp-head h2{{font-size:30px;white-space:normal}}}}
+        @media(max-width:720px){{.ind-kpis,.ind-tools,.ind-epp-form,.ind-epp-main,.ind-epp-bottom,.ind-epp-bottom2{{grid-template-columns:1fr}}.ind-modal{{padding:4px}}.ind-epp-head{{height:auto;flex-wrap:wrap}}.ind-epp-close{{width:100%}}.ind-req-line{{height:auto;white-space:normal;flex-wrap:wrap;padding:10px}}}}
         </style>
         <section class='ind-page'>
           {modulo_requerimiento_header_html('🦺','Indumentaria y EPP','Seleccione primero el requerimiento, revise postulantes y registre una sola entrega con prendas, cargo firmado y responsable.','indumentaria', "<option value=''>Seleccione requerimiento</option>" + req_options_indumentaria, req_filtro_indumentaria)}
@@ -12512,7 +12387,41 @@ html,body{overflow-x:hidden!important;}
           <form id='form_masivo_indumentaria' method='post' class='ind-tools'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='indumentaria'><input type='hidden' name='campo_estado' value='estado_indumentaria'><div><label>Buscar por DNI</label><input type='text' oninput="filtrarTabla(this,'tabla_indumentaria_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='ind-state-filter' onchange="filtrarTabla(this,'tabla_indumentaria_360')"><option value=''>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select><select class='legacy-mass-select' name='nuevo_estado'><option>PENDIENTE</option><option>ENTREGADO</option><option>OBSERVADO</option></select><button class='ind-btn mass-apply-btn' type='submit'>Aplicar estado</button></div><div><span class="registrar-title" style="display:none"></span><div class='ind-actions'><label for='modal_ind_entrega' class='ind-btn'>Registrar</label></div></div></form>
           <div class='ind-table-card'><div class='ind-table-head'><h2>LISTA DE POSTULANTES</h2></div><div class='std-table-wrap'><table id='tabla_indumentaria_360' class='std-table'>{tabla_estandar_postulantes_header('tabla_indumentaria_360')}{indumentaria_control_rows}</table></div></div><script>document.addEventListener('DOMContentLoaded',function(){{function b(t,f){{var form=document.getElementById(f);if(!form)return;document.querySelectorAll('#'+t+' input[name="ingreso_ids"]').forEach(function(x){{x.setAttribute('form',f);}});}}b('tabla_induccion_360','form_masivo_induccion');b('tabla_indumentaria_360','form_masivo_indumentaria');}});</script>
           <div class='ind-table-card'><div class='ind-table-head'><h2>Cargos de entrega registrados</h2><small>{len(indumentarias_filtradas)} registro(s)</small></div><div class='ind-table-wrap'><table class='ind-table'><tr><th>Fecha registro</th><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Polo</th><th>Pantalón</th><th>Botas</th><th>Estado</th><th>Responsable</th><th>Fecha entrega</th><th>Acción</th></tr>{ind_rows}</table></div></div>
-          <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card ind-epp-card'><div class='ind-modal-head ind-epp-head'><h2><span class='ind-epp-logo'><i class='bi bi-bag-check-fill'></i></span>Registro de entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-close ind-epp-close'>Cerrar ✕</label></div><div class='ind-alert' style='display:none'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span></div><div class='ind-epp-shell'><aside class='ind-epp-photo-card'><div class='ind-epp-photo-box' id='ind_foto_box'><div class='blank'></div></div><small id='ind_foto_txt'>Sin fotografía<br>registrada</small></aside><form method='post' enctype='multipart/form-data' class='ind-form ind-epp-form' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'><input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><input type='hidden' name='requerimiento' id='ind_requerimiento' value='{h(req_filtro_indumentaria)}'><div class='section'>1. SELECCIONAR POSTULANTE</div><b class='req ind-lbl-dni'><i class='bi bi-person-vcard-fill'></i>DNI del postulante</b><div class='ind-epp-dni-wrap'><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI del requerimiento' required><button type='button' class='ind-epp-search' onclick='buscarIndumentariaDNI()' title='Buscar DNI'><i class='bi bi-search'></i></button></div><div class='ind-epp-status'><b>Estado de entrega</b><span id='ind_estado_badge'>PENDIENTE</span></div><div class='full ind-req-line'><strong>ⓘ &nbsp; Requerimiento seleccionado:</strong> <em>{h(req_filtro_indumentaria) or 'Seleccione requerimiento antes de registrar'}</em> <span>· Al digitar 8 números, los datos se cargan automáticamente.</span></div><div class='section'>2. DATOS DEL TRABAJADOR</div><b class='req ind-lbl-trab'><i class='bi bi-person-circle'></i>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b class='ind-lbl-emp'><i class='bi bi-buildings-fill'></i>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'><b class='ind-lbl-area'><i class='bi bi-diagram-3-fill'></i>Área</b><input id='ind_area' name='area' placeholder='Área'><b class='ind-lbl-cargo'><i class='bi bi-briefcase-fill'></i>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'><b class='ind-lbl-act'><i class='bi bi-clipboard2-check-fill'></i>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b class='ind-lbl-fecha'><i class='bi bi-calendar3'></i>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'><div class='section'>3. DETALLE DE PRENDAS / EPP</div><b class='req ind-lbl-polo'><i class='bi bi-tshirt'></i>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req ind-lbl-pantalon'><i class='bi bi-person-standing'></i>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select><b class='req ind-lbl-botas'><i class='bi bi-cone-striped'></i>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b class='ind-lbl-casaca'><i class='bi bi-person-bounding-box'></i>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='ind-lbl-gorro'><i class='bi bi-shield-fill-check'></i>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b class='ind-lbl-lentes'><i class='bi bi-eyeglasses'></i>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select><b class='ind-lbl-guantes'><i class='bi bi-hand-index-thumb-fill'></i>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b class='ind-lbl-otros'><i class='bi bi-box-seam-fill'></i>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'><b class='ind-lbl-estado'><i class='bi bi-shield-check'></i>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req ind-lbl-fecha'><i class='bi bi-calendar-check-fill'></i>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'><div class='ind-epp-bottom'><b class='req ind-lbl-resp'><i class='bi bi-person-fill'></i>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b class='ind-lbl-firma'><i class='bi bi-pencil-fill'></i>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'></div><div class='ind-epp-bottom2'><b class='ind-lbl-obs'><i class='bi bi-chat-dots'></i>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><div class='submit-wrap'><button class='ind-btn green' type='submit'><i class='bi bi-check-circle-fill'></i> Registrar entrega</button></div></div></form><datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist></div></div></div>
+
+          <input type='checkbox' id='modal_ind_entrega' class='ind-modal-check' onchange='if(window.forceSidebarForModal)window.forceSidebarForModal(this.checked)'><div class='ind-modal'><div class='ind-modal-card ind-epp-card'>
+            <div class='ind-epp-head'><h2><span class='ind-epp-logo'><i class='bi bi-bag-check-fill'></i></span>Registro de entrega de indumentaria / EPP</h2><label for='modal_ind_entrega' class='ind-epp-close'>Cerrar&nbsp; ✕</label></div>
+            <div class='ind-alert'><span id='ind_estado_msg'>Complete los campos obligatorios resaltados.</span></div>
+            <form method='post' enctype='multipart/form-data' id='form_indumentaria_entrega' onsubmit='return validarFormularioIndumentaria(event)'>
+              <input type='hidden' name='accion' value='guardar_indumentaria'><input type='hidden' name='fotocheck' value=''><input type='hidden' name='requerimiento' id='ind_requerimiento' value='{h(req_filtro_indumentaria)}'>
+              <div class='ind-epp-body'>
+                <div class='ind-epp-top'>
+                  <aside class='ind-epp-photo-card'><div class='ind-epp-photo-box' id='ind_foto_box'><div class='blank'></div></div><small id='ind_foto_txt'>Sin fotografía<br>registrada</small></aside>
+                  <div class='ind-epp-form'>
+                    <div class='ind-epp-section'>1. SELECCIONAR POSTULANTE</div>
+                    <b class='req'><i class='bi bi-person-vcard-fill'></i>DNI del postulante</b><div class='ind-dni-line'><input name='dni' id='ind_dni' list='lista_dni_ind' placeholder='Digite DNI del requerimiento' required><button type='button' class='ind-epp-search' onclick='buscarIndumentariaDNI()' title='Buscar DNI'><i class='bi bi-search'></i></button></div>
+                    <div class='ind-epp-status'><b>Estado de entrega</b><span id='ind_estado_badge'><i class='bi bi-clock'></i> PENDIENTE</span></div>
+                    <div class='ind-req-line'><strong><i class='bi bi-info-circle'></i>&nbsp; Requerimiento seleccionado:</strong><em>{h(req_filtro_indumentaria) or 'Seleccione requerimiento antes de registrar'}</em><span>· Al digitar 8 números, los datos se cargan automáticamente.</span></div>
+                  </div>
+                </div>
+                <div class='ind-epp-main'>
+                  <div class='ind-epp-section'>2. DATOS DEL TRABAJADOR</div>
+                  <b class='req'><i class='bi bi-person-circle'></i>Trabajador</b><input id='ind_trabajador' name='trabajador' placeholder='Se carga automático por DNI' required><b><i class='bi bi-buildings-fill'></i>Empresa</b><input id='ind_empresa' name='empresa' placeholder='Empresa'>
+                  <b><i class='bi bi-diagram-3-fill'></i>Área</b><input id='ind_area' name='area' placeholder='Área'><b><i class='bi bi-briefcase-fill'></i>Cargo</b><input id='ind_cargo' name='cargo' placeholder='Cargo'>
+                  <b><i class='bi bi-clipboard2-check-fill'></i>Actividad</b><input id='ind_actividad' name='actividad' placeholder='Actividad'><b><i class='bi bi-calendar3'></i>Fecha ingreso</b><input id='ind_fecha_ingreso' name='fecha_ingreso' placeholder='Fecha ingreso'>
+                  <div class='ind-epp-section'>3. DETALLE DE PRENDAS / EPP</div>
+                  <b class='req'><i class='bi bi-tshirt'></i>Polo</b><select name='polo' id='ind_polo'><option value=''>Seleccione talla</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select><b class='req'><i class='bi bi-person-standing'></i>Pantalón</b><select name='pantalon' id='ind_pantalon'><option value=''>Seleccione talla</option><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option><option>40</option><option>42</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select>
+                  <b class='req'><i class='bi bi-cone-striped'></i>Botas</b><select name='botas' id='ind_botas'><option value=''>Seleccione talla</option><option>36</option><option>37</option><option>38</option><option>39</option><option>40</option><option>41</option><option>42</option><option>43</option><option>44</option><option>45</option></select><b><i class='bi bi-person-bounding-box'></i>Casaca</b><select name='casaca'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select>
+                  <b><i class='bi bi-shield-fill-check'></i>Gorro</b><select name='gorro'><option value='NO'>NO</option><option>SI</option></select><b><i class='bi bi-eyeglasses'></i>Lentes</b><select name='lentes'><option value='NO'>NO</option><option>SI</option></select>
+                  <b><i class='bi bi-hand-index-thumb-fill'></i>Guantes</b><select name='guantes'><option value=''>No aplica / pendiente</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>SI</option><option>NO</option></select><b><i class='bi bi-box-seam-fill'></i>Otros</b><input name='otros' placeholder='Chaleco, tapones, protector...'>
+                  <b><i class='bi bi-shield-check'></i>Estado</b><input id='ind_estado_auto' value='Automático: ENTREGADO al completar obligatorios' readonly><b class='req'><i class='bi bi-calendar-check-fill'></i>Fecha entrega</b><input type='date' name='fecha_entrega' id='ind_fecha_entrega' value='{hoy_iso()}'>
+                  <div class='ind-row-sep'></div>
+                  <div class='ind-epp-bottom'><b class='req'><i class='bi bi-person-fill'></i>Responsable entrega</b><input name='responsable_entrega' id='ind_responsable_entrega' placeholder='Nombre del responsable'><b><i class='bi bi-pencil-fill'></i>Cargo firmado</b><input type='file' name='cargo_firmado' accept='.pdf,.png,.jpg,.jpeg'></div>
+                  <div class='ind-epp-bottom2'><b><i class='bi bi-chat-dots'></i>Observación</b><textarea name='observacion' placeholder='Detalle de prendas pendientes, observaciones o motivo.'></textarea><button class='ind-epp-submit' type='submit'><i class='bi bi-check-circle-fill'></i> Registrar entrega</button></div>
+                </div>
+              </div>
+              <datalist id='lista_dni_ind'>{opt_ingresos_indumentaria}</datalist>
+            </form>
+          </div></div>
         </section>
         <script>
         const trabajadoresIndumentaria = {trabajadores_js};
@@ -12530,76 +12439,39 @@ html,body{overflow-x:hidden!important;}
           const dniEl=document.getElementById('ind_dni');
           if(!dniEl) return false;
           if(!req){{
-            dniEl.value='';
-            dniEl.disabled=true;
-            dniEl.placeholder='Primero seleccione requerimiento';
-            limpiarDatosIndumentaria();
-            setAlertaIndumentaria('Debe seleccionar un requerimiento antes de registrar indumentaria.', true);
-            return false;
+            dniEl.value=''; dniEl.disabled=true; dniEl.placeholder='Primero seleccione requerimiento'; limpiarDatosIndumentaria();
+            setAlertaIndumentaria('Debe seleccionar un requerimiento antes de registrar indumentaria.', true); return false;
           }}
-          dniEl.disabled=false;
-          dniEl.placeholder='Digite DNI';
+          dniEl.disabled=false; dniEl.placeholder='Digite DNI del requerimiento';
           if(limpiarDni){{ dniEl.value=''; limpiarDatosIndumentaria(); }}
-          setAlertaIndumentaria('Digite DNI de 8 números. Los datos se cargarán solo del requerimiento seleccionado.', false);
-          return true;
+          setAlertaIndumentaria('Digite DNI de 8 números. Los datos se cargarán solo del requerimiento seleccionado.', false); return true;
         }}
         async function buscarIndumentariaDNI(){{
           const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
-          if(!req){{
-            actualizarBloqueoIndumentaria();
-            document.getElementById('ind_requerimiento')?.focus();
-            return;
-          }}
+          if(!req){{ actualizarBloqueoIndumentaria(); document.getElementById('ind_requerimiento')?.focus(); return; }}
           const dni=(document.getElementById('ind_dni')?.value||'').replace(/\D/g,'');
           if(dni.length!==8){{ setAlertaIndumentaria('Digite un DNI válido de 8 dígitos.', true); return; }}
           let t=trabajadoresIndumentaria[dni]||null;
-          if(!t){{
-            limpiarDatosIndumentaria();
-            setAlertaIndumentaria('DNI no encontrado en el requerimiento seleccionado. Seleccione el requerimiento correcto o registre primero al postulante.', true);
-            return;
-          }}
+          if(!t){{ limpiarDatosIndumentaria(); setAlertaIndumentaria('DNI no encontrado en el requerimiento seleccionado. Seleccione el requerimiento correcto o registre primero al postulante.', true); return; }}
           const map={{ind_trabajador:(t.nombre||t.trabajador||''), ind_empresa:(t.empresa||''), ind_area:(t.area||''), ind_cargo:(t.cargo||''), ind_actividad:(t.actividad||''), ind_fecha_ingreso:(t.fecha_ingreso||'')}};
           Object.keys(map).forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=map[id]||''; }});
-          const fotoBox=document.getElementById('ind_foto_box');
-          const fotoTxt=document.getElementById('ind_foto_txt');
+          const fotoBox=document.getElementById('ind_foto_box'); const fotoTxt=document.getElementById('ind_foto_txt');
           if(fotoBox){{ fotoBox.innerHTML = t.foto_url ? `<img src='${{t.foto_url}}' alt='Foto postulante'>` : `<div class='blank'></div>`; }}
           if(fotoTxt){{ fotoTxt.innerHTML = t.foto_url ? 'Fotografía<br>registrada' : 'Sin fotografía<br>registrada'; }}
           setAlertaIndumentaria('Datos cargados correctamente. Complete prendas obligatorias y responsable.', false);
         }}
-        function actualizarEstadoIndumentaria(){{
-          const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
-          if(!req){{ actualizarBloqueoIndumentaria(false); return; }}
-          setAlertaIndumentaria('Complete los campos obligatorios resaltados. Al registrar, el estado será ENTREGADO.', false);
-        }}
         function validarFormularioIndumentaria(ev){{
           const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
-          if(!req){{
-            if(ev) ev.preventDefault();
-            setAlertaIndumentaria('Debe seleccionar un requerimiento antes de registrar indumentaria.', true);
-            document.getElementById('ind_requerimiento')?.classList.add('field-error');
-            document.getElementById('ind_requerimiento')?.focus();
-            return false;
-          }}
+          if(!req){{ if(ev) ev.preventDefault(); setAlertaIndumentaria('Debe seleccionar un requerimiento antes de registrar indumentaria.', true); return false; }}
           const campos=[['ind_requerimiento','Requerimiento'],['ind_dni','DNI'],['ind_trabajador','Trabajador'],['ind_polo','Polo'],['ind_pantalon','Pantalón'],['ind_botas','Botas'],['ind_fecha_entrega','Fecha de entrega'],['ind_responsable_entrega','Responsable de entrega']];
-          const faltan=[];
-          document.querySelectorAll('#form_indumentaria_entrega .field-error').forEach(x=>x.classList.remove('field-error'));
+          const faltan=[]; document.querySelectorAll('#form_indumentaria_entrega .field-error').forEach(x=>x.classList.remove('field-error'));
           campos.forEach(([id,nom])=>{{ const el=document.getElementById(id); if(el && !(el.value||'').trim()){{ faltan.push(nom); el.classList.add('field-error'); }} }});
-          if(faltan.length){{
-            setAlertaIndumentaria('Falta completar: '+faltan.join(', '), true);
-            if(ev) ev.preventDefault();
-            const first=document.querySelector('#form_indumentaria_entrega .field-error'); if(first) first.focus();
-            return false;
-          }}
+          if(faltan.length){{ setAlertaIndumentaria('Falta completar: '+faltan.join(', '), true); if(ev) ev.preventDefault(); const first=document.querySelector('#form_indumentaria_entrega .field-error'); if(first) first.focus(); return false; }}
           return true;
         }}
         let indDniTimer=null;
-        document.getElementById('ind_dni')?.addEventListener('input', function(){{
-          this.value=(this.value||'').replace(/\D/g,'').slice(0,8);
-          clearTimeout(indDniTimer);
-          if(this.value.length===8) indDniTimer=setTimeout(buscarIndumentariaDNI, 250);
-        }});
+        document.getElementById('ind_dni')?.addEventListener('input', function(){{ this.value=(this.value||'').replace(/\D/g,'').slice(0,8); clearTimeout(indDniTimer); if(this.value.length===8) indDniTimer=setTimeout(buscarIndumentariaDNI,250); }});
         actualizarBloqueoIndumentaria(false);
-        actualizarEstadoIndumentaria();
         </script>
         """)
     elif sec=='integracion_nisira':
