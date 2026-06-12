@@ -8339,9 +8339,7 @@ def admin_contratacion():
                 ('Observación', 'observacion'),
             ]
             faltantes_med = [etq for etq, campo in obligatorios_med if not clean(request.form.get(campo))]
-            f_pre = request.files.get('archivo')
-            if not f_pre or not clean(getattr(f_pre, 'filename', '')):
-                faltantes_med.append('Resultado PDF/imagen')
+            # Archivo de resultado médico opcional: puede adjuntarse luego sin bloquear el registro.
             if aptitud_med in ('', 'PENDIENTE'):
                 faltantes_med.append('Aptitud médica distinta a PENDIENTE')
             if ('RESTRICC' in aptitud_med or 'NO APTO' in aptitud_med) and not clean(request.form.get('restricciones')):
@@ -11549,6 +11547,26 @@ html,body{overflow-x:hidden!important;}
           .med-submit-pro{{min-width:500px!important;width:500px!important;height:62px!important;border-radius:16px!important;background:linear-gradient(180deg,#11b970,#008a48)!important;color:#fff!important;font-size:24px!important;font-weight:1000!important;box-shadow:0 20px 44px rgba(0,140,74,.28)!important;border:0!important}}
           @media(max-width:1050px){{.med-head-pro{{height:auto!important;min-height:76px!important}}.med-head-pro h2{{font-size:26px!important}}.med-pro-top,.med-pro-two,.med-select-row,.med-support-grid{{grid-template-columns:1fr!important;gap:16px!important}}.med-pro-card-main{{height:auto!important;min-height:0!important}}.med-person{{grid-template-columns:1fr!important;height:auto!important}}.med-person div{{height:auto!important;border-right:0!important;border-bottom:1px solid #dbe7ef!important}}.med-field-row{{grid-template-columns:1fr!important;height:auto!important}}.med-field-row b{{justify-content:flex-start!important;text-align:left!important;border-right:0!important;border-bottom:1px solid #60e89c!important}}.med-date-grid,.med-date-grid-2{{grid-template-columns:1fr!important;gap:14px!important}}.med-submit-pro{{width:100%!important;min-width:0!important}}}}
 
+
+          /* AJUSTE FINAL SOLICITADO 2026 - evaluación médica */
+          .med-pro-card-main{{height:auto!important;min-height:330px!important;overflow:visible!important}}
+          .med-select-row{{grid-template-columns:minmax(460px,1fr) minmax(420px,.8fr)!important;align-items:stretch!important;gap:36px!important}}
+          .med-status-card{{height:auto!important;min-height:112px!important;overflow:visible!important;justify-content:center!important;align-self:stretch!important}}
+          .med-status-card .med-status-value{{min-width:0!important;width:max-content!important;max-width:100%!important;height:auto!important;min-height:38px!important;padding:7px 18px!important;font-size:18px!important;line-height:1.15!important;white-space:nowrap!important;overflow:visible!important}}
+          .med-status-card.warn .med-status-value{{min-width:260px!important;background:#fff7dd!important;color:#9a6500!important;border-color:#ffc76b!important;font-size:18px!important}}
+          .med-status-card.ok .med-status-value{{min-width:150px!important;background:#e7fff1!important;color:#007a3d!important;border-color:#7be6aa!important}}
+          .med-status-card.danger .med-status-value{{min-width:150px!important;background:#ffe7e7!important;color:#b00020!important;border-color:#ffb0b0!important}}
+          .med-person{{height:auto!important;min-height:116px!important;align-items:stretch!important;overflow:visible!important;background:#fff!important}}
+          .med-person div{{height:auto!important;min-height:116px!important;padding:16px 18px!important;display:flex!important;flex-direction:column!important;justify-content:flex-start!important;overflow:visible!important}}
+          .med-person small{{font-size:16px!important;line-height:1.05!important;margin-bottom:10px!important;color:#435775!important}}
+          .med-person b{{font-size:18px!important;line-height:1.22!important;color:#031a35!important;white-space:normal!important;overflow:visible!important;word-break:break-word!important;overflow-wrap:anywhere!important;display:block!important;max-height:none!important}}
+          #med_nombre{{font-size:20px!important;line-height:1.18!important;color:#031a35!important}}
+          .med-support-grid{{grid-template-columns:minmax(360px,470px) minmax(420px,1fr)!important}}
+          #med_archivo_resultado{{font-weight:800!important;color:#031a35!important}}
+          #med_archivo_resultado:invalid{{box-shadow:none!important;border-color:#c6dae8!important}}
+          .med-field .campo-opcional{{color:#64748b!important;font-size:13px!important;font-weight:850!important;margin-left:6px!important}}
+          @media(max-width:1050px){{.med-select-row,.med-support-grid{{grid-template-columns:1fr!important}}.med-person{{min-height:0!important}}.med-person div{{min-height:74px!important}}.med-status-card .med-status-value,.med-status-card.warn .med-status-value{{min-width:0!important;white-space:normal!important}}}}
+
 </style>
 
         <div class='med-page-pro'>
@@ -11632,7 +11650,7 @@ html,body{overflow-x:hidden!important;}
                 <div class='med-step-title'>4. OBSERVACIONES Y SUSTENTO</div>
                 <div class='med-support-grid'>
                   <label class='med-field'><span>Recomendaciones</span><input id='med_recomendaciones' name='recomendaciones' placeholder='Seguimiento, interconsulta, levantamiento de observación'></label>
-                  <label class='med-field'><span>Resultado PDF / imagen <em>*</em></span><input id='med_archivo_resultado' type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg' required></label>
+                  <label class='med-field'><span>Resultado PDF / imagen <small class='campo-opcional'>(opcional)</small></span><input id='med_archivo_resultado' type='file' name='archivo' accept='.pdf,.png,.jpg,.jpeg'></label>
                 </div>
                 <label class='med-field med-obs-field'><span>Observaciones <em>*</em></span><textarea id='med_observacion' name='observacion' rows='3' required placeholder='Obligatorio: sustento del resultado. Para NO APTO/BLOQUEADO indique motivo y acción de seguimiento.'></textarea></label>
               </section>
@@ -11832,7 +11850,7 @@ html,body{overflow-x:hidden!important;}
           }}
           function validarMedicaSeleccionada(){{
             const dni=(medDni.value||'').replace(/\D/g,'');
-            const row = MEDICA_BY_DNI[normDni(dni)] || (medDniShow && medDniShow.textContent===dni ? {{dni:dni}} : null);
+            const row = MEDICA_BY_DNI[normDni(dni)] || (medDniShow && normDni(medDniShow.textContent)===normDni(dni) ? {{dni:dni, trabajador:(medNombre?medNombre.textContent:'')}} : null);
             if(!row){{medAlert('Espere unos segundos: primero debe cargar automáticamente los datos del DNI.', 'error'); buscarMedicaPorDni(dni, true); return false;}}
             if(!medReqInput.value){{medAlert('Debe seleccionar un requerimiento antes de registrar la evaluación médica.', 'error'); return false;}}
             const faltantes=[];
@@ -11848,8 +11866,7 @@ html,body{overflow-x:hidden!important;}
               ['Fecha resultado', document.getElementById('med_fecha_resultado')],
               ['Fecha vencimiento', document.getElementById('med_fecha_vencimiento')],
               ['Responsable seguimiento', document.getElementById('med_responsable')],
-              ['Observación', document.getElementById('med_observacion')],
-              ['Resultado PDF/imagen', document.getElementById('med_archivo_resultado')]
+              ['Observación', document.getElementById('med_observacion')]
             ];
             reqs.forEach(([label, el])=>{{ if(!el || !(el.value||'').trim()) faltantes.push(label); }});
             if(apt==='PENDIENTE') faltantes.push('Aptitud médica distinta a PENDIENTE');
@@ -11859,7 +11876,7 @@ html,body{overflow-x:hidden!important;}
               faltantes.push('Restricciones');
             }}
             if(faltantes.length){{
-              const mapa = {{'Aptitud médica':medAptitudSelect,'Tipo examen':document.getElementById('med_tipo_examen'),'Riesgo del puesto':document.getElementById('med_riesgo'),'Fecha resultado':document.getElementById('med_fecha_resultado'),'Fecha vencimiento':document.getElementById('med_fecha_vencimiento'),'Responsable seguimiento':document.getElementById('med_responsable'),'Observación':document.getElementById('med_observacion'),'Restricciones':document.getElementById('med_restricciones'),'Resultado PDF/imagen':document.getElementById('med_archivo_resultado')}};
+              const mapa = {{'Aptitud médica':medAptitudSelect,'Tipo examen':document.getElementById('med_tipo_examen'),'Riesgo del puesto':document.getElementById('med_riesgo'),'Fecha resultado':document.getElementById('med_fecha_resultado'),'Fecha vencimiento':document.getElementById('med_fecha_vencimiento'),'Responsable seguimiento':document.getElementById('med_responsable'),'Observación':document.getElementById('med_observacion'),'Restricciones':document.getElementById('med_restricciones')}};
               Object.values(mapa).forEach(el=>{{ if(el) el.classList.remove('campo-error'); }});
               const primero = mapa[faltantes[0]];
               faltantes.forEach(x=>{{ if(mapa[x]) mapa[x].classList.add('campo-error'); }});
@@ -12075,6 +12092,7 @@ html,body{overflow-x:hidden!important;}
             }}
           }}
           function bindFinal(){{
+            var arch=byId('med_archivo_resultado'); if(arch) arch.removeAttribute('required');
             ['med_aptitud_select'].forEach(function(id){{
               var el=byId(id);
               if(el && !el.getAttribute('data-med-final-ok')){{
