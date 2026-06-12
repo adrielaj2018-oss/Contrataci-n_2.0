@@ -12421,6 +12421,90 @@ html,body{overflow-x:hidden!important;}
 @media(max-width:1150px){{.ind-epp-shell{{grid-template-columns:1fr!important}}.ind-epp-photo-card{{min-height:230px!important}}.ind-form.ind-epp-form,.ind-epp-bottom,.ind-epp-bottom2{{grid-template-columns:1fr 1fr!important}}.ind-epp-status{{grid-column:auto!important}}.ind-modal-head.ind-epp-head h2{{font-size:31px!important}}}}
 @media(max-width:720px){{.ind-modal{{padding:6px!important}}.ind-modal-head.ind-epp-head{{height:auto!important;gap:12px!important;flex-wrap:wrap!important}}.ind-form.ind-epp-form,.ind-epp-bottom,.ind-epp-bottom2{{grid-template-columns:1fr!important}}.ind-epp-shell{{padding:18px 14px!important}}.ind-close.ind-epp-close{{width:100%!important}}.ind-epp-form .ind-req-line{{height:auto!important;flex-wrap:wrap!important;padding:12px!important}}}}
 
+/* === AJUSTE FINAL: FOTO ARRIBA IZQUIERDA COMO MOCKUP 4 === */
+.ind-modal-card.ind-epp-card{{
+  width:min(1440px,96.5vw)!important;
+  max-height:96vh!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  border-radius:20px!important;
+}}
+.ind-modal-head.ind-epp-head{{
+  height:88px!important;
+  padding:14px 28px 12px 28px!important;
+  overflow:hidden!important;
+}}
+.ind-modal-head.ind-epp-head h2{{
+  font-size:37px!important;
+  line-height:1.04!important;
+  max-width:calc(100% - 190px)!important;
+  overflow:visible!important;
+  white-space:nowrap!important;
+}}
+.ind-close.ind-epp-close{{
+  min-height:54px!important;
+  border-radius:14px!important;
+  padding:0 24px!important;
+}}
+.ind-epp-shell{{
+  grid-template-columns:250px minmax(0,1fr)!important;
+  gap:22px!important;
+  padding:18px 20px 24px!important;
+  align-items:start!important;
+}}
+.ind-epp-photo-card{{
+  width:248px!important;
+  min-height:324px!important;
+  height:324px!important;
+  margin:0!important;
+  align-self:start!important;
+  justify-content:flex-start!important;
+  padding-top:38px!important;
+  gap:28px!important;
+  border-radius:16px!important;
+}}
+.ind-epp-photo-box{{
+  width:150px!important;
+  height:150px!important;
+  border-radius:15px!important;
+  flex:0 0 150px!important;
+}}
+.ind-epp-photo-box .blank{{width:72px!important;height:72px!important;}}
+.ind-epp-photo-box .blank:before{{width:38px!important;height:38px!important;left:17px!important;top:-28px!important;}}
+.ind-epp-photo-card small{{font-size:17px!important;line-height:1.22!important;}}
+.ind-form.ind-epp-form{{
+  grid-template-columns:210px minmax(170px,1fr) 210px minmax(170px,1fr)!important;
+  gap:10px 13px!important;
+  min-width:0!important;
+}}
+.ind-form.ind-epp-form>.section{{
+  height:42px!important;
+  min-height:42px!important;
+  border-radius:10px 10px 0 0!important;
+  font-size:21px!important;
+  padding:0 18px!important;
+}}
+.ind-epp-form b{{min-height:47px!important;font-size:14px!important;border-radius:8px!important;padding:0 14px!important;gap:10px!important;}}
+.ind-epp-form b i{{font-size:21px!important;min-width:24px!important;}}
+.ind-epp-form input,.ind-epp-form select,.ind-epp-form textarea{{min-height:47px!important;height:47px!important;font-size:15px!important;border-radius:8px!important;padding:0 14px!important;min-width:0!important;}}
+.ind-epp-dni-wrap{{grid-template-columns:1fr 58px!important;min-width:0!important;}}
+.ind-epp-search{{height:52px!important;min-height:52px!important;border-radius:0 12px 12px 0!important;font-size:27px!important;}}
+.ind-epp-status{{min-height:72px!important;padding:10px 18px!important;border-radius:12px!important;}}
+.ind-epp-status b{{font-size:15px!important;}}
+.ind-epp-status span{{font-size:14px!important;padding:8px 18px!important;margin-top:7px!important;}}
+.ind-epp-form .ind-req-line{{height:38px!important;min-height:38px!important;border-radius:8px!important;font-size:13px!important;padding:0 14px!important;overflow:hidden!important;white-space:nowrap!important;}}
+.ind-epp-form .ind-req-line strong,.ind-epp-form .ind-req-line em{{font-size:12px!important;}}
+.ind-epp-form .ind-req-line span{{font-size:13px!important;}}
+.ind-epp-bottom{{grid-template-columns:210px minmax(180px,1fr) 170px minmax(260px,1.8fr)!important;gap:10px 13px!important;margin-top:10px!important;padding-top:10px!important;}}
+.ind-epp-bottom2{{grid-template-columns:210px minmax(260px,1.55fr) minmax(300px,1fr)!important;gap:10px 13px!important;}}
+.ind-epp-form textarea{{height:58px!important;min-height:58px!important;padding:12px 14px!important;}}
+.ind-epp-form .ind-btn.green{{min-height:58px!important;font-size:24px!important;border-radius:8px!important;}}
+@media(max-width:1150px){{
+  .ind-epp-shell{{grid-template-columns:1fr!important;}}
+  .ind-epp-photo-card{{width:100%!important;height:260px!important;min-height:260px!important;padding-top:28px!important;}}
+  .ind-modal-head.ind-epp-head h2{{white-space:normal!important;font-size:30px!important;max-width:100%!important;}}
+}}
+
         </style>
         <section class='ind-page'>
           {modulo_requerimiento_header_html('🦺','Indumentaria y EPP','Seleccione primero el requerimiento, revise postulantes y registre una sola entrega con prendas, cargo firmado y responsable.','indumentaria', "<option value=''>Seleccione requerimiento</option>" + req_options_indumentaria, req_filtro_indumentaria)}
