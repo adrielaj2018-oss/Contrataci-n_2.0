@@ -12373,6 +12373,33 @@ html,body{overflow-x:hidden!important;}
         .ind-submit-row .ind-btn{{height:64px!important;border-radius:10px!important;font-size:24px!important;width:100%!important}}
         .ind-alert{{border-radius:10px!important;margin-bottom:10px!important;padding:10px 14px!important;font-weight:950!important}}
         @media(max-width:980px){{.ind-modal-body{{grid-template-columns:1fr!important}}.ind-photo-panel{{min-height:auto!important;padding:16px!important}}.ind-row,.ind-row.three,.ind-submit-row{{grid-template-columns:1fr!important}}.ind-cell{{grid-template-columns:1fr!important}}.ind-req-line2{{grid-template-columns:1fr!important}}.ind-modal-head h2{{font-size:28px!important}}}}
+        /* AJUSTE FINAL INDUMENTARIA: vista compacta como referencia 2, sin cortes ni scroll horizontal */
+        .ind-modal-card{{width:min(1360px,calc(100vw - 22px))!important;max-height:calc(100vh - 18px)!important;box-sizing:border-box!important;overflow-y:auto!important;overflow-x:hidden!important;border-radius:8px!important;padding:16px 26px 24px!important;}}
+        .ind-modal-head{{position:sticky!important;top:0!important;z-index:3!important;background:#fff!important;padding:0 0 12px!important;margin:0 0 12px!important;border-bottom:0!important;}}
+        .ind-modal-head h2{{font-size:36px!important;letter-spacing:-1.1px!important;min-width:0!important;flex:1 1 auto!important;white-space:normal!important;line-height:1.04!important;}}
+        .ind-head-icon{{width:48px!important;height:48px!important;font-size:31px!important;flex:0 0 48px!important;}}
+        .ind-close{{flex:0 0 auto!important;min-width:112px!important;height:48px!important;border-radius:10px!important;font-size:15px!important;}}
+        .ind-modal-body{{grid-template-columns:250px minmax(0,1fr)!important;gap:20px!important;width:100%!important;box-sizing:border-box!important;}}
+        .ind-photo-panel{{min-height:318px!important;padding:36px 20px!important;}}
+        .ind-photo-box{{width:148px!important;height:152px!important;font-size:82px!important;}}
+        .ind-main-form,.ind-card-section{{min-width:0!important;width:100%!important;box-sizing:border-box!important;}}
+        .ind-main-form{{gap:12px!important;}}
+        .ind-sec-title{{font-size:20px!important;padding:8px 18px!important;height:auto!important;}}
+        .ind-row{{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:12px!important;padding:10px!important;}}
+        .ind-row.three{{grid-template-columns:minmax(0,1fr) 58px!important;}}
+        .ind-row.one{{grid-template-columns:1fr!important;}}
+        .ind-cell{{grid-template-columns:204px minmax(0,1fr)!important;gap:8px!important;min-width:0!important;}}
+        .ind-cell.full{{grid-template-columns:1fr!important;}}
+        .ind-label{{height:42px!important;font-size:14px!important;padding:0 14px!important;gap:10px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}}
+        .ind-label i{{font-size:22px!important;width:26px!important;}}
+        .ind-form input,.ind-form select,.ind-form textarea{{height:42px!important;min-height:42px!important;font-size:15px!important;padding:0 14px!important;min-width:0!important;}}
+        .ind-form textarea{{height:66px!important;padding:10px 14px!important;}}
+        .ind-req-line2{{grid-template-columns:260px minmax(280px,360px) minmax(0,1fr)!important;padding:8px 14px!important;gap:10px!important;font-size:15px!important;}}
+        .ind-req-line2 em{{padding:9px 12px!important;font-size:14px!important;}}
+        .ind-submit-row{{grid-template-columns:minmax(0,1.1fr) minmax(280px,.75fr)!important;gap:18px!important;}}
+        .ind-submit-row .ind-btn{{height:58px!important;font-size:22px!important;}}
+        @media(max-width:1180px){{.ind-modal-head h2{{font-size:30px!important}}.ind-modal-body{{grid-template-columns:220px minmax(0,1fr)!important}}.ind-row{{grid-template-columns:1fr!important}}.ind-cell{{grid-template-columns:190px minmax(0,1fr)!important}}.ind-req-line2{{grid-template-columns:1fr!important}}}}
+        @media(max-width:760px){{.ind-modal-card{{padding:14px!important}}.ind-modal-body{{grid-template-columns:1fr!important}}.ind-cell,.ind-submit-row{{grid-template-columns:1fr!important}}.ind-modal-head{{position:relative!important;flex-wrap:wrap!important}}.ind-close{{width:100%!important}}}}
 </style>
         <section class='ind-page'>
           {modulo_requerimiento_header_html('🦺','Indumentaria y EPP','Seleccione primero el requerimiento, revise postulantes y registre una sola entrega con prendas, cargo firmado y responsable.','indumentaria', "<option value=''>Seleccione requerimiento</option>" + req_options_indumentaria, req_filtro_indumentaria)}
