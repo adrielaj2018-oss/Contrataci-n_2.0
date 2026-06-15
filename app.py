@@ -2897,6 +2897,51 @@ def flujo_induccion_ok(row):
 def flujo_indumentaria_ok(row):
     return estado_norm(row_get(row, 'estado_indumentaria')) in ('ENTREGADO', 'COMPLETO', 'COMPLETADO', 'OK')
 
+def flujo_fotocheck_ok(row):
+    return estado_norm(row_get(row, 'fotocheck_estado')) in ('ENTREGADO', 'IMPRESO', 'CARGO GENERADO', 'LISTO PARA IMPRIMIR', 'FOTO APROBADA', 'EMITIDO', 'OK')
+
+def validar_flujo_previo_modulo(con, dni, requerimiento, modulo_destino):
+    """Regla global de bloqueo por flujo: nadie avanza si no completó el módulo anterior.
+
+    Orden operativo:
+    Requerimiento -> Postulantes -> Evaluación Médica -> Inducción -> Indumentaria -> Fotocheck -> Firma/Contratos.
+    Devuelve (ok, mensaje, row_postulante).
+    """
+    dni = normalizar_dni(dni)
+    requerimiento = clean(requerimiento)
+    modulo = estado_norm(modulo_destino)
+    if not dni or len(dni) != 8:
+        return False, 'DNI inválido. Digite 8 dígitos.', None
+    if not requerimiento:
+        return False, 'Debe seleccionar un requerimiento antes de continuar.', None
+    ok_req, msg_req, row = validar_dni_en_requerimiento(con, dni, requerimiento)
+    if not ok_req or not row:
+        return False, f'BLOQUEADO: el DNI {dni} no está registrado en Postulantes para el requerimiento {requerimiento}. Primero debe pasar por el módulo Postulantes.', row
+    if not flujo_postulante_completo(row):
+        try:
+            falt = campos_faltantes_postulante(row)
+        except Exception:
+            falt = []
+        return False, 'BLOQUEADO: primero complete la ficha en Postulantes' + (': ' + ', '.join(falt) if falt else '.'), row
+    if modulo in ('EVALUACION MEDICA', 'EVALUACIÓN MÉDICA', 'MEDICA', 'MÉDICA'):
+        return True, '', row
+    if not flujo_medica_apta_con(con, dni, requerimiento):
+        return False, 'BLOQUEADO: primero debe tener Evaluación Médica APTO/HABILITADO.', row
+    if modulo in ('INDUCCION', 'INDUCCIÓN', 'CAPACITACION', 'CAPACITACIÓN'):
+        return True, '', row
+    if not flujo_induccion_ok(row):
+        return False, 'BLOQUEADO: primero debe completar Inducción.', row
+    if modulo in ('INDUMENTARIA', 'EPP'):
+        return True, '', row
+    if not flujo_indumentaria_ok(row):
+        return False, 'BLOQUEADO: primero debe completar Indumentaria/EPP.', row
+    if modulo in ('FOTOCHECK', 'FOTO CHECK'):
+        return True, '', row
+    if not flujo_fotocheck_ok(row):
+        return False, 'BLOQUEADO: primero debe completar Fotocheck.', row
+    if modulo in ('FIRMA', 'FIRMA DIGITAL', 'CONTRATOS', 'DOCUMENTOS', 'CONTRATO'):
+        return True, '', row
+    return True, '', row
 
 
 def modulos_faltantes_postulante(row, medico_ok=None):
@@ -3158,9 +3203,11 @@ def puede_pasar_a_firma(dni, requerimiento=''):
     for campo, etiqueta in CAMPOS_FICHA_OBLIGATORIOS_PRO:
         if es_valor_incompleto(data.get(campo)):
             faltan.append(etiqueta)
-    medico = aptitud_medica_actual(dni, requerimiento)
-    if medico != 'APTO':
-        faltan.append('Evaluación médica APTO')
+    req = clean(requerimiento or data.get('requerimiento'))
+    with db() as con:
+        ok_flujo, msg_flujo, _row = validar_flujo_previo_modulo(con, dni, req, 'Firma')
+    if not ok_flujo:
+        faltan.append(msg_flujo.replace('BLOQUEADO: ', ''))
     return (not faltan), faltan
 
 def int_safe(v, default=0):
@@ -3428,7 +3475,7 @@ def es_valor_incompleto(v):
     txt = clean(v).strip()
     if not txt:
         return True
-    basura = {'0001-01-01','01/01/0001','01-01-0001','NONE','NULL','N/A','NA','SIN DATO','SIN DATOS','PENDIENTE'}
+    basura = {'0001-01-01','01/01/0001','01-01-0001','NONE','NULL','N/A','NA','SIN DATO','SIN DATOS','PENDIENTE','PENDIENTE COMPLETAR','NUEVO - PENDIENTE COMPLETAR','POR COMPLETAR','POR DEFINIR'}
     return txt.upper() in basura
 
 
@@ -8230,7 +8277,15 @@ def admin_contratacion():
                         bloqueados = len(ids) - len(ids_validos)
                     elif campo == 'estado_indumentaria':
                         rows_validar = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q})', ids).fetchall()
-                        ids_validos = [row_get(r,'id') for r in rows_validar if flujo_postulante_completo(r) and flujo_medica_apta_con(con, row_get(r,'dni'), row_get(r,'requerimiento')) and flujo_induccion_ok(r)]
+                        ids_validos = [row_get(r,'id') for r in rows_validar if validar_flujo_previo_modulo(con, row_get(r,'dni'), row_get(r,'requerimiento'), 'Indumentaria')[0]]
+                        bloqueados = len(ids) - len(ids_validos)
+                    elif campo == 'fotocheck_estado':
+                        rows_validar = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q})', ids).fetchall()
+                        ids_validos = [row_get(r,'id') for r in rows_validar if validar_flujo_previo_modulo(con, row_get(r,'dni'), row_get(r,'requerimiento'), 'Fotocheck')[0]]
+                        bloqueados = len(ids) - len(ids_validos)
+                    elif campo == 'estado_documentos':
+                        rows_validar = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q})', ids).fetchall()
+                        ids_validos = [row_get(r,'id') for r in rows_validar if validar_flujo_previo_modulo(con, row_get(r,'dni'), row_get(r,'requerimiento'), 'Firma')[0]]
                         bloqueados = len(ids) - len(ids_validos)
                     if ids_validos:
                         q2 = ','.join(['?']*len(ids_validos))
@@ -8306,12 +8361,9 @@ def admin_contratacion():
                 flash('Primero seleccione/valide un postulante del requerimiento.', 'error')
                 return redirect(url_for('admin_contratacion', sec='medica'))
             with db() as con_val:
-                pertenece = con_val.execute('SELECT * FROM contratacion_ingresos WHERE dni=? AND TRIM(requerimiento)=TRIM(?) LIMIT 1', (dni, req_medica)).fetchone()
-            if not pertenece:
-                flash('El DNI no pertenece al requerimiento seleccionado. No se guardó la evaluación médica.', 'error')
-                return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
-            if not flujo_postulante_completo(pertenece):
-                flash('No puede registrar evaluación médica: primero complete la ficha en Postulantes.', 'error')
+                ok_flujo_med, msg_flujo_med, pertenece = validar_flujo_previo_modulo(con_val, dni, req_medica, 'Evaluación Médica')
+            if not ok_flujo_med:
+                flash(msg_flujo_med, 'error')
                 return redirect(url_for('admin_contratacion', sec='medica', req=req_medica))
             with db() as con_dup_med:
                 if existe_registro_modulo(con_dup_med, 'contratacion_medica', dni, req_medica):
@@ -8401,15 +8453,9 @@ def admin_contratacion():
                 # No debe romper el botón de guardar video/material.
                 ing_cap = None
                 if dni:
-                    ok_req, msg_req, ing_cap = validar_dni_en_requerimiento(con_val_cap, dni, req_cap)
-                    if not ok_req:
-                        flash(msg_req, 'error')
-                        return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
-                    if not flujo_postulante_completo(ing_cap):
-                        flash('No puede pasar a Inducción: primero complete la ficha en Postulantes.', 'error')
-                        return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
-                    if not flujo_medica_apta_con(con_val_cap, dni, req_cap):
-                        flash('No puede registrar Inducción: primero debe tener evaluación médica APTO/HABILITADO.', 'error')
+                    ok_flujo_cap, msg_flujo_cap, ing_cap = validar_flujo_previo_modulo(con_val_cap, dni, req_cap, 'Inducción')
+                    if not ok_flujo_cap:
+                        flash(msg_flujo_cap, 'error')
                         return redirect(url_for('admin_contratacion', sec='induccion', req=req_cap))
                     if existe_registro_modulo(con_val_cap, 'contratacion_capacitacion', dni, req_cap):
                         flash(f'Este DNI ya tiene inducción/capacitación registrada para el requerimiento {req_cap}. No se permite duplicar.', 'error')
@@ -8447,18 +8493,9 @@ def admin_contratacion():
                 flash('Debe seleccionar un requerimiento antes de registrar indumentaria.', 'error')
                 return redirect(url_for('admin_contratacion', sec='indumentaria'))
             with db() as con_val_ind:
-                ok_req, msg_req, ing_ind = validar_dni_en_requerimiento(con_val_ind, dni, req_ind)
-                if not ok_req:
-                    flash(msg_req, 'error')
-                    return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
-                if not flujo_postulante_completo(ing_ind):
-                    flash('No puede registrar indumentaria: primero complete la ficha en Postulantes.', 'error')
-                    return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
-                if not flujo_medica_apta_con(con_val_ind, dni, req_ind):
-                    flash('No puede registrar indumentaria: primero debe tener evaluación médica APTO/HABILITADO.', 'error')
-                    return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
-                if not flujo_induccion_ok(ing_ind):
-                    flash('No puede registrar indumentaria: primero debe completar Inducción.', 'error')
+                ok_flujo_ind, msg_flujo_ind, ing_ind = validar_flujo_previo_modulo(con_val_ind, dni, req_ind, 'Indumentaria')
+                if not ok_flujo_ind:
+                    flash(msg_flujo_ind, 'error')
                     return redirect(url_for('admin_contratacion', sec='indumentaria', req=req_ind))
                 if existe_registro_modulo(con_val_ind, 'contratacion_indumentaria', dni, req_ind):
                     flash(f'Este DNI ya tiene entrega de indumentaria registrada para el requerimiento {req_ind}. No se permite duplicar.', 'error')
@@ -8592,6 +8629,11 @@ def admin_contratacion():
                         registrar_evento_observado(r['dni'], 'FOTOCHECK', 'ACCIÓN BLOQUEADA', msg_obs)
                         bloqueados += 1
                         continue
+                    ok_flujo_foto, msg_flujo_foto, _ = validar_flujo_previo_modulo(con, r['dni'], r['requerimiento'], 'Fotocheck')
+                    if not ok_flujo_foto:
+                        registrar_evento_observado(r['dni'], 'FOTOCHECK', 'ACCIÓN BLOQUEADA', msg_flujo_foto)
+                        bloqueados += 1
+                        continue
                     registrar_evento_observado(r['dni'], 'FOTOCHECK', 'VALIDACIÓN DNI', 'DNI validado en fotocheck')
                     foto_ruta = r['foto_ruta'] if 'foto_ruta' in r.keys() else ''
                     if nuevo_estado in ['LISTO PARA IMPRIMIR', 'ENVIADO A ZEBRA ZC300', 'IMPRESO', 'ENTREGADO'] and not foto_ruta:
@@ -8645,7 +8687,13 @@ def admin_contratacion():
                 <table><tr><th>DNI</th><th>Trabajador</th><th>Empresa</th><th>Área</th><th>Cargo</th><th>Requerimiento</th><th>Firma trabajador</th></tr>{filas}</table>
                 <div class='firma'><div class='linea'>Responsable RR.HH.</div><div class='linea'>V°B° / Control</div></div></body></html>"""
                 path_cargo.write_text(html_doc, encoding='utf-8')
+                bloqueados_cargo = 0
                 for r in seleccionados:
+                    ok_flujo_foto, msg_flujo_foto, _ = validar_flujo_previo_modulo(con, r['dni'], r['requerimiento'], 'Fotocheck')
+                    if not ok_flujo_foto:
+                        registrar_evento_observado(r['dni'], 'FOTOCHECK', 'CARGO BLOQUEADO', msg_flujo_foto)
+                        bloqueados_cargo += 1
+                        continue
                     con.execute('UPDATE contratacion_ingresos SET fotocheck_estado=? WHERE id=?', ('CARGO GENERADO', r['id']))
                     con.execute("""INSERT INTO contratacion_fotocheck
                         (dni,trabajador,empresa,area,cargo,actividad,requerimiento,fecha_ingreso,foto_estado,fotocheck_estado,impresora,lote_impresion,cargo_nombre,ruta_cargo,observacion,fecha_registro,registrado_por)
@@ -8658,7 +8706,11 @@ def admin_contratacion():
                                    VALUES(?,?,?,?,?,?,?,?,?,?)""",
                                 (r['dni'], r['trabajador'], r['empresa'], 'Fotocheck', 'Cargo de entrega de fotocheck', 'Generado', path_cargo.name, str(path_cargo), now_txt(), session.get('admin_user','admin')))
                 con.commit()
-            flash('Cargo de entrega de fotocheck generado y archivado en documentos del trabajador.', 'ok')
+            try:
+                _bc = bloqueados_cargo
+            except Exception:
+                _bc = 0
+            flash('Cargo de entrega de fotocheck generado y archivado en documentos del trabajador.' + (f' Bloqueados por flujo previo pendiente: {_bc}.' if _bc else ''), 'ok' if not _bc else 'error')
             return redirect(url_for('admin_contratacion', sec='fotocheck', req=req_return))
         if accion == 'guardar_ingreso':
             dni = normalizar_dni(request.form.get('dni'))
@@ -12363,7 +12415,7 @@ html,body{overflow-x:hidden!important;}
         indumentaria_control_rows = ''.join([
             fila_estandar_postulante(r, req=req_filtro_indumentaria or row_get(r,'requerimiento'), checkbox_name='ingreso_ids', idx=i)
             for i,r in enumerate(trabajadores_indumentaria[:500],1)
-        ]) or "<tr><td colspan='14' class='std-empty'>Seleccione un requerimiento para visualizar postulantes.</td></tr>"
+        ]) or "<tr><td colspan='14' class='std-empty'>No hay postulantes habilitados para Indumentaria. Deben completar Postulantes + Evaluación médica + Inducción.</td></tr>"
 
         trabajadores_js = json.dumps({normalizar_dni(row_get(r,'dni')):{'trabajador':clean(row_get(r,'trabajador')),'empresa':clean(row_get(r,'empresa')),'area':clean(row_get(r,'area')),'cargo':clean(row_get(r,'cargo')),'actividad':clean(row_get(r,'actividad')),'requerimiento':clean(row_get(r,'requerimiento')),'fecha_ingreso':fecha_sin_hora(row_get(r,'fecha_ingreso')),'foto_url': (url_for('contratacion_foto_postulante', ingreso_id=row_get(r,'id')) if clean(row_get(r,'foto_ruta')) else '')} for r in trabajadores_indumentaria}, ensure_ascii=False)
 
@@ -12672,7 +12724,9 @@ html,body{overflow-x:hidden!important;}
         else:
             tit='Centro de Fotocheck'
             req_actual = clean(request.args.get('req')) or requerimiento_sel
-            lista_foto = trabajadores_proceso_mostrar[:800]
+            # Flujo obligatorio: a Fotocheck solo pasan quienes completaron Postulantes + Médico + Inducción + Indumentaria.
+            with db() as con_flujo_foto:
+                lista_foto = [r for r in trabajadores_proceso_mostrar if validar_flujo_previo_modulo(con_flujo_foto, row_get(r,'dni'), row_get(r,'requerimiento'), 'Fotocheck')[0]][:800]
             total_foto = len(lista_foto)
             sin_foto = sum(1 for r in lista_foto if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
             foto_ok = total_foto - sin_foto
@@ -12688,7 +12742,7 @@ html,body{overflow-x:hidden!important;}
             for i, r in enumerate(lista_foto, 1):
                 extra = f"<a class='std-ico' title='Vista previa fotocheck' target='_blank' href='/admin/contratacion/fotocheck/preview_dni?dni={h(row_get(r,'dni'))}'>🪪</a>"
                 foto_rows.append(fila_estandar_postulante(r, req=req_actual, checkbox_name='ingreso_ids', extra_action=extra, idx=i))
-            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='14' class='std-empty'>Seleccione un requerimiento o registre postulantes con foto.</td></tr>"
+            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='14' class='std-empty'>No hay postulantes habilitados para Fotocheck. Deben completar: Postulantes + Evaluación médica + Inducción + Indumentaria.</td></tr>"
             with db() as con_cfg_ui:
                 cfg_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
                 hist_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_historial ORDER BY id DESC LIMIT 8').fetchall()
@@ -14518,13 +14572,14 @@ def api_contratacion_trabajador(dni):
 @app.route('/api/contratacion/medica_postulante')
 @admin_required
 def api_contratacion_medica_postulante():
-    """Autocarga definitiva de datos del postulante en Evaluación Médica.
+    """Autocarga segura de datos para Evaluación Médica.
 
-    Busca primero por DNI + requerimiento seleccionado. Si por diferencia de espacios,
-    mayúsculas o porque el postulante fue registrado en otra vista no encuentra exacto,
-    hace respaldo por DNI en Postulantes, Trabajadores y Fotocheck. La finalidad es que
-    al digitar 8 dígitos se pinten automáticamente nombre, empresa, área, cargo, foto y
-    estados, sin obligar a seleccionar la fila manualmente.
+    Regla corregida:
+    - El DNI SOLO se acepta si existe en contratacion_ingresos como postulante ACTIVO
+      del requerimiento seleccionado.
+    - No usa respaldo por DNI en trabajadores/fotocheck porque eso permitía cargar
+      personas que todavía no habían pasado por el módulo Postulantes.
+    - Si la ficha de Postulantes está incompleta, devuelve ok=False y bloquea el registro.
     """
     dni = normalizar_dni(request.args.get('dni'))
     req = clean(request.args.get('req'))
@@ -14539,88 +14594,54 @@ def api_contratacion_medica_postulante():
         except Exception:
             return default
 
-    def first_row(con, sql, params=()):
-        try:
-            return con.execute(sql, params).fetchone()
-        except Exception:
-            return None
-
     try:
         with db() as con:
-            # 1) Coincidencia exacta normalizada por DNI + requerimiento/requerimiento.
-            r = first_row(con, """
-                SELECT * FROM contratacion_ingresos
-                WHERE dni=? AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
-                ORDER BY id DESC LIMIT 1
-            """, (dni, req))
+            ok_req, msg_req, r = validar_dni_en_requerimiento(con, dni, req)
+            if not ok_req or not r:
+                return jsonify({
+                    'ok': False,
+                    'bloqueado': True,
+                    'mensaje': f'BLOQUEADO: el DNI {dni} no está registrado en Postulantes para el requerimiento {req}. Primero debe pasar por el módulo Postulantes.'
+                })
 
-            # 2) Respaldo: el requerimiento puede venir con espacios, guiones o distinta escritura.
-            if not r:
-                r = first_row(con, """
-                    SELECT * FROM contratacion_ingresos
-                    WHERE dni=? AND REPLACE(REPLACE(UPPER(TRIM(COALESCE(requerimiento,''))),' ',''),'-','')=
-                                  REPLACE(REPLACE(UPPER(TRIM(?)),' ',''),'-','')
-                    ORDER BY id DESC LIMIT 1
-                """, (dni, req))
+            if not flujo_postulante_completo(r):
+                faltantes = campos_faltantes_postulante(r)
+                return jsonify({
+                    'ok': False,
+                    'bloqueado': True,
+                    'mensaje': 'BLOQUEADO: el DNI existe en el requerimiento, pero la ficha de Postulantes está incompleta. Complete primero Postulantes' + (': ' + ', '.join(faltantes) if faltantes else '.')
+                })
 
-            # 3) Respaldo final por DNI: evita que la pantalla se quede en blanco.
-            #    Si existe el postulante, se autocompleta igual y se registra con el requerimiento seleccionado.
-            if not r:
-                r = first_row(con, """
-                    SELECT * FROM contratacion_ingresos
-                    WHERE dni=? AND COALESCE(estado,'')<>'ANULADO'
-                    ORDER BY id DESC LIMIT 1
-                """, (dni,))
-
-            t = first_row(con, "SELECT * FROM trabajadores WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
-            fc = first_row(con, "SELECT * FROM contratacion_fotocheck WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,))
-
-            if not r and not t and not fc:
-                return jsonify({'ok': False, 'mensaje': 'DNI no encontrado en Postulantes/Trabajadores. Registre primero el postulante.'})
-
-            med = first_row(con, """
+            med = con.execute("""
                 SELECT * FROM contratacion_medica
                 WHERE dni=? AND UPPER(TRIM(COALESCE(requerimiento,'')))=UPPER(TRIM(?))
                 ORDER BY id DESC LIMIT 1
-            """, (dni, req)) or first_row(con, """
-                SELECT * FROM contratacion_medica
-                WHERE dni=? ORDER BY id DESC LIMIT 1
-            """, (dni,))
+            """, (dni, req)).fetchone()
 
             data_med = {}
             if med:
                 for k in med.keys():
                     data_med[k] = rg(med, k)
 
-            trabajador = (clean(rg(r, 'trabajador')) or clean(rg(r, 'nombre')) or
-                          clean(rg(t, 'nombre')) or clean(rg(fc, 'trabajador')) or 'PENDIENTE COMPLETAR')
-            empresa = clean(rg(r, 'empresa')) or clean(rg(fc, 'empresa')) or clean(rg(t, 'empresa'))
-            area = clean(rg(r, 'area')) or clean(rg(fc, 'area')) or clean(rg(t, 'area'))
-            cargo = clean(rg(r, 'cargo')) or clean(rg(fc, 'cargo')) or clean(rg(t, 'cargo'))
-            actividad = clean(rg(r, 'actividad')) or clean(rg(fc, 'actividad'))
-            fecha_ingreso = clean(rg(r, 'fecha_ingreso')) or clean(rg(fc, 'fecha_ingreso')) or clean(rg(t, 'fecha_ingreso'))
-            req_real = clean(rg(r, 'requerimiento')) or clean(rg(fc, 'requerimiento')) or req
-
-            foto_ruta = clean(rg(r, 'foto_ruta')) or clean(rg(fc, 'foto_ruta')) or clean(rg(fc, 'ruta_foto'))
+            foto_ruta = clean(rg(r, 'foto_ruta'))
             foto_ok = bool(foto_ruta)
 
             return jsonify({
                 'ok': True,
-                'mensaje': 'Datos cargados automáticamente por DNI.',
+                'mensaje': 'Datos cargados automáticamente desde Postulantes. Complete la evaluación médica.',
                 'postulante': {
-                    'id': rg(r, 'id') or rg(t, 'id') or rg(fc, 'id'),
+                    'id': rg(r, 'id'),
                     'dni': dni,
-                    'trabajador': trabajador,
-                    # Mantiene el requerimiento seleccionado en el formulario para no alterar el flujo.
-                    'requerimiento': req or req_real,
-                    'requerimiento_origen': req_real,
-                    'empresa': empresa,
-                    'area': area,
-                    'cargo': cargo,
-                    'actividad': actividad,
-                    'fecha_ingreso': fecha_ingreso,
+                    'trabajador': clean(rg(r, 'trabajador')) or clean(rg(r, 'nombre')),
+                    'requerimiento': clean(rg(r, 'requerimiento')) or req,
+                    'requerimiento_origen': clean(rg(r, 'requerimiento')) or req,
+                    'empresa': clean(rg(r, 'empresa')),
+                    'area': clean(rg(r, 'area')),
+                    'cargo': clean(rg(r, 'cargo')),
+                    'actividad': clean(rg(r, 'actividad')),
+                    'fecha_ingreso': clean(rg(r, 'fecha_ingreso')),
                     'foto': foto_ok,
-                    'foto_url': (url_for('contratacion_foto_postulante', ingreso_id=rg(r, 'id')) if (foto_ok and r and rg(r, 'id')) else (url_for('contratacion_foto_postulante_dni', dni=dni) if foto_ok else '')),
+                    'foto_url': (url_for('contratacion_foto_postulante', ingreso_id=rg(r, 'id')) if foto_ok and rg(r, 'id') else ''),
                     'aptitud': rg(med, 'aptitud', '') or rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
                     'estado': rg(med, 'estado', '') or rg(r, 'estado_medico', '') or 'PENDIENTE',
                     'medica': data_med
@@ -15347,6 +15368,29 @@ try:
 except Exception:
     pass
 
+
+
+# ===== PATCH BLOQUEO FRONTEND EVALUACION MEDICA =====
+try:
+    FINAL_UI_PATCH_JS += '''
+<script id="medica-submit-guard-patch">
+(function(){
+  document.addEventListener('submit', function(ev){
+    var f=ev.target;
+    if(!f || !(f.querySelector && f.querySelector('[name="accion"][value="guardar_medica"]'))) return;
+    var dni=(f.querySelector('[name="dni"]')||{}).value||'';
+    var trabajador=(f.querySelector('[name="trabajador"]')||{}).value||'';
+    var bloqueado=(f.dataset.medicaBloqueada==='1') || /PENDIENTE\s+COMPLETAR|NUEVO\s+-\s+PENDIENTE/i.test(trabajador);
+    if(bloqueado || !/^\d{8}$/.test((dni||'').replace(/\D/g,''))){
+      ev.preventDefault();
+      alert('BLOQUEADO: primero registre y complete este DNI en el módulo Postulantes del requerimiento seleccionado.');
+    }
+  }, true);
+})();
+</script>
+'''
+except Exception:
+    pass
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '5000'))
     host = os.getenv('HOST', '0.0.0.0')
