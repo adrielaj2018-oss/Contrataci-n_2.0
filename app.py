@@ -11226,7 +11226,9 @@ html,body{overflow-x:hidden!important;}
         # En Evaluación Médica deben aparecer TODOS los postulantes registrados en el requerimiento.
         # Antes se filtraba con flujo_postulante_completo(), por eso algunos DNI registrados en Postulantes
         # no aparecían si aún tenían campos pendientes. La evaluación médica es parte del flujo y no debe ocultarlos.
-        lista_med = list(trabajadores_proceso_mostrar) if req_actual else []
+        # Solo deben aparecer en Evaluación Médica los DNI que YA pasaron correctamente por Postulantes.
+        # Si la ficha está incompleta o solo existe como precarga del requerimiento, se bloquea y no se muestra.
+        lista_med = [r for r in list(trabajadores_proceso_mostrar) if flujo_postulante_completo(r)] if req_actual else []
         total_med_req = len(lista_med)
         aptos_med_req = 0
         no_aptos_med_req = 0
@@ -11289,7 +11291,7 @@ html,body{overflow-x:hidden!important;}
 
         medica_json = json.dumps(medica_data, ensure_ascii=False)
         if req_actual:
-            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='13'><div class='med-empty'>No hay postulantes visibles para este requerimiento. Verifique que el registro en Postulantes tenga el mismo requerimiento seleccionado y que no esté ANULADO/CANCELADO.</div></td></tr>"
+            med_table_html = ''.join(med_table_rows) or "<tr><td colspan='13'><div class='med-empty'>No hay postulantes habilitados para Evaluación Médica. Verifique que primero estén registrados y completos en el módulo Postulantes.</div></td></tr>"
         else:
             med_table_html = "<tr><td colspan='13'><div class='med-empty'>Seleccione primero un requerimiento para cargar la evaluación médica de sus postulantes.</div></td></tr>"
 
@@ -11909,11 +11911,12 @@ html,body{overflow-x:hidden!important;}
             if(medDni && medDni.value !== dni) medDni.value = dni;
             if(dni.length < 8){{ limpiarSeleccionMedica('Digite los 8 dígitos del DNI para validar contra el requerimiento.'); return; }}
             const dniNorm = normDni(dni);
-            const local = MEDICA_BY_DNI[dniNorm] || MEDICA_BY_DNI[dni] || rowDesdeTablaMedica(dniNorm);
-            if(local) pintarMedico(local, dniNorm); // pinta de inmediato, mientras confirma por API definitiva
+            // Regla crítica: NO pintar datos desde tabla/local sin confirmar por API.
+            // Así se evita que un DNI precargado del requerimiento salte Postulantes.
             const req = (medReqInput && medReqInput.value) ? medReqInput.value : '{h(req_actual)}';
             if(!req){{ limpiarSeleccionMedica('Seleccione requerimiento antes de buscar DNI.'); medAlert('Debe seleccionar un requerimiento antes de buscar o registrar evaluación médica.', 'error'); return; }}
-            if(!local){{ medDecisionMsg.textContent = 'Buscando DNI en el requerimiento seleccionado...'; medDecisionMsg.className = 'med-block-msg'; }}
+            medDecisionMsg.textContent = 'Validando DNI contra el módulo Postulantes...';
+            medDecisionMsg.className = 'med-block-msg';
             clearTimeout(medicaFetchTimer);
             medicaFetchTimer = setTimeout(async function(){{
               try{{
@@ -11921,13 +11924,16 @@ html,body{overflow-x:hidden!important;}
                 const data = await resp.json();
                 if(data && data.ok && data.postulante){{
                   pintarMedico(data.postulante, dniNorm);
-                }}else if(!local){{
-                  const msg=(data && data.mensaje) ? data.mensaje : 'DNI no pertenece al requerimiento seleccionado.';
+                }}else{{
+                  const msg=(data && data.mensaje) ? data.mensaje : 'BLOQUEADO: falta registrar o completar el DNI en el módulo Postulantes.';
+                  delete MEDICA_BY_DNI[dniNorm];
                   limpiarSeleccionMedica(msg);
                   medAlert(msg, 'error');
                 }}
               }}catch(e){{
-                if(!local) limpiarSeleccionMedica('No se pudo consultar el DNI. Revise conexión o recargue la página.');
+                const msg='No se pudo validar el DNI contra Postulantes. Recargue la página e intente nuevamente.';
+                limpiarSeleccionMedica(msg);
+                medAlert(msg, 'error');
               }}
             }}, 80);
           }}
@@ -11943,8 +11949,8 @@ html,body{overflow-x:hidden!important;}
           }}
           function validarMedicaSeleccionada(){{
             const dni=(medDni.value||'').replace(/\D/g,'');
-            const row = MEDICA_BY_DNI[normDni(dni)] || (medDniShow && normDni(medDniShow.textContent)===normDni(dni) ? {{dni:dni, trabajador:(medNombre?medNombre.textContent:'')}} : null);
-            if(!row){{medAlert('Espere unos segundos: primero debe cargar automáticamente los datos del DNI.', 'error'); buscarMedicaPorDni(dni, true); return false;}}
+            const row = MEDICA_BY_DNI[normDni(dni)] || null;
+            if(!row || !row.trabajador || (row.trabajador||'').toUpperCase().includes('PENDIENTE')){{medAlert('BLOQUEADO: falta registrar o completar este DNI en el módulo Postulantes.', 'error'); limpiarSeleccionMedica('BLOQUEADO: primero debe registrar y completar el DNI en Postulantes.'); buscarMedicaPorDni(dni, true); return false;}}
             if(!medReqInput.value){{medAlert('Debe seleccionar un requerimiento antes de registrar la evaluación médica.', 'error'); return false;}}
             const faltantes=[];
             const apt=(medAptitudSelect.value||'').toUpperCase();
@@ -12106,25 +12112,34 @@ html,body{overflow-x:hidden!important;}
             var d=dni8(v);
             var inp=$id('med_dni_lookup'); if(inp && inp.value!==d) inp.value=d;
             if(d.length!==8) return;
-            var local=rowData(d);
-            if(local) paint(local);
             var req=getReq();
             if(!req) return;
             try{{
               var resp=await fetch('/api/contratacion/medica_postulante?dni='+encodeURIComponent(d)+'&req='+encodeURIComponent(req), {{cache:'no-store'}});
               var data=await resp.json();
-              if(data && data.ok && data.postulante) paint({{
-                dni:data.postulante.dni||d,
-                trabajador:data.postulante.trabajador||'',
-                requerimiento:data.postulante.requerimiento||req,
-                empresa:data.postulante.empresa||'',
-                area:data.postulante.area||'',
-                cargo:data.postulante.cargo||'',
-                foto_url:data.postulante.foto_url||'',
-                aptitud:data.postulante.aptitud||'PENDIENTE',
-                estado:data.postulante.estado||'PENDIENTE'
-              }});
-            }}catch(e){{ /* si la API falla, queda la carga local desde la tabla */ }}
+              if(data && data.ok && data.postulante){{
+                paint({{
+                  dni:data.postulante.dni||d,
+                  trabajador:data.postulante.trabajador||'',
+                  requerimiento:data.postulante.requerimiento||req,
+                  empresa:data.postulante.empresa||'',
+                  area:data.postulante.area||'',
+                  cargo:data.postulante.cargo||'',
+                  foto_url:data.postulante.foto_url||'',
+                  aptitud:data.postulante.aptitud||'PENDIENTE',
+                  estado:data.postulante.estado||'PENDIENTE'
+                }});
+              }}else{{
+                var msg=(data&&data.mensaje)?data.mensaje:'BLOQUEADO: falta registrar o completar el DNI en Postulantes.';
+                if(typeof limpiarSeleccionMedica==='function') limpiarSeleccionMedica(msg);
+                if(typeof medAlert==='function') medAlert(msg,'error');
+                else alert(msg);
+              }}
+            }}catch(e){{
+              var msg='No se pudo validar el DNI contra Postulantes. Recargue la página e intente nuevamente.';
+              if(typeof limpiarSeleccionMedica==='function') limpiarSeleccionMedica(msg);
+              if(typeof medAlert==='function') medAlert(msg,'error');
+            }}
           }}
           window.buscarMedicaPorDni = auto;
           window.seleccionarMedico = function(d){{ var x=$id('modal_medica_registro'); if(x) x.checked=true; auto(d); var i=$id('med_dni_lookup'); if(i) setTimeout(function(){{i.focus();}},50); }};
