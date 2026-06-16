@@ -2856,7 +2856,7 @@ def validar_prendas_indumentaria(form):
 
 # =============================
 # VALIDACIONES DE FLUJO OPERATIVO CONTRATACIÓN
-# Postulantes -> Evaluación Médica -> Inducción -> Indumentaria
+# Requerimiento -> Postulantes -> Evaluación Médica -> Inducción -> Indumentaria -> Firma Digital -> Fotocheck
 # =============================
 def flujo_postulante_completo(row):
     """Solo deja avanzar a módulos posteriores si la ficha de Postulantes está registrada y completa."""
@@ -2900,11 +2900,37 @@ def flujo_indumentaria_ok(row):
 def flujo_fotocheck_ok(row):
     return estado_norm(row_get(row, 'fotocheck_estado')) in ('ENTREGADO', 'IMPRESO', 'CARGO GENERADO', 'LISTO PARA IMPRIMIR', 'FOTO APROBADA', 'EMITIDO', 'OK')
 
+def flujo_firma_digital_ok_con(con, dni, requerimiento=''):
+    """Valida que el trabajador ya tenga firma digital/facial registrada antes de Fotocheck."""
+    dni = normalizar_dni(dni)
+    if not dni:
+        return False
+    estados_ok = ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','ACEPTADO','OK')
+    try:
+        r = con.execute("""SELECT f.estado
+                           FROM firma_solicitudes f
+                           LEFT JOIN contratacion_docs d ON d.id=f.documento_id
+                           WHERE f.dni=?
+                             AND (COALESCE(?, '')='' OR TRIM(COALESCE(d.requerimiento,''))=TRIM(?) OR TRIM(COALESCE(d.etapa,'')) LIKE '%' || TRIM(?) || '%')
+                           ORDER BY f.id DESC LIMIT 1""", (dni, clean(requerimiento), clean(requerimiento), clean(requerimiento))).fetchone()
+    except Exception:
+        try:
+            r = con.execute("SELECT estado FROM firma_solicitudes WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,)).fetchone()
+        except Exception:
+            r = None
+    if r and estado_norm(row_get(r, 'estado')) in estados_ok:
+        return True
+    try:
+        d = con.execute("SELECT estado FROM contratacion_docs WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,)).fetchone()
+        return bool(d and estado_norm(row_get(d, 'estado')) in estados_ok)
+    except Exception:
+        return False
+
 def validar_flujo_previo_modulo(con, dni, requerimiento, modulo_destino):
     """Regla global de bloqueo por flujo: nadie avanza si no completó el módulo anterior.
 
     Orden operativo:
-    Requerimiento -> Postulantes -> Evaluación Médica -> Inducción -> Indumentaria -> Fotocheck -> Firma/Contratos.
+    Requerimiento -> Postulantes -> Evaluación Médica -> Inducción -> Indumentaria -> Firma Digital -> Fotocheck.
     Devuelve (ok, mensaje, row_postulante).
     """
     dni = normalizar_dni(dni)
@@ -2935,11 +2961,11 @@ def validar_flujo_previo_modulo(con, dni, requerimiento, modulo_destino):
         return True, '', row
     if not flujo_indumentaria_ok(row):
         return False, 'BLOQUEADO: primero debe completar Indumentaria/EPP.', row
-    if modulo in ('FOTOCHECK', 'FOTO CHECK'):
-        return True, '', row
-    if not flujo_fotocheck_ok(row):
-        return False, 'BLOQUEADO: primero debe completar Fotocheck.', row
     if modulo in ('FIRMA', 'FIRMA DIGITAL', 'CONTRATOS', 'DOCUMENTOS', 'CONTRATO'):
+        return True, '', row
+    if not flujo_firma_digital_ok_con(con, dni, requerimiento):
+        return False, 'BLOQUEADO: primero debe completar Firma Digital / Facial.', row
+    if modulo in ('FOTOCHECK', 'FOTO CHECK'):
         return True, '', row
     return True, '', row
 
@@ -2965,10 +2991,10 @@ def modulos_faltantes_postulante(row, medico_ok=None):
         faltan.append('Inducción')
     if not flujo_indumentaria_ok(row):
         faltan.append('Indumentaria')
+    if estado_norm(row_get(row, 'estado_documentos')) not in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK'):
+        faltan.append('Firma digital')
     if estado_norm(row_get(row, 'fotocheck_estado')) not in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','OK'):
         faltan.append('Fotocheck')
-    if estado_norm(row_get(row, 'estado_documentos')) not in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK'):
-        faltan.append('Contratos')
     pct = max(0, int(round((6 - len(faltan)) * 100 / 6)))
     estado = 'COMPLETO' if not faltan else ('EN PROCESO' if pct else 'PENDIENTE')
     return estado, pct, faltan
@@ -3052,7 +3078,7 @@ def fila_estandar_postulante(row, req='', medico_ok=None, checkbox_name='ingreso
 
 
 def tabla_estandar_postulantes_header(tabla_id):
-    return f"""<tr><th class='std-sel'><input type='checkbox' onclick=\"document.querySelectorAll('#{tabla_id} input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)\"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr>"""
+    return f"""<tr><th class='std-sel'><input type='checkbox' onclick=\"document.querySelectorAll('#{tabla_id} input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)\"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Firma digital</th><th>Fotocheck</th><th>Acciones</th></tr>"""
 
 
 def fila_pp_postulante_estandar(row, req='', medico_ok=None, extra_action='', idx=''):
@@ -5570,8 +5596,8 @@ def sidebar(active):
             <a class='{cls('medica')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=medica'><i class='bi bi-heart-pulse'></i><span class='label'>Evaluación Médica</span></a>
             <a class='{cls('induccion')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=induccion'><i class='bi bi-camera-video'></i><span class='label'>Inducción</span></a>
             <a class='{cls('indumentaria')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=indumentaria'><i class='bi bi-bag-check'></i><span class='label'>Indumentaria</span></a>
-            <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
             <a class='{cls('firma')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=firma'><i class='bi bi-pen'></i><span class='label'>Firma / Facial / Digital</span></a>
+            <a class='{cls('fotocheck')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=fotocheck'><i class='bi bi-person-vcard'></i><span class='label'>Fotocheck</span></a>
             <a class='{cls('datos_completos')}' onclick='saveSideScroll()' href='/admin/contratacion?sec=datos_completos'><i class='bi bi-folder2-open'></i><span class='label'>Doc. Postulantes</span></a>
             <div id='grp_con_maestros' data-group='con_maestros' class='menu-group nested'>
               <button type='button' class='menu-title' onclick="toggleGroup('grp_con_maestros')"><i class='bi bi-collection'></i><span class='label'>Datos Maestros</span><span class='chev'>∨</span></button>
@@ -10992,7 +11018,7 @@ html,body{overflow-x:hidden!important;}
             <input type='hidden' name='volver' value='nuevos'>
             <input type='hidden' name='campo_estado' value='estado'>
           <div class='pp-filter-card'><div class='pp-field'><label>Buscar por DNI</label><div class='pp-search-wrap'><input class='pp-control' oninput="filtrarTabla(this,'tabla_pp_final')" placeholder='Buscar por DNI'><span>⌕</span></div></div><div class='pp-field'><label>Filtrar / cambio masivo de estado</label><select class='pp-control pp-state-filter' onchange="filtrarTabla(this,'tabla_pp_final')"><option value=''>Todos los estados</option><option>Completo</option><option>En validación</option><option>Incompleto</option><option>Observado</option></select><select class='pp-control pp-mass-select legacy-mass-select' name='nuevo_estado'><option>EN PROCESO</option><option>APROBADO</option><option>OBSERVADO</option><option>ANULADO</option></select><button class='pp-btn-green pp-mass-btn' type='submit'>Aplicar estado</button></div><div class='pp-field'><span class="registrar-title" style="display:none"></span><label for='modal_postulante_registro' class='pp-btn-green pp-register-btn'>Registrar</label></div></div>
-          <div class='pp-table-card'><div class='pp-table-head'><h3>LISTA DE POSTULANTES</h3><div class='pp-table-actions'><a class='pp-light-btn' href='/admin/plantilla_gestion/contratacion' title='Descargar / exportar formato Excel'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 3h10l6 6v12H4z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M14 3v6h6M8 12l4 6m0-6l-4 6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Exportar Excel</span></a><button type='button' class='pp-light-btn' onclick='window.print()' title='Imprimir lista'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z' fill='none' stroke='currentColor' stroke-width='2' stroke-linejoin='round'/></svg><span>Imprimir</span></button><button type='button' class='pp-btn-green' onclick='abrirFicha360Seleccionada()' title='Abrir ficha del primer/seleccionado postulante'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 2h9l5 5v15H6z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M15 2v6h5M9 13h6M9 17h6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Ver ficha 360°</span></button></div></div><div class='pp-table-wrap'><table id='tabla_pp_final' class='pp-table'><thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_medica_postulantes input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr></thead><tbody>{tabla_postulantes}</tbody></table></div><div class='pp-demo-note'>ⓘ Mostrando {len(real_rows) if real_rows else 3} de {len(real_rows) if real_rows else 3} postulantes{'' if real_rows else ' (demos visuales hasta seleccionar un requerimiento con datos reales)'}.</div></div>
+          <div class='pp-table-card'><div class='pp-table-head'><h3>LISTA DE POSTULANTES</h3><div class='pp-table-actions'><a class='pp-light-btn' href='/admin/plantilla_gestion/contratacion' title='Descargar / exportar formato Excel'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 3h10l6 6v12H4z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M14 3v6h6M8 12l4 6m0-6l-4 6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Exportar Excel</span></a><button type='button' class='pp-light-btn' onclick='window.print()' title='Imprimir lista'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z' fill='none' stroke='currentColor' stroke-width='2' stroke-linejoin='round'/></svg><span>Imprimir</span></button><button type='button' class='pp-btn-green' onclick='abrirFicha360Seleccionada()' title='Abrir ficha del primer/seleccionado postulante'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 2h9l5 5v15H6z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M15 2v6h5M9 13h6M9 17h6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Ver ficha 360°</span></button></div></div><div class='pp-table-wrap'><table id='tabla_pp_final' class='pp-table'><thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_medica_postulantes input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Firma digital</th><th>Fotocheck</th><th>Acciones</th></tr></thead><tbody>{tabla_postulantes}</tbody></table></div><div class='pp-demo-note'>ⓘ Mostrando {len(real_rows) if real_rows else 3} de {len(real_rows) if real_rows else 3} postulantes{'' if real_rows else ' (demos visuales hasta seleccionar un requerimiento con datos reales)'}.</div></div>
         </section>
           </form>
         <div class='pp-registro-separador'><h3>Registro de postulante</h3><p>Formulario operativo restaurado desde contratación.py.</p></div>
@@ -11682,7 +11708,7 @@ html,body{overflow-x:hidden!important;}
             <div class='med-table-head'><h3>LISTA DE POSTULANTES</h3></div>
             <div class='pp-table-wrap med-postulantes-wrap'>
               <table id='tabla_medica_postulantes' class='pp-table med-pp-table'>
-                <thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_medica_postulantes input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Fotocheck</th><th>Firma contratos</th><th>Acciones</th></tr></thead>
+                <thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_medica_postulantes input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Firma digital</th><th>Fotocheck</th><th>Acciones</th></tr></thead>
                 <tbody>{med_table_html}</tbody>
               </table>
             </div>
@@ -12232,9 +12258,9 @@ html,body{overflow-x:hidden!important;}
             flash('El módulo Cursos / Capacitación fue retirado del menú. Usa Inducción para videos obligatorios.', 'ok')
             return redirect(url_for('admin_contratacion', sec='induccion'))
         es_ind = (sec=='induccion')
-        req_filtro_induccion = ''
-        # Inducción general: ya no depende de seleccionar requerimiento; muestra todos los postulantes aptos.
-        trabajadores_induccion_base = list(trabajadores_proceso)
+        req_filtro_induccion = clean(request.args.get('req'))
+        # Flujo por requerimiento: recién al seleccionar requerimiento se muestran los aptos del módulo anterior.
+        trabajadores_induccion_base = [r for r in trabajadores_proceso if req_filtro_induccion and _req_key_cmp(row_get(r,'requerimiento')) == _req_key_cmp(req_filtro_induccion)]
         # Flujo obligatorio: a Inducción solo pasan postulantes con ficha completa y evaluación médica APTO/HABILITADO.
         with db() as con_flujo_ind:
             trabajadores_induccion = [r for r in trabajadores_induccion_base if flujo_postulante_completo(r) and flujo_medica_apta_con(con_flujo_ind, row_get(r,'dni'), row_get(r,'requerimiento'))]
@@ -12378,7 +12404,7 @@ html,body{overflow-x:hidden!important;}
         </style>
         <section class='mod360-page'>
           {modulo_requerimiento_header_html('🎓','Inducción laboral','Seleccione primero el requerimiento, revise postulantes aptos y cambie el estado de Pendiente a Aprobado.','induccion', "<option value=''>Seleccione requerimiento</option>" + req_options_induccion, req_filtro_induccion)}
-          <div class='mod360-control'><div class='mod360-stage'><div class='sico'>🎫</div><h4>Postulantes</h4><b>{total_ind_req}</b><small>General</small></div><div class='mod360-stage'><div class='sico'>🎓</div><h4>Inducidos</h4><b>{inducidos_req}</b><small>Realizados</small></div><div class='mod360-stage'><div class='sico'>⏳</div><h4>Pendientes</h4><b>{pendientes_ind_req}</b><small>Por completar</small></div><div class='mod360-stage'><div class='sico'>▶️</div><h4>Videos</h4><b>{videos_subidos_req}</b><small>Materiales</small></div><div class='mod360-stage'><div class='sico'>⚠️</div><h4>Observados</h4><b>0</b><small>Atención</small></div></div>
+          <div class='mod360-control'><div class='mod360-stage'><div class='sico'>🎫</div><h4>Postulantes</h4><b>{total_ind_req}</b><small>Requerimiento</small></div><div class='mod360-stage'><div class='sico'>🎓</div><h4>Inducidos</h4><b>{inducidos_req}</b><small>Realizados</small></div><div class='mod360-stage'><div class='sico'>⏳</div><h4>Pendientes</h4><b>{pendientes_ind_req}</b><small>Por completar</small></div><div class='mod360-stage'><div class='sico'>▶️</div><h4>Videos</h4><b>{videos_subidos_req}</b><small>Materiales</small></div><div class='mod360-stage'><div class='sico'>⚠️</div><h4>Observados</h4><b>0</b><small>Atención</small></div></div>
           <div class='mod360-filter-card'><div><label>Buscar por DNI</label><input oninput="filtrarTabla(this,'tabla_induccion_360')" placeholder='Buscar por DNI'></div><div><label>Filtrar / cambio masivo de estado</label><select class='mod360-state-filter' onchange="filtrarTabla(this,'tabla_induccion_360')"><option value=''>Todos los estados</option><option>COMPLETO</option><option>EN PROCESO</option><option>PENDIENTE</option></select><select class='legacy-mass-select' form='form_masivo_induccion' name='nuevo_estado'><option>PENDIENTE</option><option>APROBADO</option></select><button form='form_masivo_induccion' class='mod360-btn green mass-apply-btn' type='submit'>Aplicar estado</button></div><div><span class="registrar-title" style="display:none"></span><div class='mod360-actions'><label for='modal_biblioteca_ind' class='mod360-btn'>Registrar</label></div></div></div>
           
           <form id='form_masivo_induccion' method='post' class='mod360-mass hidden-mass'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='induccion'><input type='hidden' name='campo_estado' value='estado_capacitacion'></form>
@@ -12391,11 +12417,11 @@ html,body{overflow-x:hidden!important;}
         """)
     elif sec=='indumentaria':
         req_filtro_indumentaria = clean(request.args.get('req'))
-        trabajadores_indumentaria_base = [r for r in trabajadores_proceso if (not req_filtro_indumentaria or clean(row_get(r,'requerimiento')) == req_filtro_indumentaria)]
+        trabajadores_indumentaria_base = [r for r in trabajadores_proceso if req_filtro_indumentaria and _req_key_cmp(row_get(r,'requerimiento')) == _req_key_cmp(req_filtro_indumentaria)]
         # Flujo obligatorio: a Indumentaria solo pasan quienes ya completaron Postulantes + Médico + Inducción.
         with db() as con_flujo_indum:
             trabajadores_indumentaria = [r for r in trabajadores_indumentaria_base if flujo_postulante_completo(r) and flujo_medica_apta_con(con_flujo_indum, row_get(r,'dni'), row_get(r,'requerimiento')) and flujo_induccion_ok(r)]
-        indumentarias_filtradas = [r for r in indumentarias if (not req_filtro_indumentaria or clean(row_get(r,'requerimiento')) == req_filtro_indumentaria)]
+        indumentarias_filtradas = [r for r in indumentarias if req_filtro_indumentaria and _req_key_cmp(row_get(r,'requerimiento')) == _req_key_cmp(req_filtro_indumentaria)]
         req_options_indumentaria = ''.join([f"<option value='{h(r['requerimiento'])}' {'selected' if clean(r['requerimiento'])==req_filtro_indumentaria else ''}>{h(r['requerimiento'])} - {h(r['empresa'])} / {h(r['area'])} / {h(r['cargo'])}</option>" for r in requerimientos])
 
         estados_ok = ('ENTREGADO','COMPLETO','COMPLETADO','OK')
@@ -12734,14 +12760,14 @@ html,body{overflow-x:hidden!important;}
               <div class='flow-card'><div class='flow-icon'>✍️</div><b>5. Contrato firmado</b><small>Documento final firmado.</small><span>Pendientes: {pend_contrato}</span></div>
             </div>
             <div class='datos-kpi pro-360'><div class='pz-kpi iconic'><i>👥</i><div><span>Total postulantes</span><b>{total}</b></div></div><div class='pz-kpi iconic danger'><i>🩺</i><div><span>Pend. evaluación</span><b>{pend_medica}</b></div></div><div class='pz-kpi iconic warn'><i>🎓</i><div><span>Pend. inducción</span><b>{pend_induccion}</b></div></div><div class='pz-kpi iconic warn'><i>🦺</i><div><span>Pend. indumentaria</span><b>{pend_indumentaria}</b></div></div><div class='pz-kpi iconic warn'><i>🪪</i><div><span>Pend. fotocheck</span><b>{pend_fotocheck}</b></div></div><div class='pz-kpi iconic ok'><i>✅</i><div><span>Flujo completo</span><b>{completos_flujo}</b></div></div></div>
-            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_medico'>1. Evaluación médica</option><option value='estado_capacitacion'>2. Inducción / capacitación</option><option value='estado_indumentaria'>3. Indumentaria</option><option value='fotocheck_estado'>4. Fotocheck</option><option value='estado_documentos'>5. Contrato firmado / documentos</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>APTO</option><option>APROBADO</option><option>INDUCIDO</option><option>ENTREGADO</option><option>IMPRESO</option><option>FIRMADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th class='sticky-col'>DNI</th><th class='sticky-col-2'>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>1. Evaluación</th><th>2. Inducción</th><th>3. Indumentaria</th><th>4. Fotocheck</th><th>5. Contrato firmado</th><th>Detalle</th><th>Anular</th></tr>{tabla_rows}</table></div></form></div>
+            <form method='post'><input type='hidden' name='accion' value='avance_masivo_ingresos'><input type='hidden' name='volver' value='datos_completos'><div class='module-tools'><b>Acción masiva seleccionados:</b><select name='campo_estado'><option value='estado_medico'>1. Evaluación médica</option><option value='estado_capacitacion'>2. Inducción / capacitación</option><option value='estado_indumentaria'>3. Indumentaria</option><option value='estado_documentos'>4. Firma digital / documentos</option><option value='fotocheck_estado'>5. Fotocheck</option></select><select name='nuevo_estado'><option>PENDIENTE</option><option>EN PROCESO</option><option>APTO</option><option>APROBADO</option><option>INDUCIDO</option><option>ENTREGADO</option><option>IMPRESO</option><option>FIRMADO</option><option>OBSERVADO</option></select><button class='c-btn'>Actualizar seleccionados</button></div><div class='c-card table-wrap'><table id='tabla_datos_postulantes' class='c-table'><tr><th></th><th>Foto</th><th class='sticky-col'>DNI</th><th class='sticky-col-2'>Trabajador</th><th>Requerimiento</th><th>Actividad</th><th>Cargo</th><th>Empresa</th><th>1. Evaluación</th><th>2. Inducción</th><th>3. Indumentaria</th><th>4. Firma digital</th><th>5. Fotocheck</th><th>Detalle</th><th>Anular</th></tr>{tabla_rows}</table></div></form></div>
             """)
         else:
             tit='Centro de Fotocheck'
             req_actual = clean(request.args.get('req')) or requerimiento_sel
             # Flujo obligatorio: a Fotocheck solo pasan quienes completaron Postulantes + Médico + Inducción + Indumentaria.
             with db() as con_flujo_foto:
-                lista_foto = [r for r in trabajadores_proceso_mostrar if validar_flujo_previo_modulo(con_flujo_foto, row_get(r,'dni'), row_get(r,'requerimiento'), 'Fotocheck')[0]][:800]
+                lista_foto = [r for r in trabajadores_proceso_mostrar if req_actual and validar_flujo_previo_modulo(con_flujo_foto, row_get(r,'dni'), row_get(r,'requerimiento'), 'Fotocheck')[0]][:800]
             total_foto = len(lista_foto)
             sin_foto = sum(1 for r in lista_foto if not (r['foto_ruta'] if 'foto_ruta' in r.keys() else ''))
             foto_ok = total_foto - sin_foto
@@ -12757,7 +12783,7 @@ html,body{overflow-x:hidden!important;}
             for i, r in enumerate(lista_foto, 1):
                 extra = f"<a class='std-ico' title='Vista previa fotocheck' target='_blank' href='/admin/contratacion/fotocheck/preview_dni?dni={h(row_get(r,'dni'))}'>🪪</a>"
                 foto_rows.append(fila_estandar_postulante(r, req=req_actual, checkbox_name='ingreso_ids', extra_action=extra, idx=i))
-            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='14' class='std-empty'>No hay postulantes habilitados para Fotocheck. Deben completar: Postulantes + Evaluación médica + Inducción + Indumentaria.</td></tr>"
+            foto_rows_html=''.join(foto_rows) or "<tr><td colspan='14' class='std-empty'>No hay postulantes habilitados para Fotocheck. Deben seleccionar requerimiento y completar: Postulantes + Evaluación médica + Inducción + Indumentaria + Firma Digital.</td></tr>"
             with db() as con_cfg_ui:
                 cfg_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_config ORDER BY id DESC LIMIT 1').fetchone()
                 hist_zebra = con_cfg_ui.execute('SELECT * FROM fotocheck_zebra_historial ORDER BY id DESC LIMIT 8').fetchall()
@@ -13878,6 +13904,9 @@ html,body{overflow-x:hidden!important;}
         firma_metodo_texto = 'FACIAL + FIRMA DIGITAL - RENOVACIÓN' if es_firma_renovacion else 'FACIAL + FIRMA DIGITAL'
         firma_obs_texto = 'Renovación firmada / pendiente de aprobación' if es_firma_renovacion else 'Envío masivo a firma facial/digital'
         req_actual_firma = clean(request.args.get('req'))
+        with db() as con_flujo_firma:
+            lista_firma = [r for r in trabajadores_proceso_mostrar if req_actual_firma and validar_flujo_previo_modulo(con_flujo_firma, row_get(r,'dni'), row_get(r,'requerimiento'), 'Firma')[0]][:800]
+        firma_control_rows = ''.join([fila_estandar_postulante(r, req=req_actual_firma, checkbox_name='ingreso_ids', idx=i) for i, r in enumerate(lista_firma, 1)]) or "<tr><td colspan='14' class='std-empty'>Seleccione un requerimiento o no hay trabajadores habilitados para Firma Digital. Deben completar Postulantes + Evaluación médica + Inducción + Indumentaria.</td></tr>"
         scope_tabs_html = f"""
           <div class='firma-scope-tabs'>
             <a class='{{'' if es_firma_renovacion else 'active'}}' href='/admin/contratacion?sec=firma'>Contratación</a>
@@ -13886,9 +13915,11 @@ html,body{overflow-x:hidden!important;}
         """
         camara_demo_url = url_for('firma_camara_demo')
         content=wrap(f"""
+        {estilos_tabla_estandar_postulantes()}
         <div class='firma-page firma-boceto-final'>
           {modulo_requerimiento_header_html('✍️', firma_titulo, firma_subtitulo, 'firma', "<option value=''>Seleccione requerimiento</option>" + opt_req, req_actual_firma)}
           {scope_tabs_html}
+          <div class='mod360-table-card'><div class='mod360-table-head'><h3>LISTA DE TRABAJADORES HABILITADOS PARA FIRMA DIGITAL</h3></div><div class='std-table-wrap'><table id='tabla_firma_360' class='std-table'>{tabla_estandar_postulantes_header('tabla_firma_360')}{firma_control_rows}</table></div></div>
           <div class='person-strip'>
             <div class='strip-item'><span class='strip-ico'>👤</span><div><small>Trabajador</small><b id='stripTrabajador'>JOSE QUITO</b></div></div>
             <div class='strip-item'><span class='strip-ico'>🪪</span><div><small>DNI</small><b id='stripDni'>72244462</b></div></div>
