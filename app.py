@@ -9616,12 +9616,45 @@ def admin_contratacion():
             metodo = clean(request.form.get('metodo_masivo')) or 'FACIAL + FIRMA DIGITAL'
             obs = clean(request.form.get('observacion_masiva')) or 'Envío masivo a firma facial/digital'
             ids=[]
+            plantilla_ids=[]
             for x in re.split(r'[\n,; ]+', ids_raw):
                 x=str(x).strip()
-                if x.isdigit() and int(x) not in ids:
+                if not x:
+                    continue
+                if x.upper().startswith('PL') and x[2:].isdigit():
+                    pid=int(x[2:])
+                    if pid not in plantilla_ids:
+                        plantilla_ids.append(pid)
+                elif x.isdigit() and int(x) not in ids:
                     ids.append(int(x))
             creadas=0
+            req_firma = clean(request.form.get('req_firma') or request.args.get('req'))
             with db() as con:
+                if plantilla_ids:
+                    candidato = None
+                    if req_firma:
+                        candidatos = con.execute("SELECT * FROM contratacion_ingresos WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?) AND UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO') ORDER BY id DESC", (req_firma,)).fetchall()
+                        for cand in candidatos:
+                            ok_f, _msg_f, _row_f = validar_flujo_previo_modulo(con, row_get(cand,'dni'), row_get(cand,'requerimiento'), 'Firma')
+                            if ok_f:
+                                candidato = cand
+                                break
+                    if not candidato:
+                        candidato = con.execute("SELECT * FROM contratacion_ingresos WHERE UPPER(COALESCE(estado,'')) NOT IN ('ANULADO','CANCELADO') ORDER BY id DESC LIMIT 1").fetchone()
+                    for pid in plantilla_ids:
+                        plx = con.execute('SELECT * FROM contratacion_plantillas WHERE id=? AND activo=1', (pid,)).fetchone()
+                        if not plx or not candidato:
+                            continue
+                        dni_pl = normalizar_dni(row_get(candidato,'dni'))
+                        trab_pl = clean(row_get(candidato,'trabajador')) or 'TRABAJADOR SELECCIONADO'
+                        empresa_pl = clean(row_get(candidato,'empresa'))
+                        tipo_pl = clean(row_get(plx,'tipo_documento') or row_get(plx,'nombre_plantilla') or 'DOCUMENTO')
+                        archivo_pl = clean(row_get(plx,'archivo_nombre') or row_get(plx,'nombre_plantilla') or 'PLANTILLA')
+                        ruta_pl = clean(row_get(plx,'ruta_archivo'))
+                        cur = con.execute('INSERT INTO contratacion_docs(dni,trabajador,empresa,requerimiento,etapa,tipo_doc,estado,archivo_nombre,ruta_archivo,fecha_registro,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (dni_pl, trab_pl, empresa_pl, req_firma or clean(row_get(candidato,'requerimiento')), 'Generado desde plantilla para firma', tipo_pl, 'GENERADO VALIDADO - PENDIENTE FIRMA', archivo_pl, ruta_pl, now_txt(), marca_carga(session.get('admin_user','admin'))))
+                        new_id = cur.lastrowid
+                        if new_id not in ids:
+                            ids.append(new_id)
                 for doc_id in ids:
                     doc=con.execute('SELECT * FROM contratacion_docs WHERE id=?',(doc_id,)).fetchone()
                     if not doc: continue
@@ -9818,8 +9851,15 @@ def admin_contratacion():
         fotocheck_ok = _ok_estado(row_get(r, 'fotocheck_estado'))
         induccion_ok = _ok_estado(row_get(r, 'estado_capacitacion'))
         indumentaria_ok = _ok_estado(row_get(r, 'estado_indumentaria'))
-        checks = [len(faltantes)==0, medico_ok, docs_ok, foto_bio_ok, fotocheck_ok, induccion_ok, indumentaria_ok]
-        avance = int(round((sum(1 for x in checks if x) / len(checks)) * 100)) if checks else 0
+        # Avance del flujo debe iniciar en 0% mientras la ficha de Postulantes no esté guardada/completa.
+        # Luego avanza acumulativo en 6 pasos: Postulantes, Evaluación Médica, Inducción, Indumentaria, Firma Digital y Fotocheck.
+        postulante_ok = (len(faltantes) == 0)
+        firma_ok = _ok_estado(row_get(r, 'estado_documentos')) or _ok_estado(row_get(r, 'estado_firma'))
+        if not postulante_ok:
+            avance = 0
+        else:
+            checks = [postulante_ok, medico_ok, induccion_ok, indumentaria_ok, firma_ok, fotocheck_ok]
+            avance = int(round((sum(1 for x in checks if x) / len(checks)) * 100)) if checks else 0
         if obs and '3' in nivel:
             estado_visual = '🔴 Observado Nivel 3'
             clase = 'danger'
@@ -14160,7 +14200,7 @@ html,body{overflow-x:hidden!important;}
             <div class='firma-actions'><button class='btn-green'>Generar enlace individual</button><a class='btn-dark' href='#bandeja'>Ver bandeja</a></div>
           </form>
           <form method='post' class='firma-progress-bar' onsubmit='return prepararFirmaMasiva()'>
-            <input type='hidden' name='accion' value='firma_masiva'><input type='hidden' id='documentos_lote' name='documentos_lote'><input type='hidden' name='metodo_masivo' value='{firma_metodo_texto}'><input type='hidden' name='observacion_masiva' value='{firma_obs_texto}'>
+            <input type='hidden' name='accion' value='firma_masiva'><input type='hidden' name='req_firma' value='{h(req_actual_firma)}'><input type='hidden' id='documentos_lote' name='documentos_lote'><input type='hidden' name='metodo_masivo' value='{firma_metodo_texto}'><input type='hidden' name='observacion_masiva' value='{firma_obs_texto}'>
             <div class='progress-left'><b>Progreso de firma</b><div class='steps'><span class='done'>1<small>Verificación facial<br>Completado</small></span><i></i><span class='done'>2<small>Validación<br>Completado</small></span><i></i><span class='done'>3<small>Firma de documentos<br>En proceso...</small></span><i></i><span>4<small>Finalizado<br>Pendiente</small></span></div></div>
             <button class='btn-green btn-firmar'>🖊️ Firmar todos los documentos<br><small id='firmaMassCounter'>0 seleccionados</small></button>
           </form>
@@ -14168,7 +14208,7 @@ html,body{overflow-x:hidden!important;}
           <div class='firma-card'><h3>🔐 Trazabilidad</h3><div class='trace-grid'><span>IP y navegador</span><span>Fecha / hora</span><span>Hash de evidencia</span><span>Selfie/captura</span><span>Estado RENIEC/API</span><span>Documento archivado</span></div></div>
         </div>
         <style>
-        .firma-scope-tabs{{display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap}}.firma-scope-tabs a{{text-decoration:none;border:1px solid #dbe7ef;background:#fff;color:#0f172a;border-radius:14px;padding:10px 16px;font-weight:950;box-shadow:0 8px 18px rgba(15,23,42,.06)}}.firma-scope-tabs a.active{{background:#10b981;color:#fff;border-color:#10b981}}.firma-boceto-final{{background:#f5f7fb!important;margin:-10px -12px 0;padding:18px 26px 26px;min-height:calc(100vh - 80px);color:#0f172a!important;font-family:Inter,Segoe UI,Arial,sans-serif!important}}.firma-boceto-final *{{box-sizing:border-box!important;text-shadow:none!important}}.firma-topbar{{display:flex;justify-content:space-between;align-items:center;margin:0 0 18px}}.title-wrap{{display:flex;align-items:center;gap:12px}}.title-icon{{width:42px;height:42px;border-radius:12px;background:#edf2f7;display:grid;place-items:center;font-size:22px;box-shadow:inset 0 0 0 1px #e2e8f0}}.firma-topbar h1{{margin:0;font-size:30px;line-height:1;color:#0b1220;font-weight:1000}}.firma-topbar p{{margin:8px 0 0;color:#64748b;font-weight:800}}.btn-back{{background:#eef1f6;border:1px solid #dce3eb;border-radius:10px;color:#111827;text-decoration:none;font-weight:950;padding:12px 18px;box-shadow:0 6px 16px #0f172a0d}}.person-strip{{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:#fff;border:1px solid #dfe7ef;border-radius:12px;box-shadow:0 10px 26px #0f172a10;margin-bottom:14px;overflow:hidden}}.strip-item{{display:flex;gap:14px;align-items:center;padding:20px 26px;border-right:1px solid #e5eaf0}}.strip-item:last-child{{border-right:0}}.strip-ico{{font-size:28px;color:#3b82f6}}.strip-item small{{display:block;color:#111827;font-size:12px;font-weight:950;margin-bottom:8px}}.strip-item b{{font-size:13px;color:#020617;font-weight:1000}}.firma-grid-boceto-main{{display:grid;grid-template-columns:1fr 1.12fr;gap:16px}}.firma-card-b{{background:#fff;border:1px solid #e0e6ee;border-radius:12px;box-shadow:0 10px 26px #0f172a10;padding:18px}}.firma-card-b h2{{margin:0 0 8px;color:#0b1220;font-size:22px;font-weight:1000}}.b-muted{{color:#64748b;font-weight:750;line-height:1.45;margin:0 0 14px}}.cam-wrap{{position:relative;overflow:hidden;background:#000;border-radius:15px;min-height:525px;display:grid;place-items:center}}.cam-wrap video,.cam-wrap img{{width:100%;height:525px;object-fit:cover;background:#000;position:relative;z-index:3;display:block}}.cam-wrap video{{transform:scaleX(-1)}}.cam-wrap:not(.cam-live) .face-frame,.cam-wrap:not(.cam-live) .face-mesh,.cam-wrap:not(.capture-ok) #captureToast{{display:none!important}}.cam-error{{background:#fff7ed!important;border-color:#fed7aa!important;color:#9a3412!important}}.filecam-label{{position:relative;overflow:hidden}}.face-frame{{position:absolute;z-index:4;inset:17% 26%;border:3px solid #22c55e;border-radius:22px;pointer-events:none;display:none}}.face-frame:before,.face-frame:after{{content:'';position:absolute;inset:-3px;border-color:#22c55e;border-style:solid;border-width:0}}.face-mesh{{position:absolute;z-index:5;inset:23% 32%;opacity:.58;pointer-events:none;background:radial-gradient(circle,#34d399 1.4px,transparent 2px) 0 0/34px 34px,linear-gradient(32deg,transparent 49%,rgba(52,211,153,.55) 50%,transparent 51%) 0 0/70px 70px,linear-gradient(145deg,transparent 49%,rgba(52,211,153,.38) 50%,transparent 51%) 0 0/80px 80px;border-radius:50%;display:none}}.live-badge{{position:absolute;right:18px;top:18px;z-index:6;background:#11823b;color:#fff;border-radius:999px;padding:8px 16px;font-weight:1000;font-size:12px}}.capture-toast{{position:absolute;left:18px;right:18px;bottom:18px;z-index:7;background:linear-gradient(90deg,#0f5132,#0b5d34);color:#fff;border-radius:12px;padding:16px 22px;font-weight:1000;box-shadow:0 8px 22px #0006;display:none}}.capture-toast small{{display:block;color:#dcfce7;font-weight:800;margin-top:4px}}.sound-ok{{margin:16px 0 14px;background:#eafff1;border:1px solid #b9edcc;border-radius:10px;color:#16a34a;display:none;align-items:center;gap:12px;padding:12px 14px;font-weight:1000}}.sound-icon{{font-size:27px}}.sound-ok small{{display:block;color:#16a34a;font-weight:700}}.wave{{margin-left:auto;letter-spacing:2px}}.boceto-actions{{display:flex;gap:10px;flex-wrap:wrap}}.btn-yellow,.btn-green,.btn-dark{{border:0;border-radius:8px;padding:13px 18px;font-weight:1000;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 8px 16px #0f172a18}}.btn-yellow{{background:#ffbd00;color:#111827}}.btn-green{{background:#10b84e;color:#fff!important}}.btn-dark{{background:#334155;color:#fff!important}}.doc-sign-list{{display:grid;gap:12px;margin:18px 0;max-height:505px;overflow:auto;padding:0 4px 0 0}}.doc-sign-card{{display:grid;grid-template-columns:32px 56px 1fr;align-items:center;gap:14px;border:1px solid #dbe3ec;border-radius:12px;background:#fafcff;padding:17px;min-height:88px;box-shadow:0 6px 18px #0f172a08;cursor:pointer}}.doc-sign-card input{{width:20px;height:20px;accent-color:#10b84e}}.doc-icon{{width:45px;height:50px;border-radius:8px;background:#2f67c7;color:#fff;display:grid;place-items:center;font-size:20px;font-weight:1000;box-shadow:inset 0 -8px 0 rgba(0,0,0,.08)}}.doc-info b{{display:block;color:#0f172a;font-size:14px;text-transform:uppercase;margin-bottom:7px}}.doc-info small{{display:block;color:#475569;font-weight:850;margin-top:3px}}.badge-green{{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:999px;background:#10b84e;color:#fff;font-size:14px;vertical-align:middle}}.switch-row{{display:flex;align-items:center;gap:10px;margin:18px 0;color:#111827;font-weight:950}}.switch-row input{{width:42px;height:22px;accent-color:#10b84e}}.info-dot{{width:18px;height:18px;border-radius:50%;display:inline-grid;place-items:center;background:#111827;color:#fff;font-size:12px}}.ready-box{{display:flex;gap:12px;align-items:center;background:#eafff1;border:1px solid #b9edcc;border-radius:10px;color:#16a34a;padding:16px;font-weight:1000}}.ready-box small{{display:block;color:#16a34a;font-weight:700;margin-top:4px}}.firma-progress-bar{{display:grid;grid-template-columns:1fr 300px;gap:22px;align-items:center;background:#fff;border:1px solid #dfe7ef;border-radius:12px;box-shadow:0 10px 26px #0f172a10;margin-top:16px;padding:18px}}.progress-left>b{{display:block;font-size:16px;margin-bottom:14px;color:#0f172a}}.steps{{display:flex;align-items:flex-start;gap:10px}}.steps i{{height:1px;background:#cbd5e1;flex:1;margin-top:17px}}.steps span{{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e5e7eb;color:#111827;font-weight:1000;position:relative;flex:0 0 auto}}.steps span.done{{background:#10b84e;color:#fff}}.steps small{{position:absolute;top:42px;left:50%;transform:translateX(-50%);width:130px;color:#475569;font-size:10px;text-align:center;line-height:1.35}}.steps .done small{{color:#10b84e}}.btn-firmar{{height:54px;font-size:15px;flex-direction:column}}.btn-firmar small{{font-size:11px;color:#eafff1;margin-top:4px}}.sr-only-form{{display:none!important}}.firma-card{{background:#fff;border:1px solid #e0e6ee;border-radius:12px;padding:18px;margin-top:16px;color:#0f172a}}.firma-table th{{background:#0b2135!important;color:#fff!important}}.firma-table td{{background:white!important;color:#1f2937!important}}.trace-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}}.trace-grid span{{background:#e0f2fe;border:1px solid #7dd3fc;color:#075985;padding:12px;border-radius:10px;font-weight:950}}.estado-pill,.estado-soft,.ok-chip,.pend-chip{{display:inline-flex;border-radius:999px;padding:7px 10px;font-weight:950}}.estado-pill{{background:#fef3c7;color:#92400e}}.estado-soft{{background:#e0f2fe;color:#075985}}.ok-chip{{background:#dcfce7;color:#166534}}.pend-chip{{background:#fee2e2;color:#991b1b}}.docs-panel-b h2,.docs-panel-b p,.docs-panel-b label,.camera-card-b h2,.camera-card-b p{{color:#0f172a!important}}.doc-sign-card{{color:#0f172a!important}}.empty-docs{{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:14px;font-weight:900}}.plantilla-sign-card{{border-color:#bbf7d0!important;background:#f8fffb!important}}.cam-wrap.cam-live .face-frame,.cam-wrap.cam-live .face-mesh{{display:block}}.cam-wrap.capture-ok #captureToast{{display:block}}.boceto-actions button:disabled{{opacity:.65;cursor:wait}}@media(max-width:1180px){{.firma-grid-boceto-main,.firma-progress-bar{{grid-template-columns:1fr}}.person-strip{{grid-template-columns:1fr 1fr}}}}@media(max-width:720px){{.firma-boceto-final{{padding:14px}}.firma-topbar,.steps{{display:grid}}.person-strip{{grid-template-columns:1fr}}.strip-item{{border-right:0;border-bottom:1px solid #e5eaf0}}.cam-wrap,.cam-wrap video,.cam-wrap img{{min-height:360px;height:360px}}}}
+        .firma-scope-tabs{{display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap}}.firma-scope-tabs a{{text-decoration:none;border:1px solid #dbe7ef;background:#fff;color:#0f172a;border-radius:14px;padding:10px 16px;font-weight:950;box-shadow:0 8px 18px rgba(15,23,42,.06)}}.firma-scope-tabs a.active{{background:#10b981;color:#fff;border-color:#10b981}}.firma-boceto-final{{background:#f5f7fb!important;margin:-10px -12px 0;padding:18px 26px 26px;min-height:calc(100vh - 80px);color:#0f172a!important;font-family:Inter,Segoe UI,Arial,sans-serif!important}}.firma-boceto-final *{{box-sizing:border-box!important;text-shadow:none!important}}.firma-topbar{{display:flex;justify-content:space-between;align-items:center;margin:0 0 18px}}.title-wrap{{display:flex;align-items:center;gap:12px}}.title-icon{{width:42px;height:42px;border-radius:12px;background:#edf2f7;display:grid;place-items:center;font-size:22px;box-shadow:inset 0 0 0 1px #e2e8f0}}.firma-topbar h1{{margin:0;font-size:30px;line-height:1;color:#0b1220;font-weight:1000}}.firma-topbar p{{margin:8px 0 0;color:#64748b;font-weight:800}}.btn-back{{background:#eef1f6;border:1px solid #dce3eb;border-radius:10px;color:#111827;text-decoration:none;font-weight:950;padding:12px 18px;box-shadow:0 6px 16px #0f172a0d}}.person-strip{{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:#fff;border:1px solid #dfe7ef;border-radius:12px;box-shadow:0 10px 26px #0f172a10;margin-bottom:14px;overflow:hidden}}.strip-item{{display:flex;gap:14px;align-items:center;padding:20px 26px;border-right:1px solid #e5eaf0}}.strip-item:last-child{{border-right:0}}.strip-ico{{font-size:28px;color:#3b82f6}}.strip-item small{{display:block;color:#111827;font-size:12px;font-weight:950;margin-bottom:8px}}.strip-item b{{font-size:13px;color:#020617;font-weight:1000}}.firma-grid-boceto-main{{display:grid;grid-template-columns:1fr 1.12fr;gap:16px}}.firma-card-b{{background:#fff;border:1px solid #e0e6ee;border-radius:12px;box-shadow:0 10px 26px #0f172a10;padding:18px}}.firma-card-b h2{{margin:0 0 8px;color:#0b1220;font-size:22px;font-weight:1000}}.b-muted{{color:#64748b;font-weight:750;line-height:1.45;margin:0 0 14px}}.cam-wrap{{position:relative;overflow:hidden;background:#000;border-radius:15px;height:340px;min-height:340px;display:block}}.cam-wrap video,.cam-wrap img{{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;z-index:3;display:block}}.cam-wrap img{{z-index:4;display:none}}.cam-wrap video{{transform:scaleX(-1)}}.cam-wrap:not(.cam-live) .face-frame,.cam-wrap:not(.cam-live) .face-mesh,.cam-wrap:not(.capture-ok) #captureToast{{display:none!important}}.cam-error{{background:#fff7ed!important;border-color:#fed7aa!important;color:#9a3412!important}}.filecam-label{{position:relative;overflow:hidden}}.face-frame{{position:absolute;z-index:4;inset:17% 26%;border:3px solid #22c55e;border-radius:22px;pointer-events:none;display:none}}.face-frame:before,.face-frame:after{{content:'';position:absolute;inset:-3px;border-color:#22c55e;border-style:solid;border-width:0}}.face-mesh{{position:absolute;z-index:5;inset:23% 32%;opacity:.58;pointer-events:none;background:radial-gradient(circle,#34d399 1.4px,transparent 2px) 0 0/34px 34px,linear-gradient(32deg,transparent 49%,rgba(52,211,153,.55) 50%,transparent 51%) 0 0/70px 70px,linear-gradient(145deg,transparent 49%,rgba(52,211,153,.38) 50%,transparent 51%) 0 0/80px 80px;border-radius:50%;display:none}}.live-badge{{position:absolute;right:18px;top:18px;z-index:6;background:#11823b;color:#fff;border-radius:999px;padding:8px 16px;font-weight:1000;font-size:12px}}.capture-toast{{position:absolute;left:18px;right:18px;bottom:18px;z-index:7;background:linear-gradient(90deg,#0f5132,#0b5d34);color:#fff;border-radius:12px;padding:16px 22px;font-weight:1000;box-shadow:0 8px 22px #0006;display:none}}.capture-toast small{{display:block;color:#dcfce7;font-weight:800;margin-top:4px}}.sound-ok{{margin:16px 0 14px;background:#eafff1;border:1px solid #b9edcc;border-radius:10px;color:#16a34a;display:none;align-items:center;gap:12px;padding:12px 14px;font-weight:1000}}.sound-icon{{font-size:27px}}.sound-ok small{{display:block;color:#16a34a;font-weight:700}}.wave{{margin-left:auto;letter-spacing:2px}}.boceto-actions{{display:flex;gap:10px;flex-wrap:wrap}}.btn-yellow,.btn-green,.btn-dark{{border:0;border-radius:8px;padding:13px 18px;font-weight:1000;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 8px 16px #0f172a18}}.btn-yellow{{background:#ffbd00;color:#111827}}.btn-green{{background:#10b84e;color:#fff!important}}.btn-dark{{background:#334155;color:#fff!important}}.doc-sign-list{{display:grid;gap:12px;margin:18px 0;max-height:505px;overflow:auto;padding:0 4px 0 0}}.doc-sign-card{{display:grid;grid-template-columns:32px 56px 1fr;align-items:center;gap:14px;border:1px solid #dbe3ec;border-radius:12px;background:#fafcff;padding:17px;min-height:88px;box-shadow:0 6px 18px #0f172a08;cursor:pointer}}.doc-sign-card input{{width:20px;height:20px;accent-color:#10b84e}}.doc-icon{{width:45px;height:50px;border-radius:8px;background:#2f67c7;color:#fff;display:grid;place-items:center;font-size:20px;font-weight:1000;box-shadow:inset 0 -8px 0 rgba(0,0,0,.08)}}.doc-info b{{display:block;color:#0f172a;font-size:14px;text-transform:uppercase;margin-bottom:7px}}.doc-info small{{display:block;color:#475569;font-weight:850;margin-top:3px}}.badge-green{{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;border-radius:999px;background:#10b84e;color:#fff;font-size:14px;vertical-align:middle}}.switch-row{{display:flex;align-items:center;gap:10px;margin:18px 0;color:#111827;font-weight:950}}.switch-row input{{width:42px;height:22px;accent-color:#10b84e}}.info-dot{{width:18px;height:18px;border-radius:50%;display:inline-grid;place-items:center;background:#111827;color:#fff;font-size:12px}}.ready-box{{display:flex;gap:12px;align-items:center;background:#eafff1;border:1px solid #b9edcc;border-radius:10px;color:#16a34a;padding:16px;font-weight:1000}}.ready-box small{{display:block;color:#16a34a;font-weight:700;margin-top:4px}}.firma-progress-bar{{display:grid;grid-template-columns:1fr 300px;gap:22px;align-items:center;background:#fff;border:1px solid #dfe7ef;border-radius:12px;box-shadow:0 10px 26px #0f172a10;margin-top:16px;padding:18px}}.progress-left>b{{display:block;font-size:16px;margin-bottom:14px;color:#0f172a}}.steps{{display:flex;align-items:flex-start;gap:10px}}.steps i{{height:1px;background:#cbd5e1;flex:1;margin-top:17px}}.steps span{{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#e5e7eb;color:#111827;font-weight:1000;position:relative;flex:0 0 auto}}.steps span.done{{background:#10b84e;color:#fff}}.steps small{{position:absolute;top:42px;left:50%;transform:translateX(-50%);width:130px;color:#475569;font-size:10px;text-align:center;line-height:1.35}}.steps .done small{{color:#10b84e}}.btn-firmar{{height:54px;font-size:15px;flex-direction:column}}.btn-firmar small{{font-size:11px;color:#eafff1;margin-top:4px}}.sr-only-form{{display:none!important}}.firma-card{{background:#fff;border:1px solid #e0e6ee;border-radius:12px;padding:18px;margin-top:16px;color:#0f172a}}.firma-table th{{background:#0b2135!important;color:#fff!important}}.firma-table td{{background:white!important;color:#1f2937!important}}.trace-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}}.trace-grid span{{background:#e0f2fe;border:1px solid #7dd3fc;color:#075985;padding:12px;border-radius:10px;font-weight:950}}.estado-pill,.estado-soft,.ok-chip,.pend-chip{{display:inline-flex;border-radius:999px;padding:7px 10px;font-weight:950}}.estado-pill{{background:#fef3c7;color:#92400e}}.estado-soft{{background:#e0f2fe;color:#075985}}.ok-chip{{background:#dcfce7;color:#166534}}.pend-chip{{background:#fee2e2;color:#991b1b}}.docs-panel-b h2,.docs-panel-b p,.docs-panel-b label,.camera-card-b h2,.camera-card-b p{{color:#0f172a!important}}.doc-sign-card{{color:#0f172a!important}}.empty-docs{{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:14px;font-weight:900}}.plantilla-sign-card{{border-color:#bbf7d0!important;background:#f8fffb!important}}.cam-wrap.cam-live .face-frame,.cam-wrap.cam-live .face-mesh{{display:block}}.cam-wrap.capture-ok #captureToast{{display:block}}.boceto-actions button:disabled{{opacity:.65;cursor:wait}}@media(max-width:1180px){{.firma-grid-boceto-main,.firma-progress-bar{{grid-template-columns:1fr}}.person-strip{{grid-template-columns:1fr 1fr}}}}@media(max-width:720px){{.firma-boceto-final{{padding:14px}}.firma-topbar,.steps{{display:grid}}.person-strip{{grid-template-columns:1fr}}.strip-item{{border-right:0;border-bottom:1px solid #e5eaf0}}.cam-wrap{{height:300px;min-height:300px}}.cam-wrap video,.cam-wrap img{{height:100%}}}}
         </style>
         <script>
         let firmaStream=null;
@@ -14195,7 +14235,7 @@ html,body{overflow-x:hidden!important;}
           }}catch(e){{}}
         }}
         function firmaResetVisual(){{
-          const wrap=document.querySelector('.cam-box-ren');
+          const wrap=document.querySelector('.cam-wrap');
           const preview=document.getElementById('firmaPreview');
           const sound=document.getElementById('soundBox');
           const v=document.getElementById('firmaVideo');
@@ -14221,7 +14261,7 @@ html,body{overflow-x:hidden!important;}
           if(firmaStarting) return false;
           firmaStarting=true;
 
-          const wrap=document.querySelector('.cam-box-ren');
+          const wrap=document.querySelector('.cam-wrap');
           const btn=document.getElementById('btnActivarCamara');
           const v=document.getElementById('firmaVideo');
 
@@ -14305,7 +14345,7 @@ html,body{overflow-x:hidden!important;}
           const v=document.getElementById('firmaVideo');
           const c=document.getElementById('firmaCanvas');
           const img=document.getElementById('firmaPreview');
-          const wrap=document.querySelector('.cam-box-ren');
+          const wrap=document.querySelector('.cam-wrap');
           const sound=document.getElementById('soundBox');
           if(!v || !v.srcObject || !v.videoWidth){{
             firmaSetMsg('Primero se activará la cámara. Acepta el permiso del navegador.',false,false);
@@ -14331,7 +14371,7 @@ html,body{overflow-x:hidden!important;}
         function firmaLoadFileCam(input){{
           const file=input && input.files ? input.files[0] : null;
           if(!file) return;
-          const img=document.getElementById('firmaPreview'), wrap=document.querySelector('.cam-box-ren'), sound=document.getElementById('soundBox');
+          const img=document.getElementById('firmaPreview'), wrap=document.querySelector('.cam-wrap'), sound=document.getElementById('soundBox');
           const reader=new FileReader();
           reader.onload=function(){{
             if(img){{ img.src=reader.result; img.style.display='block'; }}
@@ -14350,20 +14390,28 @@ html,body{overflow-x:hidden!important;}
           if(firmaStream){{ firmaStream.getTracks().forEach(t=>t.stop()); firmaStream=null; }}
           const v=document.getElementById('firmaVideo');
           if(v){{ v.pause(); v.srcObject=null; }}
-          const wrap=document.querySelector('.cam-box-ren');
+          const wrap=document.querySelector('.cam-wrap');
           if(wrap) wrap.classList.remove('cam-live');
           firmaBadge('● DETENIDA','#334155');
           firmaSetMsg('Cámara detenida.');
         }}
+        function firmaDocChecks(){{
+          return [...document.querySelectorAll('.doc-sign-list .chk-doc-firma')];
+        }}
+        function firmaDocSeleccionados(){{
+          const masiva=document.getElementById('firmaMasivaSwitch');
+          const checks=firmaDocChecks();
+          if(masiva && masiva.checked) checks.forEach(x=>x.checked=true);
+          return [...new Set(checks.filter(x=>x.checked).map(x=>x.value).filter(Boolean))];
+        }}
         function updateFirmaCounter(){{
-          const checks=[...document.querySelectorAll('.ren-doc-list .chk-doc-firma:checked')];
-          const n=checks.length;
+          const n=firmaDocSeleccionados().length;
           const el=document.getElementById('firmaMassCounter'); if(el) el.textContent=n+' seleccionados';
           const b=document.getElementById('docsBadge'); if(b) b.textContent=n;
         }}
-        function marcarTodosFirma(on){{ document.querySelectorAll('.chk-doc-firma').forEach(x=>x.checked=on); updateFirmaCounter(); }}
+        function marcarTodosFirma(on){{ firmaDocChecks().forEach(x=>x.checked=on); updateFirmaCounter(); }}
         function prepararFirmaMasiva(){{
-          const ids=[...new Set([...document.querySelectorAll('.ren-doc-list .chk-doc-firma:checked')].map(x=>x.value))];
+          const ids=firmaDocSeleccionados();
           if(ids.length===0){{ alert('Selecciona al menos un contrato para firmar.'); return false; }}
           if(!firmaCaptured){{ const continuar=confirm('Aún no se capturó evidencia facial. ¿Deseas continuar igual?'); if(!continuar) return false; }}
           const lote=document.getElementById('documentos_lote'); if(lote) lote.value=ids.join(',');
