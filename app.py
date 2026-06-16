@@ -11117,20 +11117,31 @@ html,body{overflow-x:hidden!important;}
                 try: return r.get(k, default)
                 except Exception: return default
         def _faltan(r):
-            return [x for k,x in [('dni','DNI'),('trabajador','Trabajador'),('cargo','Cargo'),('empresa','Empresa'),('actividad','Actividad'),('fecha_ingreso','Fecha ingreso')] if not clean(_rv(r,k))]
+            # Ficha obligatoria COMPLETA del módulo Postulantes.
+            # Antes solo revisaba 6 campos básicos y por eso un registro incompleto
+            # aparecía con 29%. Ahora, si falta cualquier obligatorio, el avance queda en 0%.
+            try:
+                return campos_faltantes_postulante(r)
+            except Exception:
+                return [x for k,x in [('dni','DNI'),('trabajador','Trabajador'),('cargo','Cargo'),('empresa','Empresa'),('actividad','Actividad'),('fecha_ingreso','Fecha ingreso'),('fecha_nacimiento','Fecha nacimiento'),('direccion','Dirección'),('distrito','Distrito'),('provincia','Provincia'),('departamento','Departamento'),('remuneracion_basica','Remuneración básica')] if not clean(_rv(r,k))]
         def _avance(r):
-            score=0
-            if not _faltan(r): score+=2
-            if 'APTO' in clean(_rv(r,'estado_medico')).upper(): score+=1
-            if clean(_rv(r,'estado_documentos')).upper() in ('OK','COMPLETO','APROBADO'): score+=1
-            if clean(_rv(r,'estado_firma')).upper() in ('FIRMADO','OK','COMPLETO'): score+=1
-            if clean(_rv(r,'estado_fotocheck')).upper() in ('EMITIDO','ENTREGADO','OK'): score+=1
-            if clean(_rv(r,'estado_induccion')).upper() in ('INDUCIDO','OK','COMPLETO'): score+=1
-            return round(score/7*100)
+            # Avance acumulativo ÚNICO del flujo.
+            # Regla solicitada: antes de completar/registrar ficha de Postulantes = 0%.
+            if _faltan(r):
+                return 0
+            try:
+                _est, _pct, _faltantes = modulos_faltantes_postulante(r)
+                return int(_pct)
+            except Exception:
+                return 0
         def _estado(r):
-            if clean(_rv(r,'estado')).upper() in ('ANULADO','CANCELADO'): return ('Anulado','bad')
-            if _faltan(r): return ('Incompleto','bad')
-            if 'APTO' in clean(_rv(r,'estado_medico')).upper(): return ('Completo','ok')
+            if clean(_rv(r,'estado')).upper() in ('ANULADO','CANCELADO'):
+                return ('Anulado','bad')
+            if _faltan(r):
+                return ('Incompleto','bad')
+            av = _avance(r)
+            if av >= 100:
+                return ('Completo','ok')
             return ('En validación','warn')
         req_has_selection = bool(requerimiento_sel)
         real_rows = ingresos_mostrar if req_has_selection else []
@@ -11204,7 +11215,7 @@ html,body{overflow-x:hidden!important;}
             <input type='hidden' name='volver' value='nuevos'>
             <input type='hidden' name='campo_estado' value='estado'>
           <div class='pp-filter-card'><div class='pp-field'><label>Buscar por DNI</label><div class='pp-search-wrap'><input class='pp-control' oninput="filtrarTabla(this,'tabla_pp_final')" placeholder='Buscar por DNI'><span>⌕</span></div></div><div class='pp-field'><label>Filtrar / cambio masivo de estado</label><select class='pp-control pp-state-filter' onchange="filtrarTabla(this,'tabla_pp_final')"><option value=''>Todos los estados</option><option>Completo</option><option>En validación</option><option>Incompleto</option><option>Observado</option></select><select class='pp-control pp-mass-select legacy-mass-select' name='nuevo_estado'><option>EN PROCESO</option><option>APROBADO</option><option>OBSERVADO</option><option>ANULADO</option></select><button class='pp-btn-green pp-mass-btn' type='submit'>Aplicar estado</button></div><div class='pp-field'><span class="registrar-title" style="display:none"></span><label for='modal_postulante_registro' class='pp-btn-green pp-register-btn'>Registrar</label></div></div>
-          <div class='pp-table-card'><div class='pp-table-head'><h3>LISTA DE POSTULANTES</h3><div class='pp-table-actions'><a class='pp-light-btn' href='/admin/plantilla_gestion/contratacion' title='Descargar / exportar formato Excel'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 3h10l6 6v12H4z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M14 3v6h6M8 12l4 6m0-6l-4 6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Exportar Excel</span></a><button type='button' class='pp-light-btn' onclick='window.print()' title='Imprimir lista'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z' fill='none' stroke='currentColor' stroke-width='2' stroke-linejoin='round'/></svg><span>Imprimir</span></button><button type='button' class='pp-btn-green' onclick='abrirFicha360Seleccionada()' title='Abrir ficha del primer/seleccionado postulante'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 2h9l5 5v15H6z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M15 2v6h5M9 13h6M9 17h6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Ver ficha 360°</span></button></div></div><div class='pp-table-wrap'><table id='tabla_pp_final' class='pp-table'><thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_medica_postulantes input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Firma digital</th><th>Fotocheck</th><th>Acciones</th></tr></thead><tbody>{tabla_postulantes}</tbody></table></div><div class='pp-demo-note'>ⓘ Mostrando {len(real_rows) if real_rows else 3} de {len(real_rows) if real_rows else 3} postulantes{'' if real_rows else ' (demos visuales hasta seleccionar un requerimiento con datos reales)'}.</div></div>
+          <div class='pp-table-card'><div class='pp-table-head'><h3>LISTA DE POSTULANTES</h3><div class='pp-table-actions'><a class='pp-light-btn' href='/admin/plantilla_gestion/contratacion' title='Descargar / exportar formato Excel'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M4 3h10l6 6v12H4z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M14 3v6h6M8 12l4 6m0-6l-4 6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Exportar Excel</span></a><button type='button' class='pp-light-btn' onclick='window.print()' title='Imprimir lista'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z' fill='none' stroke='currentColor' stroke-width='2' stroke-linejoin='round'/></svg><span>Imprimir</span></button><button type='button' class='pp-btn-green' onclick='abrirFicha360Seleccionada()' title='Abrir ficha del primer/seleccionado postulante'><svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 2h9l5 5v15H6z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M15 2v6h5M9 13h6M9 17h6' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg><span>Ver ficha 360°</span></button></div></div><div class='pp-table-wrap'><table id='tabla_pp_final' class='pp-table'><thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_pp_final input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Firma digital</th><th>Fotocheck</th><th>Acciones</th></tr></thead><tbody>{tabla_postulantes}</tbody></table></div><div class='pp-demo-note'>ⓘ Mostrando {len(real_rows) if real_rows else 3} de {len(real_rows) if real_rows else 3} postulantes{'' if real_rows else ' (demos visuales hasta seleccionar un requerimiento con datos reales)'}.</div></div>
         </section>
           </form>
         <div class='pp-registro-separador'><h3>Registro de postulante</h3><p>Formulario operativo restaurado desde contratación.py.</p></div>
@@ -11894,7 +11905,7 @@ html,body{overflow-x:hidden!important;}
             <div class='med-table-head'><h3>LISTA DE POSTULANTES</h3></div>
             <div class='pp-table-wrap med-postulantes-wrap'>
               <table id='tabla_medica_postulantes' class='pp-table med-pp-table'>
-                <thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_medica_postulantes input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Firma digital</th><th>Fotocheck</th><th>Acciones</th></tr></thead>
+                <thead><tr><th><input type='checkbox' onclick="document.querySelectorAll('#tabla_pp_final input[name=ingreso_ids]').forEach(x=>x.checked=this.checked)"></th><th>N°</th><th>Foto</th><th>DNI</th><th>Trabajador</th><th>Cargo</th><th>Estado proceso</th><th>% Completitud</th><th>Evaluación médica</th><th>Inducción</th><th>Indumentaria</th><th>Firma digital</th><th>Fotocheck</th><th>Acciones</th></tr></thead>
                 <tbody>{med_table_html}</tbody>
               </table>
             </div>
