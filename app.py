@@ -3043,94 +3043,55 @@ def validar_flujo_previo_modulo(con, dni, requerimiento, modulo_destino):
     return True, '', row
 
 
-def _estado_real_modulo_contratacion(dni, requerimiento):
-    """Lee el avance REAL por DNI + requerimiento desde las tablas de cada módulo.
-    Esto evita que Evaluación Médica muestre 33% e Inducción 17% para el mismo DNI.
-    """
-    dni = normalizar_dni(dni)
-    requerimiento = clean(requerimiento)
-    data = {'medica': False, 'induccion': False, 'indumentaria': False, 'firma': False, 'fotocheck': False,
-            'medica_estado': '', 'induccion_estado': '', 'indumentaria_estado': '', 'firma_estado': '', 'fotocheck_estado': ''}
-    if not dni:
-        return data
-    try:
-        with db() as con:
-            params_req = (dni, requerimiento)
-            if requerimiento:
-                med = con.execute("""SELECT estado, aptitud FROM contratacion_medica
-                                     WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                     ORDER BY id DESC LIMIT 1""", params_req).fetchone()
-            else:
-                med = con.execute("SELECT estado, aptitud FROM contratacion_medica WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,)).fetchone()
-            if med:
-                em = estado_norm(row_get(med, 'estado')); ap = estado_norm(row_get(med, 'aptitud'))
-                data['medica_estado'] = ap or em
-                data['medica'] = (em in ('APTO','HABILITADO','APROBADO') or ap in ('APTO','APTO CON RESTRICCIONES','HABILITADO','APROBADO'))
-
-            if requerimiento:
-                cap = con.execute("""SELECT estado FROM contratacion_capacitacion
-                                     WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                     ORDER BY id DESC LIMIT 1""", params_req).fetchone()
-            else:
-                cap = con.execute("SELECT estado FROM contratacion_capacitacion WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,)).fetchone()
-            if cap:
-                ec = estado_norm(row_get(cap, 'estado')); data['induccion_estado'] = ec
-                data['induccion'] = ec in ('VIDEO VISTO','APROBADO','INDUCIDO','COMPLETO','COMPLETADO','OK')
-
-            if requerimiento:
-                ind = con.execute("""SELECT estado FROM contratacion_indumentaria
-                                     WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                     ORDER BY id DESC LIMIT 1""", params_req).fetchone()
-            else:
-                ind = con.execute("SELECT estado FROM contratacion_indumentaria WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,)).fetchone()
-            if ind:
-                ei = estado_norm(row_get(ind, 'estado')); data['indumentaria_estado'] = ei
-                data['indumentaria'] = ei in ('ENTREGADO','COMPLETO','COMPLETADO','OK')
-
-            # Firma Digital / Facial
-            data['firma'] = flujo_firma_digital_ok_con(con, dni, requerimiento)
-            data['firma_estado'] = 'FIRMADO' if data['firma'] else estado_norm(row_get(row_get if False else {}, 'estado'))
-
-            if requerimiento:
-                fc = con.execute("""SELECT estado FROM contratacion_fotocheck
-                                    WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
-                                    ORDER BY id DESC LIMIT 1""", params_req).fetchone()
-            else:
-                fc = con.execute("SELECT estado FROM contratacion_fotocheck WHERE dni=? ORDER BY id DESC LIMIT 1", (dni,)).fetchone()
-            if fc:
-                ef = estado_norm(row_get(fc, 'estado')); data['fotocheck_estado'] = ef
-                data['fotocheck'] = ef in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','EMITIDO','OK')
-    except Exception:
-        pass
-    return data
-
-
 def modulos_faltantes_postulante(row, medico_ok=None):
-    """Devuelve avance estándar, acumulativo y ÚNICO para todos los módulos.
-    El cálculo se hace con el DNI + requerimiento real, no con estados viejos de la fila.
+    """Avance acumulativo ÚNICO para todos los módulos.
+    La lista no vuelve a 17%/33% por módulo: consulta el estado real por DNI+requerimiento
+    en las tablas operativas y, como respaldo, usa los campos sincronizados de Postulantes.
     """
+    faltan = []
     dni = normalizar_dni(row_get(row, 'dni'))
     req = clean(row_get(row, 'requerimiento'))
-    real = _estado_real_modulo_contratacion(dni, req)
-    faltan = []
     try:
         if not flujo_postulante_completo(row):
             faltan.append('Postulantes')
     except Exception:
         faltan.append('Postulantes')
 
-    med_ok = real.get('medica')
-    if medico_ok is not None:
-        med_ok = bool(medico_ok)
-    if not med_ok:
+    def _db_bool(fn, fallback=False):
+        try:
+            if dni and req:
+                with db() as conx:
+                    return bool(fn(conx, dni, req))
+        except Exception:
+            pass
+        return bool(fallback)
+
+    try:
+        med = estado_norm(row_get(row, 'estado_medico'))
+        apt = estado_norm(row_get(row, 'aptitud_medica'))
+        med_fallback = med in ('APTO','HABILITADO','APROBADO') or apt in ('APTO','HABILITADO','APROBADO','APTO CON RESTRICCIONES')
+        med_ok = bool(medico_ok) if medico_ok is not None else _db_bool(flujo_medica_apta_con, med_fallback)
+        if not med_ok:
+            faltan.append('Evaluación médica')
+    except Exception:
         faltan.append('Evaluación médica')
-    if not real.get('induccion'):
+
+    indu_fallback = flujo_induccion_ok(row)
+    indu_ok = _db_bool(flujo_induccion_ok_con, indu_fallback)
+    if not indu_ok:
         faltan.append('Inducción')
-    if not real.get('indumentaria'):
+
+    indum_fallback = flujo_indumentaria_ok(row)
+    indum_ok = _db_bool(flujo_indumentaria_ok_con, indum_fallback)
+    if not indum_ok:
         faltan.append('Indumentaria')
-    if not real.get('firma'):
+
+    firma_fallback = estado_norm(row_get(row, 'estado_documentos') or row_get(row, 'estado_firma')) in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK')
+    firma_ok = _db_bool(flujo_firma_digital_ok_con, firma_fallback)
+    if not firma_ok:
         faltan.append('Firma digital')
-    if not real.get('fotocheck'):
+
+    if estado_norm(row_get(row, 'fotocheck_estado')) not in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','OK','EMITIDO'):
         faltan.append('Fotocheck')
     pct = max(0, int(round((6 - len(faltan)) * 100 / 6)))
     estado = 'COMPLETO' if not faltan else ('EN PROCESO' if pct else 'PENDIENTE')
@@ -3206,21 +3167,25 @@ def fila_estandar_postulante(row, req='', medico_ok=None, checkbox_name='ingreso
     cargo = h(row_get(row, 'cargo'))
     foto_html = foto_real_mini_html(row, wrapper_cls='std-avatar', fallback='👤')
 
-    real = _estado_real_modulo_contratacion(row_get(row,'dni'), row_get(row,'requerimiento') or req)
-    med_ok = bool(medico_ok) if medico_ok is not None else bool(real.get('medica'))
+    med_txt = estado_norm(row_get(row,'estado_medico') or row_get(row,'aptitud_medica'))
+    med_ok = bool(medico_ok) if medico_ok is not None else med_txt in ('APTO','HABILITADO','APROBADO','APTO CON RESTRICCIONES')
     med_cell = _std_mod_cell('✅' if med_ok else '❌', 'Apto' if med_ok else 'No apto', 'ok' if med_ok else 'bad')
 
-    indu_ok = bool(real.get('induccion'))
+    indu = estado_norm(row_get(row,'estado_capacitacion'))
+    indu_ok = flujo_induccion_ok(row)
     indu_cell = _std_mod_cell('✅' if indu_ok else '➖', 'Inducido' if indu_ok else 'Pendiente', 'ok' if indu_ok else 'pendiente')
 
-    indum_ok = bool(real.get('indumentaria'))
+    indum = estado_norm(row_get(row,'estado_indumentaria'))
+    indum_ok = flujo_indumentaria_ok(row)
     indum_cell = _std_mod_cell('✅' if indum_ok else '➖', 'Entregado' if indum_ok else 'Pendiente', 'ok' if indum_ok else 'pendiente')
 
-    firma_ok = bool(real.get('firma'))
-    firma_cell = _std_mod_cell('✅' if firma_ok else '🕘', 'Firmado' if firma_ok else 'Pendiente', 'ok' if firma_ok else 'pendiente')
-
-    foto_ok = bool(real.get('fotocheck'))
+    foto_estado = estado_norm(row_get(row,'fotocheck_estado'))
+    foto_ok = foto_estado in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','OK')
     foto_cell = _std_mod_cell('✅' if foto_ok else '➖', 'Emitido' if foto_ok else 'Pendiente', 'ok' if foto_ok else 'pendiente')
+
+    firma_estado = estado_norm(row_get(row,'estado_documentos'))
+    firma_ok = firma_estado in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK')
+    firma_cell = _std_mod_cell('✅' if firma_ok else '🕘', 'Firmado' if firma_ok else 'Pendiente', 'ok' if firma_ok else 'pendiente')
 
     return f"""
       <tr data-dni='{dni}' data-estado='{h(estado)}'>
@@ -3257,14 +3222,16 @@ def fila_pp_postulante_estandar(row, req='', medico_ok=None, extra_action='', id
     cargo = h(row_get(row, 'cargo') or 'SIN CARGO')
     foto_html = foto_real_mini_html(row, wrapper_cls='pp-photo', fallback='👤')
 
-    real = _estado_real_modulo_contratacion(row_get(row,'dni'), row_get(row,'requerimiento') or req)
-    med_ok = bool(medico_ok) if medico_ok is not None else bool(real.get('medica'))
+    med_txt = estado_norm(row_get(row,'estado_medico') or row_get(row,'aptitud_medica'))
+    med_ok = bool(medico_ok) if medico_ok is not None else med_txt in ('APTO','HABILITADO','APROBADO','APTO CON RESTRICCIONES')
     med_label = 'APTO' if med_ok else 'PENDIENTE'
 
-    indu_ok = bool(real.get('induccion'))
-    indum_ok = bool(real.get('indumentaria'))
-    firma_ok = bool(real.get('firma'))
-    foto_ok = bool(real.get('fotocheck'))
+    indu_ok = flujo_induccion_ok(row)
+    indum_ok = flujo_indumentaria_ok(row)
+    foto_estado = estado_norm(row_get(row,'fotocheck_estado'))
+    foto_ok = foto_estado in ('ENTREGADO','IMPRESO','CARGO GENERADO','LISTO PARA IMPRIMIR','FOTO APROBADA','OK','EMITIDO')
+    firma_estado = estado_norm(row_get(row,'estado_documentos') or row_get(row,'estado_firma'))
+    firma_ok = firma_estado in ('FIRMADO','COMPLETO','COMPLETADO','APROBADO','OK')
 
     eye_svg = "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z' fill='none' stroke='currentColor' stroke-width='2'/><circle cx='12' cy='12' r='3' fill='currentColor'/></svg>"
     doc_svg = "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M6 2h9l5 5v15H6z' fill='none' stroke='currentColor' stroke-width='2'/><path d='M15 2v6h5M9 13h6M9 17h4' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round'/></svg>"
@@ -5621,7 +5588,7 @@ EXTRA_UI_FIX_ADMIN_TABLES += '''
 @media(max-width:720px){.ctrl360-kpis,.ctrl360-center{grid-template-columns:1fr}.ctrl360-card{min-height:auto}.postulante-premium-head{padding:14px}.pp-kpis{width:100%}}
 @media print{.side,.topbar,.module-pro-actions,.ia-floating,.no-print{display:none!important}.main{margin:0!important}.ctrl360,.c-card{box-shadow:none!important}}
 '''
-EXTRA_UI_FIX_ADMIN_TABLES += '\n/* Premium selector para Inducción / Indumentaria basado en Postulantes */\n.postulante-premium-head{display:grid;grid-template-columns:1.4fr 1fr auto auto;gap:14px;align-items:center;background:linear-gradient(135deg,#ecfdf5,#ffffff);border:1px solid #bbf7d0;border-radius:24px;padding:18px;margin:0 0 18px 0;box-shadow:0 16px 35px rgba(15,118,71,.10)}\n.pp-title{display:flex;gap:14px;align-items:center}.pp-icon{width:54px;height:54px;border-radius:18px;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:28px;border:1px solid #86efac}.pp-title h1{margin:0;color:#064e3b!important;font-size:26px}.pp-title p{margin:4px 0 0;color:#475569;font-weight:700}.pp-req-select{display:grid;gap:6px}.pp-req-select label{font-size:12px;text-transform:uppercase;color:#047857;font-weight:900}.pp-req-select select{width:100%;border:1px solid #a7f3d0;border-radius:14px;padding:12px;background:#fff;color:#0f172a;font-weight:900}.pp-kpis{display:flex;gap:8px;flex-wrap:wrap}.pp-kpis div{min-width:92px;background:#fff;border:1px solid #d1fae5;border-radius:16px;padding:10px 12px;text-align:center}.pp-kpis small{display:block;color:#64748b;font-weight:900;font-size:11px;text-transform:uppercase}.pp-kpis b{display:block;color:#065f46;font-size:22px}.indumentaria-pro,.learning-grid .pro-card{border:1px solid #d1fae5!important;box-shadow:0 12px 28px rgba(16,185,129,.08)!important}.ind-alert{display:flex!important;background:linear-gradient(135deg,#f0fdf4,#ecfeff)!important;border:1px solid #a7f3d0!important;border-radius:18px!important;color:#064e3b!important}.ind-alert.danger{display:flex!important;background:#fee2e2!important;border:2px solid #ef4444!important;color:#7f1d1d!important;box-shadow:0 0 0 4px rgba(239,68,68,.10)!important;font-weight:1000!important}.indumentaria-pro :disabled{background:#f1f5f9!important;color:#64748b!important;cursor:not-allowed!important;opacity:.75!important}.video-base-grid div{background:#f0fdf4!important;border:1px solid #bbf7d0!important;border-radius:16px!important}.status-pill{border-radius:999px!important;font-weight:900!important}@media(max-width:1100px){.postulante-premium-head{grid-template-columns:1fr}.pp-kpis{justify-content:flex-start}}\n\n'
+EXTRA_UI_FIX_ADMIN_TABLES += '\n/* Premium selector para Inducción / Indumentaria basado en Postulantes */\n.postulante-premium-head{display:grid;grid-template-columns:1.4fr 1fr auto auto;gap:14px;align-items:center;background:linear-gradient(135deg,#ecfdf5,#ffffff);border:1px solid #bbf7d0;border-radius:24px;padding:18px;margin:0 0 18px 0;box-shadow:0 16px 35px rgba(15,118,71,.10)}\n.pp-title{display:flex;gap:14px;align-items:center}.pp-icon{width:54px;height:54px;border-radius:18px;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:28px;border:1px solid #86efac}.pp-title h1{margin:0;color:#064e3b!important;font-size:26px}.pp-title p{margin:4px 0 0;color:#475569;font-weight:700}.pp-req-select{display:grid;gap:6px}.pp-req-select label{font-size:12px;text-transform:uppercase;color:#047857;font-weight:900}.pp-req-select select{width:100%;border:1px solid #a7f3d0;border-radius:14px;padding:12px;background:#fff;color:#0f172a;font-weight:900}.pp-kpis{display:flex;gap:8px;flex-wrap:wrap}.pp-kpis div{min-width:92px;background:#fff;border:1px solid #d1fae5;border-radius:16px;padding:10px 12px;text-align:center}.pp-kpis small{display:block;color:#64748b;font-weight:900;font-size:11px;text-transform:uppercase}.pp-kpis b{display:block;color:#065f46;font-size:22px}.indumentaria-pro,.learning-grid .pro-card{border:1px solid #d1fae5!important;box-shadow:0 12px 28px rgba(16,185,129,.08)!important}.ind-alert{display:flex!important;background:linear-gradient(135deg,#f0fdf4,#ecfeff)!important;border:1px solid #a7f3d0!important;border-radius:18px!important;color:#064e3b!important}.ind-alert.danger{display:flex!important;background:#fee2e2!important;border-color:#ef4444!important;color:#7f1d1d!important}.video-base-grid div{background:#f0fdf4!important;border:1px solid #bbf7d0!important;border-radius:16px!important}.status-pill{border-radius:999px!important;font-weight:900!important}@media(max-width:1100px){.postulante-premium-head{grid-template-columns:1fr}.pp-kpis{justify-content:flex-start}}\n\n'
 EXTRA_UI_FIX_ADMIN_TABLES += '\n\n/* ===== PATCH 217: Dashboard presentable + responsive tipo app móvil ===== */\nhtml,body{max-width:100%!important;}\nbody{overflow-x:hidden!important;}\n.app{grid-template-columns:minmax(250px,300px) minmax(0,1fr)!important;}\n.app.side-collapsed{grid-template-columns:86px minmax(0,1fr)!important;}\n.main{min-width:0!important;width:100%!important;max-width:100%!important;overflow-x:hidden!important;}\n.dash-premium{width:100%!important;max-width:1440px!important;margin:0 auto!important;overflow:hidden!important;}\n.dash-premium *{box-sizing:border-box!important;}\n.dash-hero-pro,.dash-card-pro,.dash-360-flow,.doc-panel-pro{min-width:0!important;overflow:hidden!important;}\n.dash-hero-pro{grid-template-columns:minmax(0,1fr) minmax(230px,300px)!important;}\n.dash-kpi-grid{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))!important;}\n.dash-two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;}\n.quick-grid-pro{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;}\n.flow-grid{grid-template-columns:repeat(auto-fit,minmax(145px,1fr))!important;}\n.dash-bottom{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr)!important;}\n.dash-progress-wrap{grid-template-columns:minmax(130px,170px) minmax(0,1fr)!important;}\n.table-mini{overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;}\n.table-mini table{min-width:620px!important;}\n@media(max-width:1180px){\n  .dash-hero-pro,.dash-two,.dash-bottom{grid-template-columns:1fr!important;}\n  .dash-hero-actions{grid-template-columns:1fr 1fr!important;}\n  .dash-progress-wrap{grid-template-columns:1fr!important;text-align:center!important;}\n  .dash-ring-pro{margin:0 auto!important;}\n}\n@media(max-width:900px){\n  html,body{height:auto!important;overflow-x:hidden!important;}\n  .app,.app.side-collapsed{display:block!important;min-height:100dvh!important;width:100%!important;}\n  .main{height:auto!important;min-height:100dvh!important;padding:12px!important;overflow:visible!important;}\n  .side{position:fixed!important;left:0!important;top:0!important;width:min(86vw,310px)!important;height:100dvh!important;z-index:1000!important;transform:translateX(-105%)!important;transition:.22s ease!important;box-shadow:18px 0 45px rgba(0,0,0,.28)!important;}\n  .side.open,.app.side-open .side{transform:translateX(0)!important;}\n  .dash-premium{gap:12px!important;}\n  .dash-hero-pro{border-radius:22px!important;padding:18px!important;gap:16px!important;}\n  .dash-hero-pro h1{font-size:26px!important;line-height:1.08!important;letter-spacing:-.5px!important;}\n  .dash-hero-pro p{font-size:14px!important;line-height:1.38!important;}\n  .dash-hero-actions{grid-template-columns:1fr!important;gap:10px!important;}\n  .dash-btn-main,.dash-btn-dark{height:50px!important;border-radius:15px!important;font-size:14px!important;width:100%!important;}\n  .dash-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;}\n  .dash-kpi-pro{min-height:92px!important;padding:14px!important;gap:10px!important;border-radius:18px!important;}\n  .dash-kpi-ico{width:46px!important;height:46px!important;flex-basis:46px!important;font-size:22px!important;}\n  .dash-kpi-pro small{font-size:12px!important;line-height:1.1!important;}\n  .dash-kpi-pro b{font-size:25px!important;}\n  .dash-card-pro,.dash-360-flow{padding:16px!important;border-radius:20px!important;}\n  .dash-card-pro h2,.dash-360-flow h2{font-size:19px!important;}\n  .dash-ring-pro{width:138px!important;height:138px!important;margin:0 auto!important;}\n  .dash-ring-pro .inner{width:88px!important;height:88px!important;}\n  .dash-ring-pro b{font-size:28px!important;}\n  .quick-grid-pro{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;}\n  .quick-grid-pro a{min-height:78px!important;padding:10px!important;font-size:13px!important;}\n  .quick-grid-pro i{font-size:22px!important;margin-bottom:4px!important;}\n  .flow-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;}\n  .flow-card{padding:12px 6px!important;}\n  .flow-card:after{display:none!important;}\n  .doc-head{display:grid!important;grid-template-columns:1fr!important;}\n  .doc-mini-grid,.doc-actions-pro{grid-template-columns:1fr!important;}\n  .table-mini table{font-size:12px!important;}\n}\n@media(max-width:520px){\n  .main{padding:10px!important;background:#eef7f5!important;}\n  .dash-kpi-grid,.quick-grid-pro,.flow-grid{grid-template-columns:1fr!important;}\n  .dash-hero-pro h1{font-size:23px!important;}\n  .dash-kpi-pro{display:grid!important;grid-template-columns:46px minmax(0,1fr)!important;align-items:center!important;}\n  .dash-progress-list{padding:10px!important;}\n  .dash-pro-row{grid-template-columns:16px 1fr 42px!important;font-size:13px!important;}\n  .flow-card h4{min-height:auto!important;font-size:13px!important;}\n  .flow-card b{font-size:22px!important;}\n  .ia-floating{right:12px!important;bottom:12px!important;max-width:120px!important;}\n}\n'
 try:
     BASE = BASE.replace('</style>', EXTRA_UI_FIX_ADMIN_TABLES + '\n</style>')
@@ -8479,6 +8446,22 @@ def admin_contratacion():
                     if ids_validos:
                         q2 = ','.join(['?']*len(ids_validos))
                         con.execute(f'UPDATE contratacion_ingresos SET {campo}=? WHERE id IN ({q2})', [nuevo_estado] + ids_validos)
+                        # Inducción debe quedar como registro REAL del módulo, no solo como texto en Postulantes.
+                        # Así la completitud global sube de 33% a 50% y habilita Indumentaria.
+                        if campo == 'estado_capacitacion':
+                            rows_sync = con.execute(f'SELECT * FROM contratacion_ingresos WHERE id IN ({q2})', ids_validos).fetchall()
+                            for rr in rows_sync:
+                                dni_rr = normalizar_dni(row_get(rr, 'dni'))
+                                req_rr = clean(row_get(rr, 'requerimiento'))
+                                ex = con.execute("""SELECT id FROM contratacion_capacitacion
+                                                    WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                                    ORDER BY id DESC LIMIT 1""", (dni_rr, req_rr)).fetchone()
+                                if ex:
+                                    con.execute('UPDATE contratacion_capacitacion SET estado=?, observacion=TRIM(COALESCE(observacion,'') || ?), fecha_fin=? WHERE id=?',
+                                                (nuevo_estado, ' | Actualizado desde Inducción masiva', now_txt(), row_get(ex,'id')))
+                                else:
+                                    con.execute('''INSERT INTO contratacion_capacitacion(dni,trabajador,requerimiento,curso,video_url,estado,nota,fecha_inicio,fecha_fin,evidencia_nombre,ruta_evidencia,observacion,fecha_registro,registrado_por,tipo_video,archivo_video_nombre,ruta_video,duracion_min,preguntas,intentos,aprobador) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                                                (dni_rr, row_get(rr,'trabajador'), req_rr, 'Inducción laboral', '', nuevo_estado, '', fecha_sin_hora(hoy_iso()), fecha_sin_hora(hoy_iso()), '', '', 'Registro generado desde cambio de estado masivo.', now_txt(), session.get('admin_user','admin'), 'CONTROL', '', '', '', '', '', clean(request.form.get('aprobador'))))
                     con.commit()
                 if bloqueados:
                     flash(f'Se actualizó {campo} a {nuevo_estado} para {len(ids_validos)} trabajador(es). Bloqueados por flujo previo pendiente: {bloqueados}.', 'error' if not ids_validos else 'ok')
@@ -8627,7 +8610,7 @@ def admin_contratacion():
                     # Sincroniza la base de ingresos por DNI.
                     rows=con.execute(f'SELECT dni FROM contratacion_capacitacion WHERE id IN ({q})', ids).fetchall()
                     for rr in rows:
-                        con.execute('UPDATE contratacion_ingresos SET estado_capacitacion=? WHERE dni=?', (nuevo_estado, rr['dni']))
+                        con.execute('UPDATE contratacion_ingresos SET estado_capacitacion=? WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM((SELECT COALESCE(requerimiento,'') FROM contratacion_capacitacion WHERE dni=? ORDER BY id DESC LIMIT 1))', (nuevo_estado, rr['dni'], rr['dni']))
                     con.commit()
                 flash(f'Se cambió el estado a {nuevo_estado} para {len(ids)} registro(s). Notificaciones preparadas/enviadas según correo registrado.', 'ok')
             return redirect(url_for('admin_contratacion', sec=destino))
@@ -12007,7 +11990,20 @@ html,body{overflow-x:hidden!important;}
             card.className = 'med-status-card ' + cls;
             valEl.textContent = value || 'PENDIENTE';
           }}
+          function bloquearCamposMedica(bloqueado){{
+            const form=document.getElementById('form_medica');
+            if(!form) return;
+            form.querySelectorAll('select, textarea, input, button[type=submit]').forEach(function(el){{
+              const esBusqueda = el.id==='med_dni_lookup' || el.type==='hidden' || el.type==='file';
+              if(!esBusqueda) el.disabled = !!bloqueado;
+              if(bloqueado && !esBusqueda && el.type!=='date'){{
+                if(el.tagName==='SELECT') el.selectedIndex=0; else el.value='';
+              }}
+            }});
+            window.__medicaBloqueadaPorFlujo = !!bloqueado;
+          }}
           function limpiarSeleccionMedica(msg){{
+            bloquearCamposMedica(true);
             medDniShow.textContent = '—';
             medNombre.textContent = '—';
             medReq.textContent = '—';
@@ -12085,6 +12081,7 @@ html,body{overflow-x:hidden!important;}
             medDecisionMsg.textContent = blocked ? 'BLOQUEADO: no debe avanzar a contrato/documentos/firma.' : 'Datos cargados correctamente. Complete resultado médico y registre.';
             medDecisionMsg.className = 'med-block-msg' + (blocked ? ' blocked' : '');
             actualizarObligatorioRestricciones();
+            bloquearCamposMedica(false);
             return true;
           }}
           function seleccionarMedico(dni){{
@@ -12137,6 +12134,7 @@ html,body{overflow-x:hidden!important;}
             }}, 60);
           }}
           function validarMedicaSeleccionada(){{
+            if(window.__medicaBloqueadaPorFlujo){{ medAlert('BLOQUEADO: primero complete Postulantes. No puede registrar evaluación médica con este DNI.', 'error'); return false; }}
             const dni=(medDni.value||'').replace(/\D/g,'');
             const row = MEDICA_BY_DNI[normDni(dni)] || null;
             if(!row || !row.trabajador || (row.trabajador||'').toUpperCase().includes('PENDIENTE')){{medAlert('BLOQUEADO: falta registrar o completar este DNI en el módulo Postulantes.', 'error'); limpiarSeleccionMedica('BLOQUEADO: primero debe registrar y completar el DNI en Postulantes.'); buscarMedicaPorDni(dni, true); return false;}}
@@ -12239,6 +12237,7 @@ html,body{overflow-x:hidden!important;}
             }}
           }}
           bindMedicaInput();
+          bloquearCamposMedica(true);
           document.addEventListener('DOMContentLoaded', function(){{
             bindMedicaInput();
             document.querySelectorAll('.med-select-btn').forEach(function(btn){{
@@ -12295,6 +12294,7 @@ html,body{overflow-x:hidden!important;}
             rows().forEach(function(tr){{ tr.style.outline=''; }});
             var tr=rows().find(function(x){{return dni8(x.getAttribute('data-dni'))===r.dni;}});
             if(tr) tr.style.outline='3px solid #00b86b';
+            if(typeof bloquearCamposMedica==='function') bloquearCamposMedica(false);
             return true;
           }}
           async function auto(v){{
@@ -12404,6 +12404,7 @@ html,body{overflow-x:hidden!important;}
                 pintar();
                 var a=byId('med_aptitud_select'), e=byId('med_estado_select');
                 var A=(a&&a.value?a.value:'').toUpperCase(), E=(e&&e.value?e.value:'').toUpperCase();
+                if(window.__medicaBloqueadaPorFlujo){{ ev.preventDefault(); if(typeof medAlert==='function') medAlert('BLOQUEADO: primero complete Postulantes. No puede continuar con este DNI.', 'error'); }}
 
               }}, true);
             }}
@@ -12583,7 +12584,7 @@ html,body{overflow-x:hidden!important;}
         trabajadores_indumentaria_base = [r for r in trabajadores_proceso if req_filtro_indumentaria and _req_key_cmp(row_get(r,'requerimiento')) == _req_key_cmp(req_filtro_indumentaria)]
         # Flujo obligatorio: a Indumentaria solo pasan quienes ya completaron Postulantes + Médico + Inducción.
         with db() as con_flujo_indum:
-            trabajadores_indumentaria = [r for r in trabajadores_indumentaria_base if flujo_postulante_completo(r) and flujo_medica_apta_con(con_flujo_indum, row_get(r,'dni'), row_get(r,'requerimiento')) and flujo_induccion_ok(r)]
+            trabajadores_indumentaria = [r for r in trabajadores_indumentaria_base if flujo_postulante_completo(r) and flujo_medica_apta_con(con_flujo_indum, row_get(r,'dni'), row_get(r,'requerimiento')) and flujo_induccion_ok_con(con_flujo_indum, row_get(r,'dni'), row_get(r,'requerimiento'))]
         indumentarias_filtradas = [r for r in indumentarias if req_filtro_indumentaria and _req_key_cmp(row_get(r,'requerimiento')) == _req_key_cmp(req_filtro_indumentaria)]
         req_options_indumentaria = ''.join([f"<option value='{h(r['requerimiento'])}' {'selected' if clean(r['requerimiento'])==req_filtro_indumentaria else ''}>{h(r['requerimiento'])} - {h(r['empresa'])} / {h(r['area'])} / {h(r['cargo'])}</option>" for r in requerimientos])
 
@@ -12754,8 +12755,20 @@ html,body{overflow-x:hidden!important;}
           ['ind_trabajador','ind_empresa','ind_area','ind_cargo','ind_actividad','ind_fecha_ingreso'].forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=''; }});
         }}
         function bloquearCamposIndumentaria(bloqueado){{
-          ['ind_trabajador','ind_empresa','ind_area','ind_cargo','ind_actividad','ind_fecha_ingreso','ind_polo','ind_pantalon','ind_botas','ind_casaca','ind_gorro','ind_lentes','ind_guantes','ind_otros','ind_fecha_entrega','ind_responsable_entrega'].forEach(id=>{{
-            const el=document.getElementById(id); if(el){{ el.disabled=!!bloqueado; if(bloqueado && !['ind_fecha_entrega'].includes(id)){{ if(el.tagName==='SELECT') el.selectedIndex=0; else if(!['ind_responsable_entrega'].includes(id)) el.value=''; }} }}
+          const form=document.getElementById('form_indumentaria_entrega');
+          if(form){{
+            form.querySelectorAll('input, select, textarea, button').forEach(function(el){{
+              const id=el.id||'';
+              const esBusqueda = id==='ind_dni' || el.classList.contains('ind-epp-search') || el.type==='hidden' || el.type==='button';
+              if(!esBusqueda) el.disabled = !!bloqueado;
+              if(bloqueado && !esBusqueda && el.type!=='date'){{
+                if(el.tagName==='SELECT') el.selectedIndex=0;
+                else if(el.type!=='file') el.value='';
+              }}
+            }});
+          }}
+          ['ind_trabajador','ind_empresa','ind_area','ind_cargo','ind_actividad','ind_fecha_ingreso','ind_polo','ind_pantalon','ind_botas','ind_fecha_entrega','ind_responsable_entrega'].forEach(id=>{{
+            const el=document.getElementById(id); if(el) el.disabled=!!bloqueado;
           }});
         }}
         function actualizarBloqueoIndumentaria(limpiarDni=false){{
@@ -12790,7 +12803,7 @@ html,body{overflow-x:hidden!important;}
             bloquearCamposIndumentaria(true);
             setAlertaIndumentaria((val&&val.mensaje)?val.mensaje:'BLOQUEADO: falta completar el módulo anterior.', true);
             indFlujoOk=false;
-            if(typeof emitirBeepBloqueo==='function') emitirBeepBloqueo();
+            emitirBeepBloqueo && emitirBeepBloqueo();
             return false;
           }}
           let t=trabajadoresIndumentaria[dni]||val.postulante||null;
@@ -12807,7 +12820,7 @@ html,body{overflow-x:hidden!important;}
         function validarFormularioIndumentaria(ev){{
           const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
           if(!req){{ if(ev) ev.preventDefault(); setAlertaIndumentaria('Debe seleccionar un requerimiento antes de registrar indumentaria.', true); return false; }}
-          if(!indFlujoOk){{ if(ev) ev.preventDefault(); setAlertaIndumentaria('BLOQUEADO: primero valide un DNI habilitado. Si falta el módulo anterior, no se puede registrar.', true); if(typeof emitirBeepBloqueo==='function') emitirBeepBloqueo(); buscarIndumentariaDNI(); return false; }}
+          if(!indFlujoOk){{ if(ev) ev.preventDefault(); setAlertaIndumentaria('BLOQUEADO: primero valide un DNI habilitado. Si falta el módulo anterior, no se puede registrar.', true); emitirBeepBloqueo && emitirBeepBloqueo(); buscarIndumentariaDNI(); return false; }}
           const campos=[['ind_requerimiento','Requerimiento'],['ind_dni','DNI'],['ind_trabajador','Trabajador'],['ind_polo','Polo'],['ind_pantalon','Pantalón'],['ind_botas','Botas'],['ind_fecha_entrega','Fecha de entrega'],['ind_responsable_entrega','Responsable de entrega']];
           const faltan=[]; document.querySelectorAll('#form_indumentaria_entrega .field-error').forEach(x=>x.classList.remove('field-error'));
           campos.forEach(([id,nom])=>{{ const el=document.getElementById(id); if(el && !(el.value||'').trim()){{ faltan.push(nom); el.classList.add('field-error'); }} }});
@@ -12816,10 +12829,7 @@ html,body{overflow-x:hidden!important;}
         }}
         let indDniTimer=null;
         document.getElementById('ind_dni')?.addEventListener('input', function(){{ indFlujoOk=false; this.value=(this.value||'').replace(/\D/g,'').slice(0,8); limpiarDatosIndumentaria(); bloquearCamposIndumentaria(true); clearTimeout(indDniTimer); if(this.value.length===8) indDniTimer=setTimeout(buscarIndumentariaDNI,250); }});
-        document.getElementById('ind_dni')?.addEventListener('blur', function(){{ if((this.value||'').replace(/\D/g,'').length===8) buscarIndumentariaDNI(); }});
-        document.getElementById('ind_dni')?.addEventListener('change', function(){{ if((this.value||'').replace(/\D/g,'').length===8) buscarIndumentariaDNI(); }});
         actualizarBloqueoIndumentaria(false); bloquearCamposIndumentaria(true);
-        setTimeout(function(){{ const dni=(document.getElementById('ind_dni')?.value||'').replace(/\D/g,''); if(dni.length===8) buscarIndumentariaDNI(); }}, 300);
         </script>
         """)
     elif sec=='integracion_nisira':
