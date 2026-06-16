@@ -2926,10 +2926,20 @@ def flujo_firma_digital_ok_con(con, dni, requerimiento=''):
     except Exception:
         return False
 
+def alerta_bloqueo_flujo(mensaje):
+    """Mensaje uniforme para todos los módulos del flujo de contratación.
+    Se muestra como alerta roja y el servidor bloquea el guardado/avance.
+    """
+    mensaje = clean(mensaje)
+    if not mensaje.upper().startswith('BLOQUEADO'):
+        mensaje = 'BLOQUEADO: ' + mensaje
+    return mensaje
+
+
 def validar_flujo_previo_modulo(con, dni, requerimiento, modulo_destino):
     """Regla global de bloqueo por flujo: nadie avanza si no completó el módulo anterior.
 
-    Orden operativo:
+    Orden operativo aplicado en TODOS los módulos:
     Requerimiento -> Postulantes -> Evaluación Médica -> Inducción -> Indumentaria -> Firma Digital -> Fotocheck.
     Devuelve (ok, mensaje, row_postulante).
     """
@@ -2937,34 +2947,63 @@ def validar_flujo_previo_modulo(con, dni, requerimiento, modulo_destino):
     requerimiento = clean(requerimiento)
     modulo = estado_norm(modulo_destino)
     if not dni or len(dni) != 8:
-        return False, 'DNI inválido. Digite 8 dígitos.', None
+        return False, alerta_bloqueo_flujo('DNI inválido. Digite 8 dígitos.'), None
     if not requerimiento:
-        return False, 'Debe seleccionar un requerimiento antes de continuar.', None
+        return False, alerta_bloqueo_flujo('Debe seleccionar un requerimiento antes de continuar.'), None
+
     ok_req, msg_req, row = validar_dni_en_requerimiento(con, dni, requerimiento)
     if not ok_req or not row:
-        return False, f'BLOQUEADO: el DNI {dni} no está registrado en Postulantes para el requerimiento {requerimiento}. Primero debe pasar por el módulo Postulantes.', row
+        return False, alerta_bloqueo_flujo(
+            f'el DNI {dni} no está registrado en el módulo anterior: Postulantes para el requerimiento {requerimiento}. Complete primero Postulantes.'
+        ), row
+
     if not flujo_postulante_completo(row):
         try:
             falt = campos_faltantes_postulante(row)
         except Exception:
             falt = []
-        return False, 'BLOQUEADO: primero complete la ficha en Postulantes' + (': ' + ', '.join(falt) if falt else '.'), row
+        detalle = (': ' + ', '.join(falt)) if falt else '.'
+        return False, alerta_bloqueo_flujo(
+            'el DNI existe en el requerimiento, pero la ficha de Postulantes está incompleta. Complete primero Postulantes' + detalle
+        ), row
+
+    # Para Evaluación Médica, el módulo anterior es Postulantes.
     if modulo in ('EVALUACION MEDICA', 'EVALUACIÓN MÉDICA', 'MEDICA', 'MÉDICA'):
         return True, '', row
+
     if not flujo_medica_apta_con(con, dni, requerimiento):
-        return False, 'BLOQUEADO: primero debe tener Evaluación Médica APTO/HABILITADO.', row
+        return False, alerta_bloqueo_flujo(
+            'el DNI existe en Postulantes, pero falta completar el módulo anterior: Evaluación Médica APTO/HABILITADO. No puede continuar.'
+        ), row
+
+    # Para Inducción, el módulo anterior es Evaluación Médica.
     if modulo in ('INDUCCION', 'INDUCCIÓN', 'CAPACITACION', 'CAPACITACIÓN'):
         return True, '', row
+
     if not flujo_induccion_ok(row):
-        return False, 'BLOQUEADO: primero debe completar Inducción.', row
+        return False, alerta_bloqueo_flujo(
+            'el DNI existe en el requerimiento, pero falta completar el módulo anterior: Inducción. No puede continuar.'
+        ), row
+
+    # Para Indumentaria, el módulo anterior es Inducción.
     if modulo in ('INDUMENTARIA', 'EPP'):
         return True, '', row
+
     if not flujo_indumentaria_ok(row):
-        return False, 'BLOQUEADO: primero debe completar Indumentaria/EPP.', row
+        return False, alerta_bloqueo_flujo(
+            'el DNI existe en el requerimiento, pero falta completar el módulo anterior: Indumentaria/EPP. No puede continuar.'
+        ), row
+
+    # Para Firma Digital, el módulo anterior es Indumentaria.
     if modulo in ('FIRMA', 'FIRMA DIGITAL', 'CONTRATOS', 'DOCUMENTOS', 'CONTRATO'):
         return True, '', row
+
     if not flujo_firma_digital_ok_con(con, dni, requerimiento):
-        return False, 'BLOQUEADO: primero debe completar Firma Digital / Facial.', row
+        return False, alerta_bloqueo_flujo(
+            'el DNI existe en el requerimiento, pero falta completar el módulo anterior: Firma Digital / Facial. No puede continuar.'
+        ), row
+
+    # Para Fotocheck, el módulo anterior es Firma Digital / Facial.
     if modulo in ('FOTOCHECK', 'FOTO CHECK'):
         return True, '', row
     return True, '', row
@@ -14680,7 +14719,7 @@ def api_contratacion_medica_postulante():
                 return jsonify({
                     'ok': False,
                     'bloqueado': True,
-                    'mensaje': f'BLOQUEADO: el DNI {dni} no está registrado en Postulantes para el requerimiento {req}. Primero debe pasar por el módulo Postulantes.'
+                    'mensaje': alerta_bloqueo_flujo(f'el DNI {dni} no está registrado en el módulo anterior: Postulantes para el requerimiento {req}. Complete primero Postulantes.')
                 })
 
             if not flujo_postulante_completo(r):
@@ -14688,7 +14727,7 @@ def api_contratacion_medica_postulante():
                 return jsonify({
                     'ok': False,
                     'bloqueado': True,
-                    'mensaje': 'BLOQUEADO: el DNI existe en el requerimiento, pero la ficha de Postulantes está incompleta. Complete primero Postulantes' + (': ' + ', '.join(faltantes) if faltantes else '.')
+                    'mensaje': alerta_bloqueo_flujo('el DNI existe en el requerimiento, pero la ficha de Postulantes está incompleta. Complete primero Postulantes' + (': ' + ', '.join(faltantes) if faltantes else '.'))
                 })
 
             med = con.execute("""
@@ -14728,6 +14767,29 @@ def api_contratacion_medica_postulante():
             })
     except Exception as e:
         return jsonify({'ok': False, 'mensaje': 'Error cargando datos médicos: ' + str(e)})
+
+
+
+@app.route('/api/contratacion/validar_flujo')
+@admin_required
+def api_contratacion_validar_flujo():
+    """Validación AJAX única para cualquier módulo del flujo.
+    Útil al digitar/escanean DNI: devuelve bloqueado=True con el mismo mensaje rojo
+    usado por el servidor antes de guardar.
+    """
+    dni = normalizar_dni(request.args.get('dni'))
+    req = clean(request.args.get('req') or request.args.get('requerimiento'))
+    modulo = clean(request.args.get('modulo') or request.args.get('sec') or 'Evaluación Médica')
+    try:
+        with db() as con:
+            ok, msg, row = validar_flujo_previo_modulo(con, dni, req, modulo)
+            data = {}
+            if row:
+                for k in row.keys():
+                    data[k] = row[k]
+            return jsonify({'ok': ok, 'bloqueado': (not ok), 'mensaje': msg or 'DNI habilitado para continuar.', 'postulante': data})
+    except Exception as e:
+        return jsonify({'ok': False, 'bloqueado': True, 'mensaje': alerta_bloqueo_flujo('Error validando flujo previo: ' + str(e))})
 
 @app.route('/api/health')
 def api_health(): return jsonify({'ok': True, 'mensaje': 'Portal PRIZE activo - optimizado Render Free'})
