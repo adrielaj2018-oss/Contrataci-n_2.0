@@ -2890,6 +2890,40 @@ def flujo_medica_apta_con(con, dni, requerimiento):
     return estado in ('APTO', 'HABILITADO', 'APROBADO') or aptitud in ('APTO', 'APTO CON RESTRICCIONES', 'HABILITADO', 'APROBADO')
 
 
+
+def flujo_induccion_ok_con(con, dni, requerimiento):
+    """Valida Inducción real en la tabla del módulo anterior.
+    No basta que el estado del postulante haya sido tipeado o actualizado masivamente.
+    """
+    dni = normalizar_dni(dni)
+    requerimiento = clean(requerimiento)
+    if not dni or not requerimiento:
+        return False
+    estados_ok = ('VIDEO VISTO', 'APROBADO', 'INDUCIDO', 'COMPLETO', 'COMPLETADO', 'OK')
+    try:
+        r = con.execute("""SELECT estado FROM contratacion_capacitacion
+                           WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                           ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
+        return bool(r and estado_norm(row_get(r, 'estado')) in estados_ok)
+    except Exception:
+        return False
+
+
+def flujo_indumentaria_ok_con(con, dni, requerimiento):
+    """Valida entrega real de Indumentaria/EPP registrada en su tabla."""
+    dni = normalizar_dni(dni)
+    requerimiento = clean(requerimiento)
+    if not dni or not requerimiento:
+        return False
+    estados_ok = ('ENTREGADO', 'COMPLETO', 'COMPLETADO', 'OK')
+    try:
+        r = con.execute("""SELECT estado FROM contratacion_indumentaria
+                           WHERE dni=? AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                           ORDER BY id DESC LIMIT 1""", (dni, requerimiento)).fetchone()
+        return bool(r and estado_norm(row_get(r, 'estado')) in estados_ok)
+    except Exception:
+        return False
+
 def flujo_induccion_ok(row):
     return estado_norm(row_get(row, 'estado_capacitacion')) in ('VIDEO VISTO', 'APROBADO', 'INDUCIDO', 'COMPLETO', 'COMPLETADO', 'OK')
 
@@ -2980,18 +3014,18 @@ def validar_flujo_previo_modulo(con, dni, requerimiento, modulo_destino):
     if modulo in ('INDUCCION', 'INDUCCIÓN', 'CAPACITACION', 'CAPACITACIÓN'):
         return True, '', row
 
-    if not flujo_induccion_ok(row):
+    if not flujo_induccion_ok_con(con, dni, requerimiento):
         return False, alerta_bloqueo_flujo(
-            'el DNI existe en el requerimiento, pero falta completar el módulo anterior: Inducción. No puede continuar.'
+            'el DNI existe en el requerimiento, pero falta registrar/completar el módulo anterior: Inducción. No puede continuar.'
         ), row
 
     # Para Indumentaria, el módulo anterior es Inducción.
     if modulo in ('INDUMENTARIA', 'EPP'):
         return True, '', row
 
-    if not flujo_indumentaria_ok(row):
+    if not flujo_indumentaria_ok_con(con, dni, requerimiento):
         return False, alerta_bloqueo_flujo(
-            'el DNI existe en el requerimiento, pero falta completar el módulo anterior: Indumentaria/EPP. No puede continuar.'
+            'el DNI existe en el requerimiento, pero falta registrar/completar el módulo anterior: Indumentaria/EPP. No puede continuar.'
         ), row
 
     # Para Firma Digital, el módulo anterior es Indumentaria.
@@ -12648,6 +12682,7 @@ html,body{overflow-x:hidden!important;}
         </section>
         <script>
         const trabajadoresIndumentaria = {trabajadores_js};
+        let indFlujoOk = false;
         function setAlertaIndumentaria(txt, peligro=false){{
           const msg=document.getElementById('ind_estado_msg');
           const box=msg ? msg.closest('.ind-alert') : null;
@@ -12671,21 +12706,40 @@ html,body{overflow-x:hidden!important;}
         }}
         async function buscarIndumentariaDNI(){{
           const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
-          if(!req){{ actualizarBloqueoIndumentaria(); document.getElementById('ind_requerimiento')?.focus(); return; }}
+          if(!req){{ indFlujoOk=false; actualizarBloqueoIndumentaria(); document.getElementById('ind_requerimiento')?.focus(); return; }}
           const dni=(document.getElementById('ind_dni')?.value||'').replace(/\D/g,'');
-          if(dni.length!==8){{ setAlertaIndumentaria('Digite un DNI válido de 8 dígitos.', true); return; }}
-          let t=trabajadoresIndumentaria[dni]||null;
-          if(!t){{ limpiarDatosIndumentaria(); setAlertaIndumentaria('DNI no encontrado en el requerimiento seleccionado. Seleccione el requerimiento correcto o registre primero al postulante.', true); return; }}
+          if(dni.length!==8){{ indFlujoOk=false; setAlertaIndumentaria('Digite un DNI válido de 8 dígitos.', true); return; }}
+          // Regla crítica: antes de pintar datos, validar contra servidor el flujo completo.
+          // Así no se rellenan cuadros si falta el módulo anterior.
+          let val=null;
+          try{{
+            const resp = await fetch('/api/contratacion/validar_flujo?dni='+encodeURIComponent(dni)+'&req='+encodeURIComponent(req)+'&modulo=Indumentaria', {{cache:'no-store'}});
+            val = await resp.json();
+          }}catch(e){{ val={{ok:false,bloqueado:true,mensaje:'BLOQUEADO: no se pudo validar el flujo previo. Intente nuevamente.'}}; }}
+          if(!val || !val.ok){{
+            limpiarDatosIndumentaria();
+            const fotoBox=document.getElementById('ind_foto_box'); const fotoTxt=document.getElementById('ind_foto_txt');
+            if(fotoBox) fotoBox.innerHTML = `<div class='blank'></div>`;
+            if(fotoTxt) fotoTxt.innerHTML = 'Sin fotografía<br>registrada';
+            setAlertaIndumentaria((val&&val.mensaje)?val.mensaje:'BLOQUEADO: falta completar el módulo anterior.', true);
+            indFlujoOk=false;
+            emitirBeepBloqueo && emitirBeepBloqueo();
+            return false;
+          }}
+          let t=trabajadoresIndumentaria[dni]||val.postulante||null;
+          if(!t){{ limpiarDatosIndumentaria(); setAlertaIndumentaria('BLOQUEADO: DNI no encontrado en el requerimiento seleccionado. Registre primero el módulo anterior.', true); return false; }}
           const map={{ind_trabajador:(t.nombre||t.trabajador||''), ind_empresa:(t.empresa||''), ind_area:(t.area||''), ind_cargo:(t.cargo||''), ind_actividad:(t.actividad||''), ind_fecha_ingreso:(t.fecha_ingreso||'')}};
           Object.keys(map).forEach(id=>{{ const el=document.getElementById(id); if(el) el.value=map[id]||''; }});
           const fotoBox=document.getElementById('ind_foto_box'); const fotoTxt=document.getElementById('ind_foto_txt');
           if(fotoBox){{ fotoBox.innerHTML = t.foto_url ? `<img src='${{t.foto_url}}' alt='Foto postulante'>` : `<div class='blank'></div>`; }}
           if(fotoTxt){{ fotoTxt.innerHTML = t.foto_url ? 'Fotografía<br>registrada' : 'Sin fotografía<br>registrada'; }}
+          indFlujoOk=true;
           setAlertaIndumentaria('Datos cargados correctamente. Complete prendas obligatorias y responsable.', false);
         }}
         function validarFormularioIndumentaria(ev){{
           const req=(document.getElementById('ind_requerimiento')?.value||'').trim();
           if(!req){{ if(ev) ev.preventDefault(); setAlertaIndumentaria('Debe seleccionar un requerimiento antes de registrar indumentaria.', true); return false; }}
+          if(!indFlujoOk){{ if(ev) ev.preventDefault(); setAlertaIndumentaria('BLOQUEADO: primero valide un DNI habilitado. Si falta el módulo anterior, no se puede registrar.', true); emitirBeepBloqueo && emitirBeepBloqueo(); buscarIndumentariaDNI(); return false; }}
           const campos=[['ind_requerimiento','Requerimiento'],['ind_dni','DNI'],['ind_trabajador','Trabajador'],['ind_polo','Polo'],['ind_pantalon','Pantalón'],['ind_botas','Botas'],['ind_fecha_entrega','Fecha de entrega'],['ind_responsable_entrega','Responsable de entrega']];
           const faltan=[]; document.querySelectorAll('#form_indumentaria_entrega .field-error').forEach(x=>x.classList.remove('field-error'));
           campos.forEach(([id,nom])=>{{ const el=document.getElementById(id); if(el && !(el.value||'').trim()){{ faltan.push(nom); el.classList.add('field-error'); }} }});
@@ -12693,7 +12747,7 @@ html,body{overflow-x:hidden!important;}
           return true;
         }}
         let indDniTimer=null;
-        document.getElementById('ind_dni')?.addEventListener('input', function(){{ this.value=(this.value||'').replace(/\D/g,'').slice(0,8); clearTimeout(indDniTimer); if(this.value.length===8) indDniTimer=setTimeout(buscarIndumentariaDNI,250); }});
+        document.getElementById('ind_dni')?.addEventListener('input', function(){{ indFlujoOk=false; this.value=(this.value||'').replace(/\D/g,'').slice(0,8); limpiarDatosIndumentaria(); clearTimeout(indDniTimer); if(this.value.length===8) indDniTimer=setTimeout(buscarIndumentariaDNI,250); }});
         actualizarBloqueoIndumentaria(false);
         </script>
         """)
