@@ -5633,13 +5633,165 @@ def safe_ia_widget_hr(active):
         return ''
 
 
+
+# =============================
+# UI PRO GLOBAL - ESTILO CORPORATIVO 2026
+# Se aplica al final de cada página para unificar todos los módulos sin tocar la lógica.
+# =============================
+PRO_UI_STYLE = r"""
+<style id="prize-ui-pro-2026">
+:root{
+  --pro-green:#059669;
+  --pro-green-2:#10b981;
+  --pro-green-soft:#ecfdf5;
+  --pro-navy:#08233f;
+  --pro-text:#0f2742;
+  --pro-muted:#64748b;
+  --pro-bg:#f5faf8;
+  --pro-card:#ffffff;
+  --pro-line:#dbeafe;
+  --pro-shadow:0 18px 42px rgba(15,23,42,.08);
+  --pro-radius:20px;
+}
+html,body{font-family:Inter,"Segoe UI",Arial,sans-serif!important;background:var(--pro-bg)!important;color:var(--pro-text)!important;font-size:14px!important;font-weight:500!important;letter-spacing:-.01em!important}
+.main{background:linear-gradient(135deg,#f8fffc 0%,#effaf7 100%)!important;padding:22px 26px!important;min-width:0!important}
+h1{font-size:clamp(30px,3vw,42px)!important;line-height:1.05!important;font-weight:850!important;letter-spacing:-.055em!important;color:var(--pro-navy)!important;margin:0 0 8px!important}
+h2{font-size:22px!important;font-weight:850!important;letter-spacing:-.035em!important;color:var(--pro-navy)!important;margin:0 0 14px!important}
+h3{font-size:17px!important;font-weight:800!important;color:var(--pro-navy)!important}
+p,small,label{color:var(--pro-muted)!important}
+b,strong{font-weight:800!important;color:var(--pro-navy)}
+.mod-req-hero,.hero,.top-hero,.module-hero,.admin-hero{
+  background:rgba(255,255,255,.82)!important;
+  border:1px solid #bbf7d0!important;
+  border-radius:26px!important;
+  padding:26px 30px!important;
+  box-shadow:var(--pro-shadow)!important;
+}
+.mod-req-title h1,.hero h1,.module-hero h1,.admin-hero h1{font-size:clamp(34px,3.6vw,48px)!important}
+.mod-req-title p,.hero p,.module-hero p,.admin-hero p{font-size:18px!important;line-height:1.35!important;font-weight:550!important;color:#50627a!important}
+.mod-req-icon,.hero-icon,.module-icon{
+  width:72px!important;height:72px!important;border-radius:22px!important;
+  background:var(--pro-green-soft)!important;border:1.5px solid #86efac!important;color:var(--pro-green)!important;
+  box-shadow:0 12px 30px rgba(16,185,129,.12)!important;
+}
+.card,.box,.panel,.section,.white-card,.list-card,.form-card,.modal-card,.mini,.metric,.stat,.kpi-card{
+  background:rgba(255,255,255,.92)!important;
+  border:1px solid #dbeafe!important;
+  border-radius:20px!important;
+  box-shadow:0 12px 30px rgba(15,23,42,.055)!important;
+}
+.mini,.metric,.stat,.kpi-card{min-height:96px!important;padding:18px 20px!important}
+.mini b,.metric b,.stat b,.kpi-card b{font-size:30px!important;font-weight:850!important;color:var(--pro-navy)!important;line-height:1!important}
+.mini small,.metric small,.stat small,.kpi-card small{font-size:13px!important;font-weight:650!important;color:#64748b!important}
+.btn,.btn-blue,.btn-green,.btn-red,button[type="submit"],.action-btn,.btn-primary,.btn-dark,.btn-ok,.btn-danger{
+  min-height:42px!important;
+  border-radius:12px!important;
+  padding:10px 16px!important;
+  font-size:14px!important;
+  font-weight:800!important;
+  letter-spacing:-.01em!important;
+  box-shadow:0 10px 22px rgba(15,23,42,.08)!important;
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:8px!important;
+  white-space:nowrap!important;
+}
+.btn-green,.btn-ok,.btn-primary,button[type="submit"]{
+  background:linear-gradient(135deg,#059669,#10b981)!important;
+  color:#fff!important;border:0!important;
+}
+.btn-blue,.btn-dark{background:#1f2937!important;color:#fff!important;border:0!important}
+.btn-red,.btn-danger{background:#fee2e2!important;color:#991b1b!important;border:1px solid #fecaca!important}
+.input,select,textarea,input[type="text"],input[type="number"],input[type="date"],input[type="email"],input[type="password"]{
+  min-height:42px!important;border-radius:12px!important;border:1px solid #cfe0f4!important;
+  background:#fff!important;color:var(--pro-text)!important;
+  font-size:14px!important;font-weight:600!important;padding:10px 14px!important;
+  box-shadow:none!important;
+}
+.input:focus,select:focus,textarea:focus,input:focus{
+  border-color:#10b981!important;box-shadow:0 0 0 4px rgba(16,185,129,.12)!important;outline:none!important;
+}
+.table-wrap,.std-table-wrap,.table-responsive{border-radius:18px!important;border:1px solid #dbeafe!important;box-shadow:0 12px 30px rgba(15,23,42,.045)!important;background:#fff!important}
+table{width:100%!important;border-collapse:separate!important;border-spacing:0!important;background:#fff!important;font-size:13px!important;color:var(--pro-text)!important}
+th{
+  background:#078b4e!important;color:#fff!important;
+  font-size:13px!important;font-weight:850!important;text-transform:none!important;
+  padding:12px 14px!important;line-height:1.15!important;border-color:#10a464!important;
+  white-space:nowrap!important;
+}
+td{
+  font-size:13px!important;font-weight:600!important;color:#16324f!important;
+  padding:12px 14px!important;line-height:1.25!important;border-color:#e2edf8!important;
+  vertical-align:middle!important;
+}
+td b,td strong{font-size:13px!important;font-weight:800!important;color:#0b2744!important}
+tr:nth-child(even) td{background:#f8fbff!important}
+tr:hover td{background:#eefdf6!important}
+td .btn,td button,.row-actions button,.icon-btn{
+  min-width:38px!important;height:34px!important;padding:7px 10px!important;border-radius:10px!important;font-size:13px!important;
+}
+.badge,.pill,.status,.estado,.tag,[class*="badge"],[class*="pill"],[class*="estado"]{
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;
+  min-height:26px!important;padding:6px 11px!important;border-radius:999px!important;
+  font-size:12px!important;font-weight:850!important;line-height:1!important;white-space:nowrap!important;
+}
+.pro-status{display:inline-flex!important;align-items:center!important;gap:6px!important;border-radius:999px!important;padding:6px 10px!important;font-size:12px!important;font-weight:850!important;line-height:1!important}
+.pro-ok{background:#dcfce7!important;color:#166534!important;border:1px solid #bbf7d0!important}
+.pro-warn{background:#fef3c7!important;color:#92400e!important;border:1px solid #fde68a!important}
+.pro-bad{background:#fee2e2!important;color:#991b1b!important;border:1px solid #fecaca!important}
+.pro-info{background:#dbeafe!important;color:#1e40af!important;border:1px solid #bfdbfe!important}
+img.foto,img.worker-photo,.foto-trabajador,.avatar-img,.photo,.photo-sm,td img{
+  width:54px!important;height:54px!important;object-fit:cover!important;border-radius:14px!important;
+  border:1.5px solid #bbf7d0!important;background:#f8fafc!important;box-shadow:0 8px 18px rgba(15,23,42,.08)!important;
+}
+.side{background:linear-gradient(180deg,#064e3b,#063f33)!important;border-right:1px solid rgba(255,255,255,.12)!important;box-shadow:12px 0 34px rgba(6,78,59,.18)!important}
+.menu-title,.nav-link,.side a{border-radius:14px!important}
+.menu-title.active,.nav-link.active,.side a.active{background:linear-gradient(135deg,#10b981,#059669)!important;color:#fff!important}
+.flash.err,.alarm-flash{
+  background:#fee2e2!important;color:#7f1d1d!important;border:2px solid #ef4444!important;border-left:10px solid #dc2626!important;
+  border-radius:16px!important;font-weight:850!important;box-shadow:0 18px 42px rgba(220,38,38,.18)!important;
+}
+.flash:not(.err),.ok-flash{background:#dcfce7!important;color:#166534!important;border:1.5px solid #86efac!important;border-radius:16px!important}
+.modal,.modal-card,.modal-content{border-radius:22px!important}
+.progress,.bar,.progressbar{height:8px!important;border-radius:999px!important;background:#e2e8f0!important}
+.progress>* ,.bar>* ,.progressbar>*{border-radius:999px!important;background:#059669!important}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:999px}
+::-webkit-scrollbar-track{background:#e2e8f0;border-radius:999px}
+@media(max-width:900px){
+  .main{padding:16px 14px!important}
+  .mod-req-hero,.hero,.top-hero,.module-hero,.admin-hero{padding:22px 18px!important;border-radius:22px!important}
+  .mod-req-title h1,.hero h1,.module-hero h1{font-size:32px!important}
+  .mod-req-title p,.hero p,.module-hero p{font-size:16px!important}
+  th,td{font-size:12px!important;padding:10px 11px!important}
+  .mini,.metric,.stat,.kpi-card{min-height:86px!important;padding:14px!important}
+  img.foto,img.worker-photo,.foto-trabajador,.avatar-img,.photo,.photo-sm,td img{width:48px!important;height:48px!important}
+}
+</style>
+<script id="prize-ui-pro-2026-js">
+document.addEventListener('DOMContentLoaded', function(){
+  const map=[
+    {re:/^(APTO|ACTIVO|COMPLETADO|ENTREGADO|APROBADO|FIRMADO|GENERADO VALIDADO)$/i, cls:'pro-ok'},
+    {re:/^(PENDIENTE|EN VALIDACION|EN VALIDACIÓN|EN PROCESO|POR COMPLETAR)$/i, cls:'pro-warn'},
+    {re:/^(NO APTO|INCOMPLETO|BLOQUEADO|ANULADO|OBSERVADO|VENCIDO|ERROR)$/i, cls:'pro-bad'},
+    {re:/^(NUEVO|REINGRESO|REINGRESANTE|VALIDADO)$/i, cls:'pro-info'}
+  ];
+  document.querySelectorAll('td span,td small,td b,.badge,.pill,.status,.estado').forEach(el=>{
+    const t=(el.textContent||'').replace(/\s+/g,' ').trim();
+    if(!t || t.length>28 || el.classList.contains('pro-status')) return;
+    const found=map.find(x=>x.re.test(t));
+    if(found){el.classList.add('pro-status', found.cls);}
+  });
+});
+</script>
+"""
+
+
 def render_page(content, title="Portal de Documentos PRIZE", active="Inicio"):
     user_label = session.get('admin_nombre') or session.get('nombre') or 'Usuario PRIZE'
     primer_nombre = user_label.split()[0] if user_label else 'Usuario'
     body = f'''
     <div class="mobile-head"><button class="toggle" onclick="toggleSide()">☰</button><b>PRIZE Documentos</b><a href="/logout">Salir</a></div>
     <div class="app"><aside class="side"><div class="side-top"><button class="toggle" title="Expandir / contraer panel" onclick="toggleSide()">☰</button><b class="label">PRIZE RRHH</b><button class="toggle" title="Expandir / contraer panel" onclick="toggleSide()">☰</button></div>
-      <div class="brand"><img src="{logo_url()}" alt="PRIZE"><p>Documentos PRIZE</p></div>{sidebar(active)}<div class="side-user"><div class="avatar">👤</div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}</main>{safe_ia_widget_hr(active)}
+      <div class="brand"><img src="{logo_url()}" alt="PRIZE"><p>Documentos PRIZE</p></div>{sidebar(active)}<div class="side-user"><div class="avatar">👤</div><div><b>{primer_nombre}</b><br><small>{'Administrador' if session.get('admin_id') else 'Trabajador'}</small></div></div></aside><main class="main">{flashes()}{content}{PRO_UI_STYLE}</main>{safe_ia_widget_hr(active)}
 <style id="iahr-inline-assets">
 
 
