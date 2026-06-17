@@ -9661,8 +9661,20 @@ def admin_contratacion():
                         tipo_pl = clean(row_get(plx,'tipo_documento') or row_get(plx,'nombre_plantilla') or 'DOCUMENTO')
                         archivo_pl = clean(row_get(plx,'archivo_nombre') or row_get(plx,'nombre_plantilla') or 'PLANTILLA')
                         ruta_pl = clean(row_get(plx,'ruta_archivo'))
-                        cur = con.execute('INSERT INTO contratacion_docs(dni,trabajador,empresa,requerimiento,etapa,tipo_doc,estado,archivo_nombre,ruta_archivo,fecha_registro,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (dni_pl, trab_pl, empresa_pl, req_firma or clean(row_get(candidato,'requerimiento')), 'Generado desde plantilla para firma', tipo_pl, 'GENERADO VALIDADO - PENDIENTE FIRMA', archivo_pl, ruta_pl, now_txt(), marca_carga(session.get('admin_user','admin'))))
-                        new_id = cur.lastrowid
+                        req_doc_pl = req_firma or clean(row_get(candidato,'requerimiento'))
+                        # No duplicar documentos: si ya existe uno pendiente/validado/enviado para el mismo DNI + requerimiento + tipo,
+                        # se reutiliza el último registro en vez de crear otro cada vez que se presiona Firmar.
+                        doc_exist = con.execute("""SELECT * FROM contratacion_docs
+                                                   WHERE dni=?
+                                                     AND TRIM(COALESCE(requerimiento,''))=TRIM(?)
+                                                     AND UPPER(TRIM(COALESCE(tipo_doc,'')))=UPPER(TRIM(?))
+                                                     AND UPPER(COALESCE(estado,'')) NOT LIKE '%FIRMADO%'
+                                                   ORDER BY id DESC LIMIT 1""", (dni_pl, req_doc_pl, tipo_pl)).fetchone()
+                        if doc_exist:
+                            new_id = doc_exist['id']
+                        else:
+                            cur = con.execute('INSERT INTO contratacion_docs(dni,trabajador,empresa,requerimiento,etapa,tipo_doc,estado,archivo_nombre,ruta_archivo,fecha_registro,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (dni_pl, trab_pl, empresa_pl, req_doc_pl, 'Generado desde plantilla para firma', tipo_pl, 'GENERADO VALIDADO - PENDIENTE FIRMA', archivo_pl, ruta_pl, now_txt(), marca_carga(session.get('admin_user','admin'))))
+                            new_id = cur.lastrowid
                         if new_id not in ids:
                             ids.append(new_id)
                 for doc_id in ids:
@@ -9687,7 +9699,10 @@ def admin_contratacion():
                     con.execute('INSERT INTO eventos_documento(dni,evento,fecha,detalle) VALUES(?,?,?,?)',(doc['dni'],'Contrato pendiente de firma',now_txt(),f"Tiene pendiente firmar: {doc['tipo_doc']}. Ingrese a Gestión Contrato / Bandeja de firmas."))
                     creadas += 1
                 con.commit()
-            flash(f'Solicitudes masivas creadas: {creadas}. Revisa la Bandeja de Firmas para copiar/enviar enlaces móviles.', 'ok' if creadas else 'error')
+            if creadas:
+                flash(f'Solicitudes masivas creadas: {creadas}. Revisa la Bandeja de Firmas para copiar/enviar enlaces móviles.', 'ok')
+            else:
+                flash('No se creó ninguna solicitud nueva. Revisa que el trabajador tenga flujo completo, documentos no firmados y que no estén duplicados/enviados previamente.', 'error')
             scope_destino = 'renovacion' if ('RENOV' in metodo.upper() or 'RENOV' in obs.upper()) else None
             redirect_kwargs = {'sec': 'firma'}
             if req_firma:
@@ -9740,8 +9755,16 @@ def admin_contratacion():
             docs=con.execute("""SELECT * FROM contratacion_docs WHERE UPPER(COALESCE(etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%RENOV%' OR UPPER(COALESCE(tipo_doc,'')) LIKE '%ADENDA%' ORDER BY id DESC LIMIT 300""").fetchall()
             firma_sols=con.execute("""SELECT f.* FROM firma_solicitudes f LEFT JOIN contratacion_docs d ON d.id=f.documento_id WHERE UPPER(COALESCE(d.etapa,'')) LIKE '%RENOV%' OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%RENOV%' OR UPPER(COALESCE(d.tipo_doc,'')) LIKE '%ADENDA%' ORDER BY f.id DESC LIMIT 300""").fetchall()
         else:
-            docs=con.execute('SELECT * FROM contratacion_docs ORDER BY id DESC LIMIT 300').fetchall()
-            firma_sols=con.execute('SELECT * FROM firma_solicitudes ORDER BY id DESC LIMIT 300').fetchall()
+            req_filtro_firma = clean(request.args.get('req'))
+            if req_filtro_firma:
+                docs=con.execute('SELECT * FROM contratacion_docs WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?) ORDER BY id DESC LIMIT 300', (req_filtro_firma,)).fetchall()
+                firma_sols=con.execute('''SELECT f.* FROM firma_solicitudes f
+                                           LEFT JOIN contratacion_docs d ON d.id=f.documento_id
+                                           WHERE TRIM(COALESCE(d.requerimiento,''))=TRIM(?)
+                                           ORDER BY f.id DESC LIMIT 300''', (req_filtro_firma,)).fetchall()
+            else:
+                docs=con.execute('SELECT * FROM contratacion_docs ORDER BY id DESC LIMIT 300').fetchall()
+                firma_sols=con.execute('SELECT * FROM firma_solicitudes ORDER BY id DESC LIMIT 300').fetchall()
         trabajadores=con.execute('SELECT dni,nombre,empresa,cargo,area,correo,activo,fecha_registro FROM trabajadores ORDER BY nombre LIMIT 700').fetchall()
         observados=con.execute('SELECT * FROM trabajadores_observados ORDER BY id DESC LIMIT 500').fetchall()
         tipo_empleado=con.execute('SELECT * FROM contratacion_tipo_empleado ORDER BY descripcion LIMIT 1000').fetchall()
@@ -14179,6 +14202,32 @@ html,body{overflow-x:hidden!important;}
         req_actual_firma = clean(request.args.get('req'))
         with db() as con_flujo_firma:
             lista_firma = [r for r in trabajadores_proceso_mostrar if req_actual_firma and validar_flujo_previo_modulo(con_flujo_firma, row_get(r,'dni'), row_get(r,'requerimiento'), 'Firma')[0]][:800]
+        # Documentos visibles en Firma: filtrar por requerimiento/trabajador habilitado y quitar duplicados.
+        # Esto evita que se acumulen 20, 30 o más documentos repetidos cuando se presiona varias veces firmar.
+        dnis_habilitados_firma = {normalizar_dni(row_get(r,'dni')) for r in lista_firma}
+        docs_filtrados_firma = []
+        vistos_docs_firma = set()
+        for d in docs:
+            dni_d = normalizar_dni(row_get(d,'dni'))
+            req_d = clean(row_get(d,'requerimiento'))
+            if req_actual_firma:
+                if req_d and req_d != req_actual_firma:
+                    continue
+                if dnis_habilitados_firma and dni_d not in dnis_habilitados_firma:
+                    continue
+            estado_d = clean(row_get(d,'estado')).upper()
+            if 'FIRMADO' in estado_d or 'ARCHIVADO' in estado_d:
+                continue
+            clave_doc = (dni_d, re.sub(r'\s+', ' ', clean(row_get(d,'tipo_doc') or row_get(d,'archivo_nombre')).upper()))
+            if clave_doc in vistos_docs_firma:
+                continue
+            vistos_docs_firma.add(clave_doc)
+            docs_filtrados_firma.append(d)
+        docs = docs_filtrados_firma[:80]
+        opt_docs = ''.join([f"<option value='{d['id']}' data-dni='{h(d['dni'])}' data-trabajador='{h(d['trabajador'])}' data-tipo='{h(d['tipo_doc'])}'>ID {d['id']} - {h(d['dni'])} - {h(d['trabajador'])} - {h(d['tipo_doc'])}</option>" for d in docs])
+        doc_cards_firma = ''
+        for d in docs:
+            doc_cards_firma += f"""<label class='doc-sign-card'><input type='checkbox' class='chk-doc-firma' value='{d['id']}' data-dni='{h(d['dni'])}' data-trabajador='{h(d['trabajador'])}' data-tipo='{h(d['tipo_doc'])}' checked><span class='doc-icon'>W</span><span class='doc-info'><b>{h(d['tipo_doc'] or 'DOCUMENTO')}</b><small>{h(d['trabajador'] or '')} - DNI {h(d['dni'] or '')}</small><small>Estado: {h(d['estado'] or 'Pendiente')}</small></span></label>"""
         firma_control_rows = ''.join([fila_estandar_postulante(r, req=req_actual_firma, checkbox_name='ingreso_ids', idx=i) for i, r in enumerate(lista_firma, 1)]) or "<tr><td colspan='14' class='std-empty'>Seleccione un requerimiento o no hay trabajadores habilitados para Firma Digital. Deben completar Postulantes + Evaluación médica + Inducción + Indumentaria.</td></tr>"
         scope_tabs_html = f"""
           <div class='firma-scope-tabs'>
@@ -14227,7 +14276,7 @@ html,body{overflow-x:hidden!important;}
           </form>
           <form method='post' class='firma-progress-bar' onsubmit='return prepararFirmaMasiva()'>
             <input type='hidden' name='accion' value='firma_masiva'><input type='hidden' name='req_firma' value='{h(req_actual_firma)}'><input type='hidden' id='documentos_lote' name='documentos_lote'><input type='hidden' name='metodo_masivo' value='{firma_metodo_texto}'><input type='hidden' name='observacion_masiva' value='{firma_obs_texto}'>
-            <div class='progress-left'><b>Progreso de firma</b><div class='steps'><span class='done'>1<small>Verificación facial<br>Completado</small></span><i></i><span class='done'>2<small>Validación<br>Completado</small></span><i></i><span class='done'>3<small>Firma de documentos<br>En proceso...</small></span><i></i><span>4<small>Finalizado<br>Pendiente</small></span></div></div>
+            <div class='progress-left'><b>Progreso de firma</b><div class='steps'><span class='done'>1<small>Verificación facial<br>Completado</small></span><i></i><span class='done'>2<small>Validación<br>Completado</small></span><i></i><span id='stepFirma3' class='active'>3<small>Firma de documentos<br>En proceso...</small></span><i></i><span id='stepFirma4'>4<small>Finalizado<br>Pendiente</small></span></div></div>
             <button class='btn-green btn-firmar'>🖊️ Firmar todos los documentos<br><small id='firmaMassCounter'>0 seleccionados</small></button>
           </form>
           <div id='bandeja' class='firma-card'><h3>🧾 Bandeja de Firmas</h3><div class='table-wrap'><table class='c-table firma-table'><tr><th>ID</th><th>DNI</th><th>Trabajador</th><th>Método</th><th>Estado</th><th>Fecha envío</th><th>Fecha firma</th><th>Link cámara</th><th>Evidencia</th><th>Observación</th></tr>{rows_firma or '<tr><td colspan=10>No hay solicitudes de firma.</td></tr>'}</table></div></div>
