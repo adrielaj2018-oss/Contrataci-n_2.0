@@ -9757,7 +9757,7 @@ def admin_contratacion():
         else:
             req_filtro_firma = clean(request.args.get('req'))
             if req_filtro_firma:
-                docs=con.execute('SELECT * FROM contratacion_docs WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?) ORDER BY id DESC LIMIT 300', (req_filtro_firma,)).fetchall()
+                docs=con.execute("""SELECT * FROM contratacion_docs WHERE TRIM(COALESCE(requerimiento,''))=TRIM(?) ORDER BY id DESC LIMIT 300""", (req_filtro_firma,)).fetchall()
                 firma_sols=con.execute('''SELECT f.* FROM firma_solicitudes f
                                            LEFT JOIN contratacion_docs d ON d.id=f.documento_id
                                            WHERE TRIM(COALESCE(d.requerimiento,''))=TRIM(?)
